@@ -16,7 +16,7 @@ to osu!'s files.
 - osu!-style search: `keys=7 sr>4.5 status=ranked creator=… length<2:30 grade>=A played=no`
 - Ruleset and key-count filters, star range, status, played / not played
 - Set pages with every difficulty, notes, long-note share, notes per second and your best grade
-- Audio preview from the map's preview point, straight from lazer's files
+- Plays the songs straight from lazer's files, from the beginning
 - Accent colour and ambient background taken from the artwork (Kodama design language)
 - Re-imports automatically when lazer's library changes
 - Home page: recently played and added, most played, sets you haven't played in a while, quick picks

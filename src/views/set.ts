@@ -80,7 +80,7 @@ export class SetView {
           <div class="set-artist">${esc(artist)}</div>
           <div class="meta-line set-meta">${meta.join("")}</div>
           <div class="set-actions">
-            <button class="btn btn-primary btn-lg set-play" type="button">${icon("play", "ic-play")}${icon("pause", "ic-pause")}<span>Preview</span></button>
+            <button class="btn btn-primary btn-lg set-play" type="button">${icon("play", "ic-play")}${icon("pause", "ic-pause")}<span>Play</span></button>
             ${set.onlineId ? `<button class="btn btn-lg set-web" type="button">${icon("external")}<span>osu! website</span></button>` : ""}
             <button class="icon-btn set-more" type="button" data-tip="More" aria-label="More actions">${icon("more")}</button>
           </div>
@@ -236,7 +236,7 @@ export class SetView {
     const btn = this.el.querySelector<HTMLElement>(".set-play");
     if (!btn) return;
     btn.classList.toggle("is-playing", playing);
-    btn.querySelector("span")!.textContent = playing ? "Pause" : player.isCurrent(this.setIdx) ? "Resume" : "Preview";
+    btn.querySelector("span")!.textContent = playing ? "Pause" : player.isCurrent(this.setIdx) ? "Resume" : "Play";
     this.el.querySelectorAll<HTMLElement>(".diff").forEach((d) => d.classList.toggle("playing", player.isCurrent(this.setIdx) && player.now?.map === +d.dataset.map!));
   }
 

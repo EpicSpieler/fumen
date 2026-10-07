@@ -138,12 +138,8 @@ export class ChartPanel {
 
   private render(d: ChartData): void {
     this.data = d;
-    const a = d.analysis;
-    const snap = store.snap!;
-    const map = snap.maps[this.mapIdx];
-    const set = snap.sets[this.setIdx];
-    const preview = (map.audio ? map.preview : undefined) ?? set.preview ?? -1;
-    this.cursor = preview >= 0 ? preview : a.start;
+    // the song starts at the beginning, so the cursor does too
+    this.cursor = 0;
     for (let i = 2; i < d.notes.length; i += 3) this.maxHold = Math.max(this.maxHold, d.notes[i]);
 
     const mania = d.mode === 3 && d.keys > 0;

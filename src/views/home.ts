@@ -193,7 +193,7 @@ export class HomeView {
       <div class="card hcard" data-set="${si}">
         <div class="card-art${set.bg ? "" : " img-missing"}">
           ${set.bg ? `<img src="${thumbUrl(set.bg, 360)}" alt="" loading="lazy" decoding="async" />` : ""}
-          <button class="card-play" type="button" aria-label="Play preview">${icon("play", "ic-play")}${icon("pause", "ic-pause")}</button>
+          <button class="card-play" type="button" aria-label="Play">${icon("play", "ic-play")}${icon("pause", "ic-pause")}</button>
         </div>
         <div class="card-title">${esc(displayTitle(set, unicode))}</div>
         <div class="card-sub">${esc(displayArtist(set, unicode))}</div>

@@ -35,7 +35,7 @@ export function setMenu(
   const map = mapIdx !== undefined ? snap.maps[mapIdx] : undefined;
   const playing = player.isCurrent(setIdx) && player.playing;
   const entries: MenuEntry[] = [
-    { label: playing ? "Pause preview" : "Play preview", icon: playing ? "pause" : "play", action: () => player.playSet(setIdx, mapIdx) },
+    { label: playing ? "Pause" : "Play", icon: playing ? "pause" : "play", action: () => player.playSet(setIdx, mapIdx) },
   ];
   if (!opts.inSetPage) entries.push({ label: "Open beatmap set", icon: "library", action: () => openSet(setIdx, mapIdx) });
   entries.push("sep");
