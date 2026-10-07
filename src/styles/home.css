@@ -1,0 +1,180 @@
+/* ===========================================================================
+   Home — greeting, shelves (carousels), quick picks panel
+   =========================================================================== */
+
+.home-view { container-type: inline-size; padding-bottom: 56px; }
+
+/* ---------- Greeting ---------- */
+.home-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 56px 0 52px;
+  text-align: center;
+}
+.hero-icon { color: var(--accent); animation: hero-drop .6s var(--ease-out) both; }
+.hero-icon .ic { width: 60px; height: 60px; }
+.hero-title {
+  margin-top: 14px;
+  font-size: var(--fs-hero);
+  font-weight: 700;
+  letter-spacing: -.02em;
+  line-height: 1.15;
+  animation: hero-rise .55s var(--ease-out) .12s both;
+}
+.hero-name { color: var(--accent-ink); transition: color .9s var(--ease-std); }
+.hero-sub { margin-top: 8px; font-size: var(--fs-12); color: var(--t3); animation: hero-rise .55s var(--ease-out) .2s both; }
+@keyframes hero-drop { from { opacity: 0; transform: translateY(-22px) scale(.8); } }
+@keyframes hero-rise { from { opacity: 0; transform: translateY(16px); } }
+
+/* ---------- Top block: two shelves beside the quick picks ---------- */
+.home-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 32px;
+  align-items: start;
+}
+@container (min-width: 1080px) {
+  .home-top { grid-template-columns: minmax(0, 1fr) 420px; gap: 28px; }
+}
+.home-top-shelves { display: flex; flex-direction: column; gap: 32px; min-width: 0; }
+.home-top-shelves .shelf { margin-top: 0; }
+.home-top + .shelf { margin-top: 36px; }
+.shelf + .shelf { margin-top: 32px; }
+
+/* ---------- Shelf ---------- */
+.shelf { min-width: 0; }
+.shelf-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+.shelf-head .section-title { margin: 0; }
+
+.pager { display: flex; gap: 6px; flex: none; }
+.pager-btn {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 32px;
+  border-radius: 16px;
+  background: var(--fill-subtle);
+  color: var(--t2);
+  transition: background .15s var(--ease-std), color .15s var(--ease-std), transform .22s var(--ease-spring);
+}
+.pager-btn .ic { width: 17px; height: 17px; }
+.pager-btn:hover { background: var(--fill-mod); color: var(--t1); }
+.pager-btn:active { transform: scale(.94); }
+.pager-btn:disabled { opacity: .35; }
+
+/* edges fade out where there is more to scroll */
+@property --fade-l { syntax: "<length>"; inherits: false; initial-value: 0px; }
+@property --fade-r { syntax: "<length>"; inherits: false; initial-value: 0px; }
+.shelf-track {
+  display: flex;
+  gap: 16px;
+  margin: 0 -4px;
+  padding: 10px 4px 14px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 var(--fade-l), #000 calc(100% - var(--fade-r)), transparent 100%);
+          mask-image: linear-gradient(90deg, transparent 0, #000 var(--fade-l), #000 calc(100% - var(--fade-r)), transparent 100%);
+  transition: --fade-l .3s var(--ease-std), --fade-r .3s var(--ease-std);
+}
+.shelf-track::-webkit-scrollbar { display: none; }
+.shelf-track.more-left { --fade-l: 28px; }
+.shelf-track.more-right { --fade-r: 28px; }
+
+.hcard { flex: none; width: 208px; }
+.card-meta { margin-top: 2px; font-size: var(--fs-11); color: var(--t3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------- Quick picks (speed dial) ---------- */
+.dial {
+  padding: 14px 16px 12px;
+  border-radius: var(--r-2xl);
+  background: color-mix(in srgb, var(--bg-surface) 55%, transparent);
+  -webkit-backdrop-filter: blur(16px);
+          backdrop-filter: blur(16px);
+}
+.dial-head { display: flex; align-items: center; gap: 6px; margin-bottom: 12px; }
+.dial-head .label-caps { flex: 1; }
+.dial-reroll { color: var(--t3); }
+.dial-reroll:active .ic { animation: nav-pop .32s var(--ease-spring); }
+
+.dial-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.tile {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  background: var(--placeholder-gradient);
+  box-shadow: var(--elevation-2);
+}
+.tile-empty { box-shadow: none; background: var(--fill-subtle); }
+.dial-grid.turn .tile { animation: tile-in .32s var(--ease-out) both; animation-delay: calc(var(--k, 0) * 22ms); }
+@keyframes tile-in { from { opacity: 0; transform: scale(.94); } }
+.tile img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity .3s var(--ease-std), transform .4s var(--ease-out);
+}
+.tile img.loaded { opacity: 1; }
+.tile::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(0, 0, 0, .85) 0%, rgba(0, 0, 0, .45) 32%, transparent 60%);
+  pointer-events: none;
+}
+.tile-text { position: absolute; left: 8px; right: 8px; bottom: 7px; z-index: 1; text-shadow: 0 1px 3px rgba(0, 0, 0, .5); }
+.tile-title { font-size: var(--fs-11); font-weight: 700; color: #fff; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile-sub { font-size: var(--fs-10); color: rgba(255, 255, 255, .78); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile-play {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, .4);
+  opacity: 0;
+  transition: opacity .18s var(--ease-std);
+}
+.tile-play::before {
+  content: "";
+  position: absolute;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: var(--elevation-2);
+  transform: scale(.85);
+  transition: transform .2s var(--ease-out);
+}
+.tile-play .ic { position: relative; width: 15px; height: 15px; color: var(--on-accent); }
+.tile-play .ic-play { margin-left: 2px; }
+.tile-play .ic-pause { display: none; }
+.tile:hover .tile-play, .tile.playing .tile-play { opacity: 1; }
+.tile:hover .tile-play::before, .tile.playing .tile-play::before { transform: none; }
+.tile:hover img { transform: scale(1.05); }
+.tile.playing:not(.paused) .tile-play .ic-pause { display: block; }
+.tile.playing:not(.paused) .tile-play .ic-play { display: none; }
+.tile:active .tile-play::before { transform: scale(.92); }
+
+.dial-dots { display: flex; justify-content: center; gap: 6px; margin-top: 12px; }
+.dial-dots > button {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--r-full);
+  background: var(--fill-strong);
+  transition: width .2s var(--ease-std), background .2s var(--ease-std);
+}
+.dial-dots > button:hover { background: var(--t3); }
+.dial-dots > button.on { width: 18px; background: var(--accent); }

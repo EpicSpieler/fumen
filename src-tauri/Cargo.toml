@@ -1,0 +1,39 @@
+[package]
+name = "fumen"
+version = "0.1.0"
+description = "Fumen — a beatmap library for osu!"
+edition = "2021"
+rust-version = "1.80"
+license = "UNLICENSED"
+
+[lib]
+# `_lib` keeps the lib name distinct from the bin name (cargo#8519 on Windows).
+name = "fumen_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rusqlite = { version = "0.40", features = ["bundled"] }
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "bmp", "webp"] }
+thiserror = "2"
+
+# Image decoding, SQLite and JSON parsing are painfully slow unoptimised; keep dev builds usable.
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.dev]
+opt-level = 1
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3
+strip = true
+panic = "abort"

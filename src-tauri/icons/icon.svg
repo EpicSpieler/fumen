@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <rect x="48" y="48" width="928" height="928" rx="208" fill="#16151c"/>
+  <!-- four lanes -->
+  <g fill="#ffffff" opacity=".055">
+    <rect x="216" y="176" width="130" height="672" rx="28"/>
+    <rect x="370" y="176" width="130" height="672" rx="28"/>
+    <rect x="524" y="176" width="130" height="672" rx="28"/>
+    <rect x="678" y="176" width="130" height="672" rx="28"/>
+  </g>
+  <!-- judgement line -->
+  <rect x="200" y="752" width="624" height="10" rx="5" fill="#ffffff" opacity=".28"/>
+  <!-- a staircase into a long note -->
+  <g fill="#8b7cff">
+    <rect x="224" y="648" width="114" height="58" rx="22"/>
+    <rect x="378" y="528" width="114" height="58" rx="22"/>
+    <rect x="532" y="408" width="114" height="58" rx="22"/>
+    <rect x="686" y="196" width="114" height="150" rx="26" opacity=".42"/>
+    <rect x="686" y="288" width="114" height="58" rx="22"/>
+  </g>
+</svg>

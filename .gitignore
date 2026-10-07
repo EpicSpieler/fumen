@@ -1,0 +1,22 @@
+# dependencies / builds
+node_modules/
+dist/
+src-tauri/target/
+src-tauri/gen/
+
+# sidecar build output (rebuilt by `npm run sidecar`)
+sidecar/out/
+sidecar/FumenRealm/bin/
+sidecar/FumenRealm/obj/
+src-tauri/binaries/
+
+# local preview data (contains the developer's library)
+tools/browser-preview/.cache/
+
+# editors / OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+*.log
