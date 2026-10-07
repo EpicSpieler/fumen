@@ -59,6 +59,10 @@ export interface MapRow {
   played?: number;
   hidden?: boolean;
   best?: BestScore;
+  /** densest two seconds in notes per second (chart analysis) */
+  peak?: number;
+  /** pattern tags from the chart analysis, space-separated (osu!mania) */
+  patterns?: string;
 }
 
 export interface CollectionRow {
@@ -76,6 +80,45 @@ export interface Snapshot {
   collections: CollectionRow[];
   /** owner of the local scores, if any */
   user?: { name: string; id?: number };
+}
+
+export type PatternName = "stream" | "jumpstream" | "handstream" | "chordjack" | "jacks" | "ln";
+
+export interface ChartAnalysis {
+  /** first object / end of the last object, ms */
+  start: number;
+  end: number;
+  /** playable ms (minus breaks) */
+  drain: number;
+  notes: number;
+  holds: number;
+  npsAvg: number;
+  npsPeak: number;
+  /** notes per second, one value per second from `start` */
+  density: number[];
+  longestBurst: number;
+  /** osu!mania only from here */
+  lanes: number[];
+  /** rows of 1, 2, 3 and 4+ notes */
+  chords: [number, number, number, number];
+  jackRatio: number;
+  lnTime: number;
+  patterns: { pattern: PatternName; share: number }[];
+  tags: string[];
+}
+
+/** One difficulty's chart (see src-tauri/src/charts.rs). Flat arrays keep the payload small. */
+export interface ChartData {
+  mode: number;
+  keys: number;
+  /** [time, lane, length] per object (lane is the x position outside osu!mania) */
+  notes: number[];
+  /** [time, beat length, meter] per uninherited timing point */
+  beats: number[];
+  /** [start, end] pairs */
+  breaks: number[];
+  kiai: number[];
+  analysis: ChartAnalysis;
 }
 
 export interface LazerInstall {

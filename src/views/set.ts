@@ -1,9 +1,9 @@
-/* set.ts — a beatmap set: artwork hero, difficulties, details. */
+/* set.ts — a beatmap set: artwork hero, difficulties (each opens its chart), details. */
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { osuSetUrl, thumbUrl } from "../lib/api";
 import {
-  bpm, date, displayArtist, displayTitle, duration, esc, holdRatio, keysOrMode, modeLabel, nps, num, rankInfo,
-  relativeTime, srChip, statusLabel,
+  bpm, date, displayArtist, displayTitle, duration, esc, holdRatio, keysOrMode, modeLabel, nps, num, patternWords,
+  rankInfo, relativeTime, srChip, statusLabel,
 } from "../lib/format";
 import { back, canGoBack, goSection } from "../lib/router";
 import { events, store } from "../lib/store";
@@ -11,11 +11,15 @@ import type { MapRow, SetRow } from "../lib/types";
 import { claimContentArt, player } from "../player";
 import { icon } from "../ui/icons";
 import { setMenu } from "./actions";
+import { ChartPanel } from "./chart";
 
 export class SetView {
   readonly el: HTMLElement;
   private offs: (() => void)[] = [];
   private setIdx = -1;
+  /** difficulty whose chart is open (by id: indices change when the library reloads) */
+  private openId: string | null = null;
+  private panel: ChartPanel | null = null;
 
   constructor(private id: string, private focusMap?: string) {
     this.el = document.createElement("section");
@@ -36,6 +40,7 @@ export class SetView {
     const snap = store.snap;
     const si = snap?.sets.findIndex((s) => s.id === this.id) ?? -1;
     this.setIdx = si;
+    this.closeChart(false);
     if (!snap || si < 0) {
       this.el.innerHTML = `<div class="empty-state set-missing">${icon("collection-duo")}<div class="empty-title">This set is no longer in your library</div><button class="btn btn-sm set-back-lib" type="button">Back to library</button></div>`;
       claimContentArt(null);
@@ -94,13 +99,68 @@ export class SetView {
     claimContentArt(set.bg ? thumbUrl(set.bg, 640) : null);
     this.syncPlay();
 
+    const open = this.initialChart(set);
+    if (open !== undefined) this.openChart(open, false);
     if (this.focusMap) {
       const row = this.el.querySelector<HTMLElement>(`.diff[data-id="${CSS.escape(this.focusMap)}"]`);
-      if (row) {
-        row.classList.add("focus");
-        requestAnimationFrame(() => row.scrollIntoView({ block: "center" }));
-      }
+      if (row) requestAnimationFrame(() => row.scrollIntoView({ block: "start", behavior: "smooth" }));
+      this.focusMap = undefined;
     }
+  }
+
+  /** Which chart to show first: the one asked for, the one playing, or the hardest in your mode. */
+  private initialChart(set: SetRow): number | undefined {
+    const snap = store.snap!;
+    const byId = (id: string | null | undefined) => set.maps.find((mi) => snap.maps[mi].id === id);
+    const asked = byId(this.focusMap) ?? byId(this.openId);
+    if (asked !== undefined) return asked;
+    if (player.isCurrent(this.setIdx) && player.now) return player.now.map;
+    const mode = store.prefs.mode;
+    const pool = set.maps.filter((mi) => mode < 0 || snap.maps[mi].mode === mode);
+    const list = pool.length ? pool : set.maps;
+    return list.reduce((best, mi) => (snap.maps[mi].sr > snap.maps[best].sr ? mi : best), list[0]);
+  }
+
+  private openChart(mi: number | null, animate = true): void {
+    const snap = store.snap!;
+    const id = mi === null ? null : snap.maps[mi].id;
+    if (id !== null && id === this.openId && this.panel) return;
+    this.closeChart(animate);
+    this.openId = id;
+    this.el.querySelectorAll<HTMLElement>(".diff").forEach((d) => {
+      const on = +d.dataset.map! === mi;
+      d.classList.toggle("open", on);
+      d.setAttribute("aria-expanded", String(on));
+    });
+    if (mi === null) return;
+    const row = this.el.querySelector<HTMLElement>(`.diff[data-map="${mi}"]`);
+    if (!row) return;
+    const wrap = document.createElement("div");
+    wrap.className = "diff-panel";
+    const inner = document.createElement("div");
+    inner.className = "diff-panel-inner";
+    wrap.appendChild(inner);
+    this.panel = new ChartPanel(this.setIdx, mi);
+    inner.appendChild(this.panel.el);
+    row.after(wrap);
+    if (animate) requestAnimationFrame(() => requestAnimationFrame(() => wrap.classList.add("open")));
+    else wrap.classList.add("open");
+  }
+
+  private closeChart(animate: boolean): void {
+    const panel = this.panel;
+    this.panel = null;
+    if (!panel) return;
+    const wrap = panel.el.closest<HTMLElement>(".diff-panel");
+    wrap?.previousElementSibling?.classList.remove("open");
+    const done = () => {
+      panel.destroy();
+      wrap?.remove();
+    };
+    if (!animate || !wrap) return done();
+    wrap.classList.remove("open");
+    wrap.addEventListener("transitionend", done, { once: true });
+    setTimeout(done, 450);
   }
 
   private diffGroups(set: SetRow, maps: MapRow[]): string {
@@ -131,12 +191,13 @@ export class SetView {
       ...(m.mode === 0 || m.mode === 2 ? [`CS ${fmt1(m.cs)}`, `AR ${fmt1(m.ar)}`] : []),
     ];
     const holdLabel = m.mode === 3 ? "long notes" : "sliders";
+    const patterns = m.patterns ? patternWords(m.patterns) : "";
     return `
-      <div class="diff${m.hidden ? " is-hidden" : ""}" data-map="${mi}" data-id="${esc(m.id)}">
+      <div class="diff${m.hidden ? " is-hidden" : ""}" data-map="${mi}" data-id="${esc(m.id)}" role="button" tabindex="0" aria-expanded="false">
         ${srChip(m.sr, "lg", icon("star-fill"))}
         <div class="diff-main">
           <div class="diff-name">${esc(m.version)}${m.hidden ? `<span class="diff-flag">hidden in osu!</span>` : ""}</div>
-          <div class="diff-facts">${facts.map((f) => `<span>${esc(f)}</span>`).join("")}</div>
+          <div class="diff-facts">${facts.map((f) => `<span>${esc(f)}</span>`).join("")}${patterns ? `<span class="diff-pat">${esc(patterns)}</span>` : ""}</div>
         </div>
         <div class="diff-stats num">
           <div><b>${num(m.objects)}</b><span>notes</span></div>
@@ -149,6 +210,7 @@ export class SetView {
             ? `<span class="grade lg" style="--c:${best.color}">${best.label}</span><div><b class="num">${(m.best!.acc * 100).toFixed(2)}%</b><span>${m.best!.plays} ${m.best!.plays === 1 ? "play" : "plays"}</span></div>`
             : `<span class="diff-unplayed">${m.played ? `played ${relativeTime(m.played)}` : "not played"}</span>`}
         </div>
+        ${icon("chevron-down", "diff-chev")}
       </div>`;
   }
 
@@ -183,7 +245,10 @@ export class SetView {
       const t = e.target as Element;
       if (t.closest(".set-back")) return canGoBack() ? back() : goSection({ name: "library" });
       if (t.closest(".set-back-lib")) return goSection({ name: "library" });
-      if (t.closest(".set-play")) return player.playSet(this.setIdx);
+      if (t.closest(".set-play")) {
+        const open = this.openId ? store.snap?.sets[this.setIdx].maps.find((mi) => store.snap!.maps[mi].id === this.openId) : undefined;
+        return player.playSet(this.setIdx, open);
+      }
       if (t.closest(".set-web")) {
         const set = store.snap?.sets[this.setIdx];
         if (set?.onlineId) void openUrl(osuSetUrl(set.onlineId));
@@ -192,8 +257,9 @@ export class SetView {
       if (t.closest(".set-more")) return setMenu(t.closest(".set-more")!, this.setIdx, undefined, { inSetPage: true, onSearch: search });
       const tag = t.closest<HTMLElement>(".tag-word");
       if (tag) return search(`tag=${tag.dataset.tag!.includes(" ") ? `"${tag.dataset.tag}"` : tag.dataset.tag}`);
+      if (t.closest(".diff-panel")) return;
       const diff = t.closest<HTMLElement>(".diff");
-      if (diff) player.playSet(this.setIdx, +diff.dataset.map!);
+      if (diff) this.openChart(diff.classList.contains("open") ? null : +diff.dataset.map!);
     });
     this.el.addEventListener("contextmenu", (e) => {
       const diff = (e.target as Element).closest<HTMLElement>(".diff");
@@ -202,11 +268,18 @@ export class SetView {
       setMenu({ x: e.clientX, y: e.clientY }, this.setIdx, +diff.dataset.map!, { inSetPage: true, onSearch: search });
     });
     this.el.addEventListener("keydown", (e) => {
+      const diff = (e.target as Element).closest<HTMLElement>(".diff");
+      if (diff && (e.key === "Enter" || e.key === " ")) {
+        e.preventDefault();
+        this.openChart(diff.classList.contains("open") ? null : +diff.dataset.map!);
+        return;
+      }
       if (e.key === "Escape" && !e.defaultPrevented) back();
     });
   }
 
   destroy(): void {
+    this.closeChart(false);
     this.offs.forEach((f) => f());
     claimContentArt(undefined);
     this.el.remove();

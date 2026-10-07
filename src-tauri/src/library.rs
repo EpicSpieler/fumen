@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use rusqlite::{Connection, OptionalExtension};
 use serde::Serialize;
 
+use crate::analysis;
 use crate::db;
 use crate::error::Result;
 
@@ -103,6 +104,12 @@ struct MapOut {
     hidden: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     best: Option<Best>,
+    /// densest two seconds in notes per second (from the chart analysis)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    peak: Option<f64>,
+    /// pattern tags from the chart analysis, space-separated
+    #[serde(skip_serializing_if = "String::is_empty")]
+    patterns: String,
 }
 
 #[derive(Serialize, Clone)]
@@ -212,12 +219,13 @@ pub fn snapshot_json(conn: &Connection) -> Result<Vec<u8>> {
     let mut md5_index: HashMap<String, u32> = HashMap::new();
     {
         let mut st = conn.prepare(
-            "SELECT set_id, id, online_id, version, ruleset, ruleset_id, status, sr, bpm, length,
-                    objects, end_objects, hp, cs, od, ar, md5, bg, audio, preview_time,
-                    last_played, hidden
-             FROM maps ORDER BY set_id, ruleset_id, sr",
+            "SELECT m.set_id, m.id, m.online_id, m.version, m.ruleset, m.ruleset_id, m.status, m.sr, m.bpm,
+                    m.length, m.objects, m.end_objects, m.hp, m.cs, m.od, m.ar, m.md5, m.bg, m.audio,
+                    m.preview_time, m.last_played, m.hidden, c.nps_peak, c.tags
+             FROM maps m LEFT JOIN chart_stats c ON c.hash = m.hash AND c.version = ?1
+             ORDER BY m.set_id, m.ruleset_id, m.sr",
         )?;
-        let mut rows = st.query([])?;
+        let mut rows = st.query([analysis::VERSION])?;
         while let Some(r) = rows.next()? {
             let set_id: String = r.get(0)?;
             let Some(&si) = set_index.get(&set_id) else { continue };
@@ -252,6 +260,8 @@ pub fn snapshot_json(conn: &Connection) -> Result<Vec<u8>> {
                 audio: if differs_audio { audio } else { None },
                 played: r.get(20)?,
                 hidden: r.get(21)?,
+                peak: r.get::<_, Option<f64>>(22)?.map(|v| (v * 10.0).round() / 10.0),
+                patterns: r.get::<_, Option<String>>(23)?.unwrap_or_default(),
             };
             let mi = maps.len() as u32;
             if let Some(h) = md5 {

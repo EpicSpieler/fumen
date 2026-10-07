@@ -96,6 +96,20 @@ const MIGRATIONS: &[&str] = &[
         value TEXT NOT NULL
     );
     "#,
+    // 2 — chart analysis, keyed by the .osu file's SHA-256 (content-addressed: never stale)
+    r#"
+    CREATE TABLE chart_stats (
+        hash          TEXT PRIMARY KEY,
+        version       INTEGER NOT NULL,
+        nps_avg       REAL,
+        nps_peak      REAL,
+        ln_time       REAL,
+        jack_ratio    REAL,
+        longest_burst INTEGER,
+        tags          TEXT NOT NULL DEFAULT '',
+        patterns      TEXT NOT NULL DEFAULT '[]'
+    );
+    "#,
 ];
 
 pub fn open(path: &Path) -> Result<Connection> {

@@ -85,7 +85,7 @@ body:not(.ambient-off) .set-hero-scrim {
 .diff {
   position: relative;
   display: grid;
-  grid-template-columns: 86px minmax(0, 1fr) auto 150px;
+  grid-template-columns: 86px minmax(0, 1fr) auto 150px 18px;
   align-items: center;
   gap: 18px;
   min-height: 64px;
@@ -96,7 +96,19 @@ body:not(.ambient-off) .set-hero-scrim {
 .diff:first-child { border-radius: var(--r-2xl) var(--r-2xl) 0 0; }
 .diff:last-child { border-radius: 0 0 var(--r-2xl) var(--r-2xl); }
 .diff:only-child { border-radius: var(--r-2xl); }
-.diff + .diff::before {
+/* the chart opens under its row, as part of the same surface */
+.diff-panel {
+  display: grid;
+  grid-template-rows: 0fr;
+  background: color-mix(in srgb, var(--surface-1) 88%, transparent);
+  transition: grid-template-rows .34s var(--ease-out);
+}
+.diff-panel.open { grid-template-rows: 1fr; }
+.diff-panel:last-child { border-radius: 0 0 var(--r-2xl) var(--r-2xl); }
+.diff:has(+ .diff-panel:last-child) { border-radius: 0; }
+.diff:first-child:has(+ .diff-panel:last-child) { border-radius: var(--r-2xl) var(--r-2xl) 0 0; }
+.diff-panel-inner { min-height: 0; overflow: hidden; }
+.diff + .diff::before, .diff-panel + .diff::before {
   content: "";
   position: absolute;
   left: 18px;
@@ -106,7 +118,12 @@ body:not(.ambient-off) .set-hero-scrim {
   background: var(--stroke-dim);
 }
 .diff:hover { background: color-mix(in srgb, var(--surface-1) 88%, var(--t1) 6%); }
-.diff.focus { background: color-mix(in srgb, var(--surface-1) 80%, var(--accent) 14%); }
+.diff:focus-visible { outline-offset: -2px; }
+.diff.open, .diff.open + .diff-panel { background: color-mix(in srgb, var(--surface-1) 84%, var(--accent) 7%); }
+.diff-chev { width: 18px; height: 18px; color: var(--t3); transition: transform .28s var(--ease-out), color .15s; }
+.diff:hover .diff-chev { color: var(--t1); }
+.diff.open .diff-chev { transform: rotate(180deg); color: var(--accent-ink); }
+.diff-pat { color: var(--accent-ink); }
 .diff.playing .diff-name { color: var(--accent-ink); }
 .diff.is-hidden { opacity: .6; }
 .sr-chip.lg { height: 26px; padding: 0 10px; font-size: var(--fs-12); justify-self: start; }
@@ -142,7 +159,7 @@ body:not(.ambient-off) .set-hero-scrim {
 .set-missing { padding-top: 120px; }
 
 @media (max-width: 1180px) {
-  .diff { grid-template-columns: 80px minmax(0, 1fr) 140px; }
+  .diff { grid-template-columns: 80px minmax(0, 1fr) 140px 18px; }
   .diff-stats { display: none; }
   .details-grid { grid-template-columns: 1fr; }
 }

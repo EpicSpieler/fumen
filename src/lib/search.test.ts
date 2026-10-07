@@ -16,10 +16,10 @@ function snapshot(): Snapshot {
     { id: "c", status: -3, title: "Local Song", artist: "Nobody", creator: "me", added: 1_000, maps: [] },
   ];
   const maps: MapRow[] = [
-    map(0, { version: "Extreme", sr: 7.2, bpm: 230, cs: 4, length: 300_000, best: { rank: 3, acc: 0.95, score: 900_000, plays: 3 } }),
+    map(0, { version: "Extreme", sr: 7.2, bpm: 230, cs: 4, length: 300_000, best: { rank: 3, acc: 0.95, score: 900_000, plays: 3 }, peak: 18.5, patterns: "jumpstream chordjack stamina" }),
     map(0, { version: "Hard", sr: 4.1, bpm: 230, cs: 7 }),
     map(1, { version: "Easy", status: 4, sr: 1.4, bpm: 200, cs: 4, holds: 500, objects: 1000 }),
-    map(1, { version: "LN Insane", status: 4, sr: 5.05, bpm: 200, cs: 4, holds: 800, objects: 1000, played: Date.now() - 2 * 86_400_000 }),
+    map(1, { version: "LN Insane", status: 4, sr: 5.05, bpm: 200, cs: 4, holds: 800, objects: 1000, played: Date.now() - 2 * 86_400_000, peak: 9, patterns: "ln" }),
     map(2, { version: "Taiko Oni", status: -3, mode: 1, sr: 5.5, bpm: 150, cs: 5 }),
   ];
   maps.forEach((m, i) => sets[m.set].maps.push(i));
@@ -83,6 +83,16 @@ describe("filterLibrary", () => {
     expect(versions({ text: "played=no" })).toEqual(["Extreme", "Hard", "Easy", "Taiko Oni"]);
     expect(versions({ text: "played<7" })).toEqual(["LN Insane"]);
     expect(versions({ text: "year=2024" })).toEqual(["Easy", "LN Insane"]);
+  });
+
+  it("filters by chart analysis", () => {
+    expect(versions({ text: "pattern=js" })).toEqual(["Extreme"]);
+    expect(versions({ text: "pattern=ln" })).toEqual(["LN Insane"]);
+    expect(versions({ text: "pattern!=stamina mode=mania" })).toEqual(["Hard", "Easy", "LN Insane"]);
+    expect(versions({ text: "peak>10" })).toEqual(["Extreme"]);
+    // not analysed yet: never matches a number
+    expect(versions({ text: "peak<10" })).toEqual(["LN Insane"]);
+    expect(parseQuery("pattern=nonsense").conds).toHaveLength(0);
   });
 
   it("combines the UI filters with the query", () => {
