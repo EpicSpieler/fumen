@@ -3,8 +3,10 @@
  *   npx vite --config tools/browser-preview/vite.config.ts
  *
  * Library data comes from tools/browser-preview/.cache/snapshot.json (generate with
- * `FUMEN_TEST_EXPORT=<export.json> FUMEN_SNAPSHOT_OUT=<that path> cargo test -- --ignored`);
- * files are read straight from osu!lazer's store. Thumbnails are the full images (no resizing).
+ * `FUMEN_TEST_EXPORT=<export.json> FUMEN_SNAPSHOT_OUT=<that path> cargo test -- --ignored`; add
+ * FUMEN_TEST_STORAGE=<lazer folder> for the chart analysis). Chart panels need
+ * .cache/charts/<map id>.json, written by the `preview_charts` test in src-tauri/src/charts.rs.
+ * Files are read straight from osu!lazer's store. Thumbnails are the full images (no resizing).
  */
 import { createReadStream, existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -35,6 +37,16 @@ function fumenFiles(): Plugin {
           if (!existsSync(p)) {
             res.statusCode = 404;
             return res.end("no snapshot; see tools/browser-preview/vite.config.ts");
+          }
+          res.setHeader("Content-Type", "application/json");
+          return createReadStream(p).pipe(res);
+        }
+        const chart = /^\/__fumen\/chart\/([0-9a-f-]{36})$/.exec(url);
+        if (chart) {
+          const p = join(here, ".cache", "charts", `${chart[1]}.json`);
+          if (!existsSync(p)) {
+            res.statusCode = 404;
+            return res.end();
           }
           res.setHeader("Content-Type", "application/json");
           return createReadStream(p).pipe(res);

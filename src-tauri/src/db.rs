@@ -110,6 +110,11 @@ const MIGRATIONS: &[&str] = &[
         patterns      TEXT NOT NULL DEFAULT '[]'
     );
     "#,
+    // 3 — osu!mania star ratings at HT (0.75×) and DT (1.5×), from Fumen's own calculator
+    r#"
+    ALTER TABLE chart_stats ADD COLUMN sr_ht REAL;
+    ALTER TABLE chart_stats ADD COLUMN sr_dt REAL;
+    "#,
 ];
 
 pub fn open(path: &Path) -> Result<Connection> {

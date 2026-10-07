@@ -43,6 +43,13 @@
 .field-zoom .icon-btn { background: rgba(0, 0, 0, .45); color: rgba(255, 255, 255, .8); }
 .field-zoom .icon-btn:hover { background: rgba(0, 0, 0, .65); color: #fff; }
 
+/* ---------- Rate ---------- */
+.chart-rate { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; margin-bottom: 14px; }
+.rate-step { display: inline-flex; align-items: center; gap: 2px; }
+.rate-val { min-width: 46px; text-align: center; font-size: var(--fs-12); font-weight: 600; color: var(--t1); }
+.rate-info { display: inline-flex; align-items: center; gap: 14px; margin-left: auto; font-size: var(--fs-12); color: var(--t2); }
+.rate-info .sr-chip { transition: background-color .2s var(--ease-std); }
+
 /* ---------- Density graph ---------- */
 .chart-side { min-width: 0; }
 .chart-graph {

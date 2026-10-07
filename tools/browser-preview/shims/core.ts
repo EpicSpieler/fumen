@@ -40,6 +40,11 @@ export async function invoke<T>(cmd: string, args: Record<string, unknown> = {})
       const res = await fetch("/__fumen/snapshot");
       return (await res.arrayBuffer()) as T;
     }
+    case "get_chart": {
+      const res = await fetch(`/__fumen/chart/${args.id as string}`);
+      if (!res.ok) throw { code: "chart-missing", message: "This chart wasn't exported for the browser preview (see preview_charts)." };
+      return (await res.arrayBuffer()) as T;
+    }
     case "scan_library": {
       const stages: [string, number][] = [["copy", 1], ["sets", 4505], ["scores", 1430], ["collections", 5], ["import", 1]];
       for (const [stage, total] of stages) {

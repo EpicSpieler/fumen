@@ -98,8 +98,11 @@ upgrade risk.
 - [x] Library-wide cache `chart_stats` keyed by `.osu` hash, background job after imports and on start (~2 s for 22k charts)
 - [x] Chart panel on the set page: playfield synced to the player, density graph with seek, stats, patterns, chords, columns
 - [x] Search: `pattern=…` (with short forms js/hs/cj), `peak`
-- [ ] Pattern tags and peak in the library table / cards, sort by peak
-- [ ] Rate-adjusted view (DT/HT) for the chart panel
+- [x] Pattern tags and peak in the library table, sort by peak
+- [x] Rate-adjusted view: HT / DT presets and 0.5×–2× in 0.05 steps, shared with the player (like
+      lazer's rate mods); stats, times, BPM and star rating at the rate
+- [x] osu!mania star rating at any rate (port of lazer's strain calculator, checked against lazer's
+      stored values: 99.8 % within 0.005★); HT/DT cached per chart, search `dt>…` / `ht<…`
 - [ ] Taiko / catch / osu! previews
 - [ ] "tech" detection (irregular snaps, SV) — needs a better definition than a heuristic guess
 

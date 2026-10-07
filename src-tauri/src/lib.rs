@@ -8,6 +8,7 @@ mod library;
 mod paths;
 mod protocol;
 mod settings;
+mod stars;
 mod thumbs;
 
 use std::path::PathBuf;

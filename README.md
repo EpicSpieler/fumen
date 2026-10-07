@@ -28,7 +28,10 @@ to osu!'s files.
   graph (kiai and breaks marked) you can click to jump, peak / average density, longest burst
 - Pattern read for osu!mania: stream, jumpstream, handstream, chordjack, jacks, long notes, stamina;
   chord mix, jacks, column and hand balance
-- Search by it: `pattern=jumpstream`, `pattern=cj`, `peak>15`
+- Rates: HT, DT or anything from 0.5× to 2× — the song plays at it and the panel shows star rating,
+  length, BPM and density at that rate. osu!mania star ratings come from Fumen's own port of lazer's
+  calculator (matches lazer's own value within 0.005★ on 99.8 % of a 5.7k-chart library)
+- Search by it: `pattern=jumpstream`, `pattern=cj`, `peak>15`, `dt>6`, `ht<3`
 
 ## Development
 

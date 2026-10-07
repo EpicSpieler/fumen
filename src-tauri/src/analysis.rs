@@ -10,7 +10,8 @@ use serde::Serialize;
 use crate::chart::{Chart, Kind};
 
 /// Bump when the analysis changes, so cached results are recomputed.
-pub const VERSION: i64 = 1;
+/// 2: osu!mania star ratings at HT and DT joined the cached summary.
+pub const VERSION: i64 = 2;
 
 const WINDOW: i32 = 1000;
 /// rows per window below which a window counts as light

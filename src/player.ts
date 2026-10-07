@@ -4,6 +4,8 @@
  * preview point with a short fade-in. One player for the whole app; views subscribe to changes.
  * Whoever starts playback can hand over the list it came from (a library page, a carousel), so
  * next/previous and the end of a track continue through what the user was looking at.
+ * The playback rate works like lazer's rate mods: it applies to whatever plays until it's reset,
+ * and times shown in the bar are at that rate.
  */
 import { fileUrl, thumbUrl } from "./lib/api";
 import { displayArtist, displayTitle, duration, esc } from "./lib/format";
@@ -25,10 +27,16 @@ export interface NowPlaying {
 /** Going back within this many seconds of the start jumps to the previous track instead. */
 const RESTART_GRACE = 3;
 
+export const RATE_MIN = 0.5;
+export const RATE_MAX = 2;
+export const RATE_STEP = 0.05;
+
 class Player {
-  readonly bus = new Emitter<{ track: NowPlaying | null; state: boolean; queue: null }>();
+  readonly bus = new Emitter<{ track: NowPlaying | null; state: boolean; queue: null; rate: number }>();
   readonly audio = new Audio();
   now: NowPlaying | null = null;
+  /** playback speed, HT 0.75 / DT 1.5 or anything from 0.5 to 2 in steps of 0.05 (session only) */
+  rate = 1;
   /** set indices in the order of the list playback started from */
   private queue: number[] = [];
   private qpos = -1;
@@ -123,6 +131,7 @@ class Player {
       const t = at ?? (previewMs >= 0 ? previewMs / 1000 : Number.isFinite(d) ? d * 0.4 : 0);
       this.startAt = Number.isFinite(d) ? Math.min(t, Math.max(0, d - 1)) : t;
       a.currentTime = this.startAt;
+      a.playbackRate = this.rate;
       this.fadeIn();
     };
     a.addEventListener("loadedmetadata", start);
@@ -223,6 +232,17 @@ class Player {
     this.audio.volume = this.targetVolume();
   }
 
+  setRate(r: number): void {
+    const v = Math.round(Math.max(RATE_MIN, Math.min(RATE_MAX, r)) / RATE_STEP) * RATE_STEP;
+    const rate = Math.round(v * 100) / 100;
+    if (rate === this.rate) return;
+    this.rate = rate;
+    // pitch stays, like lazer's rate mods without "adjust pitch"
+    this.audio.defaultPlaybackRate = rate;
+    this.audio.playbackRate = rate;
+    this.bus.emit("rate", rate);
+  }
+
   toggleShuffle(): void {
     setPrefs({ shuffle: !store.prefs.shuffle });
   }
@@ -256,7 +276,7 @@ export function mountPlayerBar(host: HTMLElement): void {
         <div class="pb-meta">
           <button class="pb-title" type="button"></button>
           <div class="pb-artist"></div>
-          <div class="pb-time num"><span class="pb-cur">0:00</span> / <span class="pb-dur">0:00</span></div>
+          <div class="pb-time num"><span class="pb-cur">0:00</span> / <span class="pb-dur">0:00</span><button class="pb-rate" type="button" data-tip="Back to normal speed" hidden></button></div>
         </div>
       </div>
       <div class="pb-center">
@@ -289,6 +309,7 @@ export function mountPlayerBar(host: HTMLElement): void {
   const repeat = $<HTMLButtonElement>(".pb-repeat");
   const prev = $<HTMLButtonElement>(".pb-prev");
   const next = $<HTMLButtonElement>(".pb-next");
+  const rateBtn = $<HTMLButtonElement>(".pb-rate");
   const a = player.audio;
 
   // ── volume ──
@@ -370,15 +391,24 @@ export function mountPlayerBar(host: HTMLElement): void {
   const renderTime = () => {
     const d = Number.isFinite(a.duration) ? a.duration : 0;
     const t = a.currentTime || 0;
-    cur.textContent = duration(t * 1000);
-    dur.textContent = duration(d * 1000);
+    cur.textContent = duration((t * 1000) / player.rate);
+    dur.textContent = duration((d * 1000) / player.rate);
     seek.style.setProperty("--p", d > 0 ? `${(t / d) * 100}%` : "0%");
     seek.setAttribute("aria-valuenow", String(Math.round(t)));
+  };
+
+  const renderRate = (rate: number) => {
+    rateBtn.hidden = rate === 1;
+    rateBtn.textContent = `${rate.toFixed(2)}×`;
+    rateBtn.setAttribute("aria-label", `Playing at ${rate.toFixed(2)}×, back to normal speed`);
+    renderTime();
   };
 
   player.bus.on("track", renderTrack);
   player.bus.on("state", renderState);
   player.bus.on("queue", renderModes);
+  player.bus.on("rate", renderRate);
+  rateBtn.addEventListener("click", () => player.setRate(1));
   a.addEventListener("timeupdate", () => {
     if (!seeking) renderTime();
   });
@@ -402,7 +432,7 @@ export function mountPlayerBar(host: HTMLElement): void {
 
   // ── seeking ──
   let seeking = false;
-  const timeAt = (f: number) => duration(f * (Number.isFinite(a.duration) ? a.duration : 0) * 1000);
+  const timeAt = (f: number) => duration((f * (Number.isFinite(a.duration) ? a.duration : 0) * 1000) / player.rate);
   dragSlider(
     seek,
     (f, done) => {

@@ -110,6 +110,11 @@ struct MapOut {
     /// pattern tags from the chart analysis, space-separated
     #[serde(skip_serializing_if = "String::is_empty")]
     patterns: String,
+    /// osu!mania star rating with Half Time / Double Time (Fumen's own calculation)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    sr_ht: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    sr_dt: Option<f64>,
 }
 
 #[derive(Serialize, Clone)]
@@ -221,7 +226,7 @@ pub fn snapshot_json(conn: &Connection) -> Result<Vec<u8>> {
         let mut st = conn.prepare(
             "SELECT m.set_id, m.id, m.online_id, m.version, m.ruleset, m.ruleset_id, m.status, m.sr, m.bpm,
                     m.length, m.objects, m.end_objects, m.hp, m.cs, m.od, m.ar, m.md5, m.bg, m.audio,
-                    m.preview_time, m.last_played, m.hidden, c.nps_peak, c.tags
+                    m.preview_time, m.last_played, m.hidden, c.nps_peak, c.tags, c.sr_ht, c.sr_dt
              FROM maps m LEFT JOIN chart_stats c ON c.hash = m.hash AND c.version = ?1
              ORDER BY m.set_id, m.ruleset_id, m.sr",
         )?;
@@ -262,6 +267,9 @@ pub fn snapshot_json(conn: &Connection) -> Result<Vec<u8>> {
                 hidden: r.get(21)?,
                 peak: r.get::<_, Option<f64>>(22)?.map(|v| (v * 10.0).round() / 10.0),
                 patterns: r.get::<_, Option<String>>(23)?.unwrap_or_default(),
+                // stored as f32: round away the float noise
+                sr_ht: r.get::<_, Option<f64>>(24)?.map(|v| (v * 100.0).round() / 100.0),
+                sr_dt: r.get::<_, Option<f64>>(25)?.map(|v| (v * 100.0).round() / 100.0),
             };
             let mi = maps.len() as u32;
             if let Some(h) = md5 {
