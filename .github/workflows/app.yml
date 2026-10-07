@@ -1,0 +1,48 @@
+name: Backend
+
+# Windows minutes are expensive on private repos: only run when the Rust side or the sidecar changes.
+on:
+  push:
+    branches: [main]
+    paths: ["src-tauri/**", "sidecar/**", "scripts/**", ".github/workflows/app.yml"]
+  pull_request:
+    paths: ["src-tauri/**", "sidecar/**", "scripts/**", ".github/workflows/app.yml"]
+
+concurrency:
+  group: app-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  # dependencies unoptimised in CI: much faster to compile, irrelevant for the unit tests
+  # (substituted into the scripts as text, so bash sees the quotes)
+  CARGO_FLAGS: --manifest-path src-tauri/Cargo.toml --config 'profile.dev.package."*".opt-level=0'
+
+jobs:
+  check:
+    name: Sidecar, clippy, tests
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+      - run: npm ci
+      # generate_context! embeds the built frontend, and tauri-build checks that the sidecar exists
+      - run: npx vite build
+      - run: node scripts/build-sidecar.mjs
+      - run: cargo clippy ${{ env.CARGO_FLAGS }} --all-targets
+      - run: cargo test ${{ env.CARGO_FLAGS }}
