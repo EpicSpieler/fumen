@@ -63,6 +63,9 @@ export interface MapRow {
   peak?: number;
   /** pattern tags from the chart analysis, space-separated (osu!mania) */
   patterns?: string;
+  /** osu!mania star rating with Half Time (0.75×) / Double Time (1.5×), Fumen's own calculation */
+  srHt?: number;
+  srDt?: number;
 }
 
 export interface CollectionRow {
@@ -118,6 +121,8 @@ export interface ChartData {
   /** [start, end] pairs */
   breaks: number[];
   kiai: number[];
+  /** osu!mania star rating at 0.5×, 0.55× … 2.0× (empty for other modes) */
+  stars: number[];
   analysis: ChartAnalysis;
 }
 

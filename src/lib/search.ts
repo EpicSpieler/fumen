@@ -5,7 +5,7 @@
  *   "quoted phrase"     phrase match;  -word excludes
  *   key<op>value        op: = == != < <= > >= :   e.g.  keys=7  sr>4.5  bpm<=200  length<2:30
  *                       status=ranked  mode=mania  creator=Shoegazer  grade>=A  played=no  ln>30
- *                       pattern=jumpstream  peak>15   (from the chart analysis)
+ *                       pattern=jumpstream  peak>15  dt=5  ht<3   (from the chart analysis)
  */
 import type { MapRow, SetRow, Snapshot } from "./types";
 
@@ -15,7 +15,7 @@ type Op = "=" | "==" | "!=" | "<" | "<=" | ">" | ">=";
 
 type NumKey =
   | "sr" | "bpm" | "length" | "od" | "hp" | "ar" | "cs" | "keys" | "objects" | "ln" | "nps"
-  | "plays" | "acc" | "added" | "played" | "year" | "setid" | "mapid" | "peak";
+  | "plays" | "acc" | "added" | "played" | "year" | "setid" | "mapid" | "peak" | "srdt" | "srht";
 type StrKey = "creator" | "artist" | "title" | "source" | "tags" | "diff";
 type Key = NumKey | StrKey | "status" | "mode" | "grade" | "pattern";
 
@@ -29,6 +29,7 @@ const ALIASES: Record<string, Key> = {
   ln: "ln", lns: "ln", holds: "ln",
   nps: "nps",
   peak: "peak", peaknps: "peak",
+  dt: "srdt", dtsr: "srdt", dtstars: "srdt", ht: "srht", htsr: "srht", htstars: "srht",
   pattern: "pattern", patterns: "pattern", skill: "pattern", style: "pattern",
   plays: "plays", playcount: "plays",
   added: "added", played: "played", lastplayed: "played",
@@ -277,6 +278,8 @@ function numValue(key: NumKey, m: MapRow, s: SetRow, now: number): number {
     case "setid": return s.onlineId ?? -1;
     case "mapid": return m.onlineId ?? -1;
     case "peak": return m.peak ?? NaN;
+    case "srdt": return m.srDt ?? NaN;
+    case "srht": return m.srHt ?? NaN;
   }
 }
 

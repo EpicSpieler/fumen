@@ -124,6 +124,8 @@ body.has-player .player-bar { transform: none; opacity: 1; }
 .pb-artist { font-size: var(--fs-12); color: var(--t2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pb-diff::before { content: "·"; margin: 0 6px; color: var(--t4); }
 .pb-time { margin-top: 1px; font-size: var(--fs-11); color: var(--t3); }
+.pb-rate { margin-left: 8px; font: inherit; font-weight: 600; color: var(--accent-ink); transition: color .15s; }
+.pb-rate:hover { color: var(--t1); }
 
 /* ---------- Transport ---------- */
 .pb-center { display: flex; align-items: center; justify-content: center; gap: 10px; }

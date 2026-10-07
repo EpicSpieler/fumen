@@ -416,6 +416,13 @@ mod tests {
         let again = import(&mut conn, Path::new(&json), &install).unwrap();
         assert_eq!(counts.maps, again.maps);
 
+        // with lazer's files at hand (FUMEN_TEST_STORAGE), the snapshot carries the chart analysis too
+        if let Some(storage) = std::env::var_os("FUMEN_TEST_STORAGE") {
+            let hashes = crate::charts::pending(&conn).unwrap();
+            let rows = crate::charts::analyse_batch(Path::new(&storage), &hashes);
+            crate::charts::store(&mut conn, &rows).unwrap();
+        }
+
         let t = std::time::Instant::now();
         let snap = crate::library::snapshot_json(&conn).unwrap();
         eprintln!("snapshot: {} KiB in {:?}", snap.len() / 1024, t.elapsed());

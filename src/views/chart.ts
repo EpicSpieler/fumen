@@ -4,12 +4,17 @@
  * The playfield follows the audio whenever this set is playing; otherwise it sits at a cursor
  * you move with the mouse wheel or by clicking the density graph. It only animates while the
  * song plays.
+ *
+ * The rate (HT, DT or anything from 0.5× to 2×) is the player's: the song plays at it, and the
+ * numbers, times and star rating here are shown at it. osu!mania star ratings for every rate
+ * come with the chart from Fumen's own calculator; 1× shows lazer's value.
  */
 import { api, asApiError } from "../lib/api";
-import { duration, esc, num } from "../lib/format";
+import { bpm, duration, esc, num, srChip } from "../lib/format";
 import { store } from "../lib/store";
 import type { ChartData, PatternName } from "../lib/types";
-import { player } from "../player";
+import { player, RATE_MAX, RATE_MIN, RATE_STEP } from "../player";
+import { attachSegIndicator } from "../ui/controls";
 import { icon } from "../ui/icons";
 
 const cache = new Map<string, Promise<ChartData>>();
@@ -34,7 +39,13 @@ const PATTERNS: Record<PatternName, { label: string; hint: string }> = {
   ln: { label: "Long notes", hint: "Long notes held for most of the time" },
 };
 
-/** visible time above the judgement line, ms */
+const RATE_PRESETS = [
+  { rate: 0.75, label: "HT", tip: "Half Time · 0.75×" },
+  { rate: 1, label: "1×", tip: "Normal speed" },
+  { rate: 1.5, label: "DT", tip: "Double Time · 1.5×" },
+];
+
+/** visible time above the judgement line at 1×, ms of real time */
 const SPANS = [700, 1000, 1400, 2000, 2800, 4000];
 const FIELD_H = 440;
 /** judgement line, px from the bottom of the playfield */
@@ -85,6 +96,7 @@ export class ChartPanel {
     this.offs.push(
       player.bus.on("state", () => this.syncLoop()),
       player.bus.on("track", () => this.syncLoop()),
+      player.bus.on("rate", () => this.onRate()),
     );
   }
 
@@ -103,6 +115,12 @@ export class ChartPanel {
   /** The graph's time axis: the chart plus a second (an outro after the last note doesn't matter). */
   private total(): number {
     return this.data!.analysis.end + 1000;
+  }
+
+  /** Song time above the judgement line. Scroll speed is real time, as in the game, so faster
+   * rates show more of the chart at once. */
+  private span(): number {
+    return SPANS[this.spanIdx] * player.rate;
   }
 
   private seek(ms: number): void {
@@ -130,16 +148,6 @@ export class ChartPanel {
 
     const mania = d.mode === 3 && d.keys > 0;
     const fieldW = Math.min(d.keys * 44, 420);
-    const stats: [string, string, string][] = [
-      ["Peak", a.npsPeak.toFixed(1), "notes/s"],
-      ["Average", a.npsAvg.toFixed(1), "notes/s"],
-      ["Longest burst", a.longestBurst ? duration(a.longestBurst) : "–", "without a breather"],
-    ];
-    if (mania) {
-      stats.push(["Long notes", `${Math.round(a.lnTime * 100)}%`, "of the time held"], ["Jacks", `${Math.round(a.jackRatio * 100)}%`, "of rows"]);
-    } else {
-      stats.push(["Objects", num(a.notes), `${num(a.holds)} with a length`]);
-    }
 
     this.el.innerHTML = `
       <div class="chart-grid${mania ? "" : " no-field"}">
@@ -156,16 +164,25 @@ export class ChartPanel {
             : ""
         }
         <div class="chart-side">
+          <div class="chart-rate">
+            <div class="seg-pill rate-presets" role="group" aria-label="Rate">
+              ${RATE_PRESETS.map((p) => `<button type="button" data-rate="${p.rate}" data-tip="${p.tip}">${p.label}</button>`).join("")}
+            </div>
+            <div class="rate-step">
+              <button class="icon-btn sm" type="button" data-rate-step="-1" data-tip="Slower" aria-label="Slower">${icon("minus")}</button>
+              <span class="rate-val num"></span>
+              <button class="icon-btn sm" type="button" data-rate-step="1" data-tip="Faster" aria-label="Faster">${icon("plus")}</button>
+            </div>
+            <div class="rate-info num"></div>
+          </div>
           <div class="chart-graph">
             <canvas class="graph-canvas" height="72" aria-label="Note density"></canvas>
             ${mania ? `<div class="graph-window"></div>` : ""}
             <div class="graph-head"></div>
             <div class="graph-tip num"></div>
           </div>
-          <div class="graph-axis num"><span>0:00</span><span class="graph-hint">Notes per second${d.kiai.length ? " · kiai shaded" : ""}</span><span>${duration(this.total())}</span></div>
-          <div class="chart-stats">
-            ${stats.map(([k, v, s]) => `<div class="cstat"><span class="cstat-k">${k}</span><b class="num">${v}</b><span class="cstat-s">${s}</span></div>`).join("")}
-          </div>
+          <div class="graph-axis num"><span>0:00</span><span class="graph-hint">Notes per second${d.kiai.length ? " · kiai shaded" : ""}</span><span class="axis-end">${duration(this.total() / player.rate)}</span></div>
+          <div class="chart-stats">${this.statsHtml(d)}</div>
           ${mania ? this.maniaBlocks(d) : `<p class="chart-note">Pattern analysis covers osu!mania for now.</p>`}
           <div class="chart-actions">
             <button class="btn btn-sm chart-play" type="button">${icon("play", "ic-play")}${icon("pause", "ic-pause")}<span>Play from here</span></button>
@@ -176,11 +193,56 @@ export class ChartPanel {
 
     this.field = this.el.querySelector(".field-canvas");
     this.graph = this.el.querySelector(".graph-canvas");
+    attachSegIndicator(this.el.querySelector(".rate-presets")!);
+    this.renderRate();
     this.bind();
     this.resize = new ResizeObserver(() => this.drawGraph());
     this.resize.observe(this.el.querySelector(".chart-graph")!);
     this.drawGraph();
     this.syncLoop();
+  }
+
+  /** Key numbers at the current rate. */
+  private statsHtml(d: ChartData): string {
+    const a = d.analysis;
+    const r = player.rate;
+    const stats: [string, string, string][] = [
+      ["Peak", (a.npsPeak * r).toFixed(1), "notes/s"],
+      ["Average", (a.npsAvg * r).toFixed(1), "notes/s"],
+      ["Longest burst", a.longestBurst ? duration(a.longestBurst / r) : "–", "without a breather"],
+    ];
+    if (d.mode === 3 && d.keys > 0) {
+      stats.push(["Long notes", `${Math.round(a.lnTime * 100)}%`, "of the time held"], ["Jacks", `${Math.round(a.jackRatio * 100)}%`, "of rows"]);
+    } else {
+      stats.push(["Objects", num(a.notes), `${num(a.holds)} with a length`]);
+    }
+    return stats.map(([k, v, s]) => `<div class="cstat"><span class="cstat-k">${k}</span><b class="num">${v}</b><span class="cstat-s">${s}</span></div>`).join("");
+  }
+
+  /** Rate controls plus star rating, length and BPM at the rate. */
+  private renderRate(): void {
+    const d = this.data!;
+    const r = player.rate;
+    const map = store.snap!.maps[this.mapIdx];
+    this.el.querySelectorAll<HTMLElement>("[data-rate]").forEach((b) => b.classList.toggle("active", +b.dataset.rate! === r));
+    this.el.querySelector<HTMLButtonElement>("[data-rate-step='-1']")!.disabled = r <= RATE_MIN;
+    this.el.querySelector<HTMLButtonElement>("[data-rate-step='1']")!.disabled = r >= RATE_MAX;
+    this.el.querySelector(".rate-val")!.textContent = `${r.toFixed(2)}×`;
+    const sr = r === 1 ? map.sr : d.stars[Math.round((r - RATE_MIN) / RATE_STEP)];
+    const tip = r === 1 ? "Star rating" : `Star rating at ${r.toFixed(2)}×, calculated by Fumen`;
+    this.el.querySelector(".rate-info")!.innerHTML = [
+      sr !== undefined ? `<span data-tip="${tip}">${srChip(sr, "lg", icon("star-fill"))}</span>` : "",
+      `<span data-tip="Length">${duration(map.length / r)}</span>`,
+      `<span>${bpm(map.bpm * r)} BPM</span>`,
+    ].join("");
+  }
+
+  private onRate(): void {
+    if (!this.data) return;
+    this.renderRate();
+    this.el.querySelector(".chart-stats")!.innerHTML = this.statsHtml(this.data);
+    this.el.querySelector(".axis-end")!.textContent = duration(this.total() / player.rate);
+    this.draw();
   }
 
   private maniaBlocks(d: ChartData): string {
@@ -271,7 +333,7 @@ export class ChartPanel {
     const keys = d.keys;
     const laneW = W / keys;
     const judgeY = H - JUDGE;
-    const span = SPANS[this.spanIdx];
+    const span = this.span();
     const pxPerMs = judgeY / span;
     const t = this.time();
     const tTop = t + span;
@@ -341,7 +403,7 @@ export class ChartPanel {
     ctx.fillRect(0, judgeY - 1, W, 2);
 
     const label = this.el.querySelector<HTMLElement>(".field-time");
-    if (label) label.textContent = duration(Math.max(0, t));
+    if (label) label.textContent = duration(Math.max(0, t) / player.rate);
   }
 
   private drawGraph(): void {
@@ -392,7 +454,7 @@ export class ChartPanel {
     const win = this.el.querySelector<HTMLElement>(".graph-window");
     if (win) {
       win.style.left = `${f * 100}%`;
-      win.style.width = `${(SPANS[this.spanIdx] / total) * 100}%`;
+      win.style.width = `${(this.span() / total) * 100}%`;
     }
     const playing = this.following() && player.playing;
     const btn = this.el.querySelector<HTMLElement>(".chart-play");
@@ -439,8 +501,8 @@ export class ChartPanel {
       const { f, x } = at(e);
       const ms = f * this.total();
       const a = this.data!.analysis;
-      const nps = a.density[Math.floor((ms - a.start) / 1000)] ?? 0;
-      tip.textContent = `${duration(ms)} · ${nps} notes/s`;
+      const nps = (a.density[Math.floor((ms - a.start) / 1000)] ?? 0) * player.rate;
+      tip.textContent = `${duration(ms / player.rate)} · ${Math.round(nps * 10) / 10} notes/s`;
       tip.style.left = `${x}px`;
       if (dragging) this.seek(ms);
     });
@@ -453,13 +515,17 @@ export class ChartPanel {
       (e) => {
         e.preventDefault();
         // wheel up pulls the chart down: forward in time
-        this.seek(this.time() - e.deltaY * (SPANS[this.spanIdx] / 900));
+        this.seek(this.time() - e.deltaY * (this.span() / 900));
       },
       { passive: false },
     );
 
     this.el.addEventListener("click", (e) => {
       const t = e.target as Element;
+      const preset = t.closest<HTMLElement>("[data-rate]");
+      if (preset) return player.setRate(+preset.dataset.rate!);
+      const step = t.closest<HTMLElement>("[data-rate-step]");
+      if (step) return player.setRate(player.rate + +step.dataset.rateStep! * RATE_STEP);
       const z = t.closest<HTMLElement>("[data-zoom]");
       if (z) {
         this.spanIdx = Math.max(0, Math.min(SPANS.length - 1, this.spanIdx + +z.dataset.zoom!));

@@ -14,6 +14,7 @@ use crate::analysis::{self, Analysis};
 use crate::chart::{self, Chart};
 use crate::error::{Error, Result};
 use crate::paths;
+use crate::stars;
 
 pub fn load(storage: &Path, hash: &str) -> Result<Chart> {
     let path = paths::lazer_file(storage, hash).ok_or_else(|| Error::known("chart-missing", "This difficulty has no chart file."))?;
@@ -38,6 +39,8 @@ struct ChartOut<'a> {
     breaks: Vec<i32>,
     /// `[start, end]` per kiai section
     kiai: Vec<i32>,
+    /// osu!mania star rating at 0.5×, 0.55× … 2.0× (empty for other modes)
+    stars: Vec<f32>,
     analysis: &'a Analysis,
 }
 
@@ -56,6 +59,7 @@ pub fn chart_json(chart: &Chart) -> Result<Vec<u8>> {
             .collect(),
         breaks: chart.breaks.iter().flat_map(|&(s, e)| [s, e]).collect(),
         kiai: kiai_sections(chart, analysis.end),
+        stars: stars::mania_rates(chart),
         analysis: &analysis,
     };
     Ok(serde_json::to_vec(&out)?)
@@ -105,9 +109,13 @@ pub struct Summary {
     longest_burst: i32,
     tags: String,
     patterns: String,
+    sr_ht: Option<f32>,
+    sr_dt: Option<f32>,
 }
 
-fn summarize(hash: &str, a: &Analysis) -> Summary {
+fn summarize(hash: &str, chart: &Chart) -> Summary {
+    let a = analysis::analyse(chart);
+    let rated = |rate: f64| (chart.mode == 3).then(|| stars::round2(stars::mania(chart, rate)));
     Summary {
         hash: hash.to_owned(),
         nps_avg: a.nps_avg,
@@ -117,6 +125,8 @@ fn summarize(hash: &str, a: &Analysis) -> Summary {
         longest_burst: a.longest_burst,
         tags: a.tags.join(" "),
         patterns: serde_json::to_string(&a.patterns).unwrap_or_else(|_| "[]".into()),
+        sr_ht: rated(0.75),
+        sr_dt: rated(1.5),
     }
 }
 
@@ -134,7 +144,7 @@ pub fn analyse_batch(storage: &Path, hashes: &[String]) -> Vec<Summary> {
                         let i = next.fetch_add(1, Ordering::Relaxed);
                         let Some(hash) = hashes.get(i) else { break };
                         if let Ok(chart) = load(storage, hash) {
-                            out.push(summarize(hash, &analysis::analyse(&chart)));
+                            out.push(summarize(hash, &chart));
                         }
                     }
                     out
@@ -150,8 +160,8 @@ pub fn store(conn: &mut Connection, rows: &[Summary]) -> Result<()> {
     {
         let mut st = tx.prepare(
             "INSERT OR REPLACE INTO chart_stats
-               (hash, version, nps_avg, nps_peak, ln_time, jack_ratio, longest_burst, tags, patterns)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+               (hash, version, nps_avg, nps_peak, ln_time, jack_ratio, longest_burst, tags, patterns, sr_ht, sr_dt)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
         )?;
         for r in rows {
             st.execute(params![
@@ -163,7 +173,9 @@ pub fn store(conn: &mut Connection, rows: &[Summary]) -> Result<()> {
                 r.jack_ratio,
                 r.longest_burst,
                 r.tags,
-                r.patterns
+                r.patterns,
+                r.sr_ht,
+                r.sr_dt
             ])?;
         }
     }
@@ -214,5 +226,40 @@ mod tests {
             }
         }
         assert_eq!(out.len(), hashes.len());
+    }
+
+    /// Chart files for the browser preview (tools/browser-preview), for every difficulty whose
+    /// title contains one of the comma-separated `FUMEN_PREVIEW_TITLES`:
+    /// `FUMEN_TEST_STORAGE=… FUMEN_TEST_EXPORT=… FUMEN_PREVIEW_TITLES="FREEDOM DiVE,Ready Steady"
+    ///  FUMEN_PREVIEW_CHARTS=../tools/browser-preview/.cache/charts cargo test preview_charts -- --ignored`
+    #[test]
+    #[ignore = "writes chart files for the browser preview"]
+    fn preview_charts() {
+        let var = std::env::var_os;
+        let (Some(storage), Some(export), Some(titles), Some(out)) =
+            (var("FUMEN_TEST_STORAGE"), var("FUMEN_TEST_EXPORT"), var("FUMEN_PREVIEW_TITLES"), var("FUMEN_PREVIEW_CHARTS"))
+        else {
+            return;
+        };
+        let storage = std::path::PathBuf::from(storage);
+        let out = std::path::PathBuf::from(out);
+        std::fs::create_dir_all(&out).unwrap();
+        let wanted: Vec<String> =
+            titles.to_string_lossy().split(',').map(|t| t.trim().to_lowercase()).filter(|t| !t.is_empty()).collect();
+        let export: serde_json::Value = serde_json::from_slice(&std::fs::read(export).unwrap()).unwrap();
+        let mut written = 0;
+        for set in export["sets"].as_array().unwrap() {
+            for m in set["maps"].as_array().unwrap() {
+                let title = m["title"].as_str().unwrap_or_default().to_lowercase();
+                if !wanted.iter().any(|w| title.contains(w.as_str())) {
+                    continue;
+                }
+                let (Some(id), Some(hash)) = (m["id"].as_str(), m["hash"].as_str()) else { continue };
+                let Ok(chart) = load(&storage, hash) else { continue };
+                std::fs::write(out.join(format!("{id}.json")), chart_json(&chart).unwrap()).unwrap();
+                written += 1;
+            }
+        }
+        eprintln!("wrote {written} charts to {}", out.display());
     }
 }
