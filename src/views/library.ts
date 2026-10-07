@@ -5,8 +5,8 @@
  */
 import { thumbUrl } from "../lib/api";
 import {
-  bpm, displayArtist, displayTitle, duration, esc, holdRatio, keysOrMode, modeLabel, num, rankInfo, srChip, srColor, stars,
-  statusLabel,
+  bpm, displayArtist, displayTitle, duration, esc, holdRatio, keysOrMode, modeLabel, num, patternWords, rankInfo, srChip,
+  srColor, stars, statusLabel,
 } from "../lib/format";
 import {
   DEFAULT_FILTER, filterLibrary, parseQuery, sortMaps, sortSets, type FilterResult, type FilterState, type MapSort,
@@ -30,10 +30,11 @@ const SET_SORTS: { value: SetSort; label: string }[] = [
   { value: "length", label: "Length" },
   { value: "ranked", label: "Ranked date" },
   { value: "played", label: "Last played" },
+  { value: "peak", label: "Peak density" },
 ];
 
 /** Sorts where "descending" is the natural first click. */
-const DESC_FIRST = new Set<string>(["added", "sr", "bpm", "length", "ranked", "played", "od", "hp", "objects", "ln", "nps", "grade"]);
+const DESC_FIRST = new Set<string>(["added", "sr", "bpm", "length", "ranked", "played", "od", "hp", "objects", "ln", "nps", "grade", "peak"]);
 
 interface Column {
   key: MapSort | null;
@@ -49,10 +50,11 @@ const COLUMNS: Column[] = [
   { key: "sr", label: "Stars", cls: "c-sr num" },
   { key: "bpm", label: "BPM", cls: "c-num" },
   { key: "length", label: "Length", cls: "c-num" },
-  { key: "od", label: "OD", cls: "c-sm", tip: "Overall difficulty (timing windows)" },
-  { key: "hp", label: "HP", cls: "c-sm", tip: "Drain rate" },
+  { key: "od", label: "OD", cls: "c-sm hide-1", tip: "Overall difficulty (timing windows)" },
+  { key: "hp", label: "HP", cls: "c-sm hide-1", tip: "Drain rate" },
   { key: "objects", label: "Notes", cls: "c-num" },
-  { key: "ln", label: "Holds", cls: "c-sm", tip: "Long notes (mania) / sliders and spinners, as share of all objects" },
+  { key: "peak", label: "Peak", cls: "c-sm hide-2", tip: "Densest two seconds, in notes per second" },
+  { key: "ln", label: "Holds", cls: "c-sm hide-2", tip: "Long notes (mania) / sliders and spinners, as share of all objects" },
   { key: "grade", label: "Best", cls: "c-grade" },
 ];
 
@@ -316,15 +318,16 @@ export class LibraryView {
     return `
       <div class="c-art"><div class="t-art${bg ? "" : " img-missing"}">${bg ? `<img src="${thumbUrl(bg, 160)}" alt="" loading="lazy" decoding="async" />` : ""}<button class="t-play" type="button" aria-label="Play preview">${icon("play", "ic-play")}${icon("pause", "ic-pause")}</button></div></div>
       <div class="c-title"><div class="t-title">${esc(displayTitle(set, unicode))}</div><div class="t-sub">${esc(displayArtist(set, unicode))}</div></div>
-      <div class="c-version"><div class="t-version">${esc(m.version)}</div><div class="t-sub">${esc(set.creator)} · ${statusLabel(m.status)}</div></div>
+      <div class="c-version"><div class="t-version">${esc(m.version)}</div><div class="t-sub">${esc(set.creator)} · ${statusLabel(m.status)}${m.patterns ? ` · <span class="t-pat">${esc(patternWords(m.patterns))}</span>` : ""}</div></div>
       <div class="c-mode">${esc(keysOrMode(m))}</div>
       <div class="c-sr">${srChip(m.sr)}</div>
       <div class="c-num num">${bpm(m.bpm)}</div>
       <div class="c-num num">${duration(m.length)}</div>
-      <div class="c-sm num">${fmt1(m.od)}</div>
-      <div class="c-sm num">${fmt1(m.hp)}</div>
+      <div class="c-sm hide-1 num">${fmt1(m.od)}</div>
+      <div class="c-sm hide-1 num">${fmt1(m.hp)}</div>
       <div class="c-num num">${num(m.objects)}</div>
-      <div class="c-sm num">${Math.round(holdRatio(m) * 100)}%</div>
+      <div class="c-sm hide-2 num">${m.peak !== undefined ? m.peak.toFixed(1) : "–"}</div>
+      <div class="c-sm hide-2 num">${Math.round(holdRatio(m) * 100)}%</div>
       <div class="c-grade">${best ? `<span class="grade" style="--c:${best.color}">${best.label}</span><span class="t-acc num">${(m.best!.acc * 100).toFixed(2)}%</span>` : `<span class="t-none">–</span>`}</div>`;
   }
 
