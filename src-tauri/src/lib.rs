@@ -1,3 +1,6 @@
+mod analysis;
+mod chart;
+mod charts;
 mod db;
 mod error;
 mod lazer;
@@ -11,7 +14,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, RwLock};
 
-use rusqlite::Connection;
+use rusqlite::{Connection, OptionalExtension};
 use serde::Serialize;
 use serde_json::Value;
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -29,6 +32,9 @@ pub struct AppState {
     /// lazer's resolved storage folder (holds client.realm + files/), for the protocol handler.
     storage: RwLock<Option<PathBuf>>,
     scanning: AtomicBool,
+    analysing: AtomicBool,
+    /// another analysis pass was requested while one was running
+    analyse_again: AtomicBool,
 }
 
 impl AppState {
@@ -168,7 +174,83 @@ fn run_scan(app: &AppHandle, state: &AppState) -> Result<ImportCounts> {
     state.refresh_storage();
     emit("import", 1, 1);
     let _ = app.emit("library-changed", counts);
+    start_analysis(app);
     Ok(counts)
+}
+
+// ── Chart analysis ──────────────────────────────────────────────────────────
+
+/// Analyses every difficulty that has no cached analysis yet, in the background. Emits
+/// `analysis-progress` while working and `analysis-done` when new results were stored.
+fn start_analysis(app: &AppHandle) {
+    let state = app.state::<AppState>();
+    if state.analysing.swap(true, Ordering::SeqCst) {
+        state.analyse_again.store(true, Ordering::SeqCst);
+        return;
+    }
+    let app = app.clone();
+    std::thread::spawn(move || {
+        let state = app.state::<AppState>();
+        loop {
+            state.analyse_again.store(false, Ordering::SeqCst);
+            match run_analysis(&app, &state) {
+                Ok(true) => {
+                    let _ = app.emit("analysis-done", ());
+                }
+                Ok(false) => {}
+                Err(e) => eprintln!("[analysis] {e}"),
+            }
+            if !state.analyse_again.load(Ordering::SeqCst) {
+                break;
+            }
+        }
+        state.analysing.store(false, Ordering::SeqCst);
+    });
+}
+
+fn run_analysis(app: &AppHandle, state: &AppState) -> Result<bool> {
+    let Some(storage) = state.storage() else { return Ok(false) };
+    if !storage.join("files").is_dir() {
+        return Ok(false);
+    }
+    let hashes = charts::pending(&state.db())?;
+    if hashes.is_empty() {
+        return Ok(false);
+    }
+    let total = hashes.len() as u64;
+    let emit = |done: u64| {
+        let _ = app.emit("analysis-progress", ScanProgress { stage: "analysis".into(), done, total });
+    };
+    emit(0);
+    let mut done = 0u64;
+    for chunk in hashes.chunks(400) {
+        let rows = charts::analyse_batch(&storage, chunk);
+        charts::store(&mut state.db(), &rows)?;
+        done += chunk.len() as u64;
+        emit(done);
+    }
+    Ok(true)
+}
+
+/// One difficulty's notes, timing and full analysis as raw JSON (see `charts.rs`).
+#[tauri::command]
+async fn get_chart(app: AppHandle, id: String) -> Result<tauri::ipc::Response> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let hash: Option<String> = state
+            .db()
+            .query_row("SELECT hash FROM maps WHERE id = ?1", [&id], |r| r.get(0))
+            .optional()?
+            .flatten();
+        let hash = hash.ok_or_else(|| Error::known("chart-missing", "This difficulty isn't in the library anymore."))?;
+        let storage = state
+            .storage()
+            .ok_or_else(|| Error::known("lazer-not-found", "osu!lazer's data folder wasn't found. Pick it in Settings."))?;
+        let chart = charts::load(&storage, &hash)?;
+        charts::chart_json(&chart).map(tauri::ipc::Response::new)
+    })
+    .await
+    .map_err(|e| Error::known("internal", e.to_string()))?
 }
 
 /// The full library snapshot as raw JSON (see `library.rs`).
@@ -209,9 +291,13 @@ pub fn run() {
                 cache_dir,
                 storage: RwLock::new(None),
                 scanning: AtomicBool::new(false),
+                analysing: AtomicBool::new(false),
+                analyse_again: AtomicBool::new(false),
             };
             state.refresh_storage();
             app.manage(state);
+            // difficulties imported by an older version (or before a crash) still need analysing
+            start_analysis(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -221,6 +307,7 @@ pub fn run() {
             library_status,
             scan_library,
             get_library,
+            get_chart,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Fumen");

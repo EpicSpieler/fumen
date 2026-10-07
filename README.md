@@ -3,13 +3,13 @@
 譜面 (*fumen*): "chart" in Japanese rhythm-game slang.
 
 Fumen is a desktop beatmap library for osu!. It reads your osu!lazer library and lets you browse,
-search, filter and preview all of it quickly. Later versions add mania chart analysis, collections
-and tournament pool building (see [docs/PLAN.md](docs/PLAN.md)).
+search, filter and preview all of it quickly, and shows what each osu!mania chart asks of you.
+Later versions add collections and tournament pool building (see [docs/PLAN.md](docs/PLAN.md)).
 
 Fumen **only reads** osu!'s data. It works on a private copy of lazer's database and never writes
 to osu!'s files.
 
-## Features (v0.1)
+## Features
 
 - Imports the osu!lazer library: sets, difficulties, local scores and collections
 - Cover grid and sortable difficulty table, both virtualised (stays smooth at 20k+ difficulties)
@@ -19,6 +19,16 @@ to osu!'s files.
 - Audio preview from the map's preview point, straight from lazer's files
 - Accent colour and ambient background taken from the artwork (Kodama design language)
 - Re-imports automatically when lazer's library changes
+- Home page: recently played and added, most played, sets you haven't played in a while, quick picks
+- Player with a queue from the list you played from, shuffle / repeat and media keys
+
+**Charts (v0.2)**
+- Every difficulty's `.osu` is analysed once in the background (all ~22k in a few seconds)
+- Chart panel on the set page: an osu!mania playfield that follows the song, a notes-per-second
+  graph (kiai and breaks marked) you can click to jump, peak / average density, longest burst
+- Pattern read for osu!mania: stream, jumpstream, handstream, chordjack, jacks, long notes, stamina;
+  chord mix, jacks, column and hand balance
+- Search by it: `pattern=jumpstream`, `pattern=cj`, `peak>15`
 
 ## Development
 
@@ -35,7 +45,7 @@ Other scripts:
 |---|---|
 | `npm run sidecar` | rebuild `fumen-realm` (the .NET lazer database reader) |
 | `npm run typecheck` | TypeScript checks |
-| `npm test` | Rust unit tests |
+| `npm test` | UI and Rust unit tests |
 | `npm run dev:browser` | UI in a normal browser with Tauri shimmed (see `tools/browser-preview`) |
 | `npm run tauri build` | installer |
 
@@ -43,7 +53,7 @@ Other scripts:
 
 ```
 src/              UI (TypeScript, no framework)
-src-tauri/        Rust backend: SQLite cache, import, fumen:// file + thumbnail protocol
+src-tauri/        Rust backend: SQLite cache, import, .osu parser + chart analysis, fumen:// protocol
 sidecar/          fumen-realm: reads lazer's client.realm (Realm .NET, dynamic + read-only)
 tools/            browser preview, CDP helper
 docs/PLAN.md      roadmap

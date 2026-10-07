@@ -5,16 +5,18 @@ import "./styles/shell.css";
 import "./styles/library.css";
 import "./styles/home.css";
 import "./styles/set.css";
+import "./styles/chart.css";
 import "./styles/player.css";
 import "./styles/settings.css";
 import "./styles/welcome.css";
 
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { api, asApiError, isTauri, thumbUrl } from "./lib/api";
+import { api, asApiError, isTauri, onAnalysis, thumbUrl } from "./lib/api";
 import { esc, num } from "./lib/format";
 import { current, goSection, initRouterInput, router, sectionRoot, type Route } from "./lib/router";
 import { describeScan, isScanning, runScan } from "./lib/scan";
-import { events, loadPrefs, refreshStatus, setPrefs, setSnapshot, store } from "./lib/store";
+import { events, loadPrefs, refreshStatus, reloadLibrary, setPrefs, setSnapshot, store } from "./lib/store";
+import type { ScanProgress } from "./lib/types";
 import { mountPlayerBar } from "./player";
 import { closeMenus, initControls, toast } from "./ui/controls";
 import { icon, injectIconSprite } from "./ui/icons";
@@ -349,6 +351,8 @@ const HINTS: { token: string; label: string }[] = [
   { token: "status=ranked", label: "ranked, loved, local…" },
   { token: "bpm>=180", label: "Tempo" },
   { token: "length<2:00", label: "Length" },
+  { token: "pattern=jumpstream", label: "stream, chordjack, ln, stamina…" },
+  { token: "peak>15", label: "Densest notes per second" },
   { token: "played=no", label: "Never played" },
   { token: "grade>=a", label: "Your best grade" },
   { token: "creator=", label: "Mapper" },
@@ -458,6 +462,9 @@ function renderProfile(): void {
   renderLibraryState();
 }
 
+/** background chart analysis (runs after imports; feeds pattern search) */
+let analysis: ScanProgress | null = null;
+
 function renderLibraryState(): void {
   const sub = $<HTMLElement>(".profile-sub");
   const p = store.scan;
@@ -465,6 +472,9 @@ function renderLibraryState(): void {
     const { label, fraction } = describeScan(p);
     sub.textContent = `Updating · ${Math.round(fraction * 100)}%`;
     sub.dataset.tip = label;
+  } else if (analysis && analysis.done < analysis.total) {
+    sub.textContent = `Analysing charts · ${Math.round((analysis.done / Math.max(1, analysis.total)) * 100)}%`;
+    sub.dataset.tip = "Reading every difficulty once, for pattern search";
   } else {
     const sets = store.snap?.sets.filter((s) => s.maps.length).length ?? 0;
     sub.textContent = store.snap ? `${num(sets)} beatmap sets` : "No library yet";
@@ -564,6 +574,19 @@ async function boot(): Promise<void> {
   initRouterInput();
   mountPlayerBar($(".player-bar"));
   void initWindow();
+  if (isTauri) {
+    void onAnalysis(
+      (p) => {
+        analysis = p;
+        renderLibraryState();
+      },
+      () => {
+        analysis = null;
+        renderLibraryState();
+        if (store.snap) void reloadLibrary().catch((e) => console.warn("[analysis] reload failed", e));
+      },
+    );
+  }
 
   try {
     loadPrefs(await api.getSettings());

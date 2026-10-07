@@ -1,7 +1,7 @@
 /* Typed wrappers around the Tauri commands, plus fumen:// URLs. */
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import type { ApiError, LazerInstall, LibraryStatus, ScanProgress, Settings, Snapshot } from "./types";
+import type { ApiError, ChartData, LazerInstall, LibraryStatus, ScanProgress, Settings, Snapshot } from "./types";
 
 export const isTauri = "__TAURI_INTERNALS__" in window;
 
@@ -17,10 +17,23 @@ export const api = {
     if (raw instanceof ArrayBuffer) return JSON.parse(new TextDecoder().decode(raw)) as Snapshot;
     return raw;
   },
+  async getChart(id: string): Promise<ChartData> {
+    const raw = await invoke<ArrayBuffer | ChartData>("get_chart", { id });
+    if (raw instanceof ArrayBuffer) return JSON.parse(new TextDecoder().decode(raw)) as ChartData;
+    return raw;
+  },
 };
 
 export function onScanProgress(cb: (p: ScanProgress) => void): Promise<UnlistenFn> {
   return listen<ScanProgress>("scan-progress", (e) => cb(e.payload));
+}
+
+/** Background chart analysis of the whole library (after imports and on start). */
+export function onAnalysis(progress: (p: ScanProgress) => void, done: () => void): Promise<UnlistenFn[]> {
+  return Promise.all([
+    listen<ScanProgress>("analysis-progress", (e) => progress(e.payload)),
+    listen("analysis-done", () => done()),
+  ]);
 }
 
 export function asApiError(e: unknown): ApiError {

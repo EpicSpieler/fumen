@@ -127,3 +127,11 @@ export const rankInfo = (rank: number) => RANKS[rank] ?? RANKS[-1];
 
 export const esc = (s: string | number | undefined | null): string =>
   String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+
+/** Display names for the chart analysis' pattern tags. */
+const PATTERN_WORDS: Record<string, string> = {
+  stream: "stream", jumpstream: "jumpstream", handstream: "handstream", chordjack: "chordjack",
+  jacks: "jacks", ln: "LN", stamina: "stamina",
+};
+export const patternWords = (tags: string): string =>
+  tags.split(" ").filter(Boolean).map((t) => PATTERN_WORDS[t] ?? t).join(", ");

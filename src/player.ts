@@ -72,9 +72,10 @@ class Player {
 
   /**
    * Plays a set's preview; toggles if it's already the current track.
-   * `queue` is the list the set was picked from (set indices, display order).
+   * `queue` is the list the set was picked from (set indices, display order); `at` (seconds)
+   * starts somewhere other than the preview point.
    */
-  playSet(setIdx: number, mapIdx?: number, queue?: number[]): void {
+  playSet(setIdx: number, mapIdx?: number, queue?: number[], opts: { at?: number } = {}): void {
     const snap = store.snap;
     if (!snap) return;
     const set = snap.sets[setIdx];
@@ -88,15 +89,18 @@ class Player {
     }
     this.qpos = this.queue.indexOf(setIdx);
     if (this.now && this.now.set === setIdx && this.now.audio === audio) {
-      this.toggle();
+      if (opts.at !== undefined) {
+        this.audio.currentTime = Math.max(0, opts.at);
+        if (!this.playing) this.fadeIn();
+      } else this.toggle();
       this.bus.emit("queue", null);
       return;
     }
-    if (!this.load(setIdx, mapIdx)) toast("This set has no audio file.");
+    if (!this.load(setIdx, mapIdx, opts.at)) toast("This set has no audio file.");
   }
 
-  /** Starts a set at its preview point. False when the set has no audio. */
-  private load(setIdx: number, mapIdx?: number): boolean {
+  /** Starts a set at its preview point (or `at` seconds). False when the set has no audio. */
+  private load(setIdx: number, mapIdx?: number, at?: number): boolean {
     const snap = store.snap;
     if (!snap) return false;
     const set = snap.sets[setIdx];
@@ -116,7 +120,7 @@ class Player {
     const start = () => {
       a.removeEventListener("loadedmetadata", start);
       const d = a.duration;
-      const t = previewMs >= 0 ? previewMs / 1000 : Number.isFinite(d) ? d * 0.4 : 0;
+      const t = at ?? (previewMs >= 0 ? previewMs / 1000 : Number.isFinite(d) ? d * 0.4 : 0);
       this.startAt = Number.isFinite(d) ? Math.min(t, Math.max(0, d - 1)) : t;
       a.currentTime = this.startAt;
       this.fadeIn();
@@ -424,7 +428,7 @@ export function mountPlayerBar(host: HTMLElement): void {
 
   // space toggles playback unless typing
   window.addEventListener("keydown", (e) => {
-    if (e.code !== "Space" || e.repeat || !player.now) return;
+    if (e.code !== "Space" || e.repeat || e.defaultPrevented || !player.now) return;
     const t = e.target as HTMLElement;
     if (t.closest("input, textarea, [contenteditable], button, [role='slider']")) return;
     e.preventDefault();

@@ -5,6 +5,7 @@
  *   "quoted phrase"     phrase match;  -word excludes
  *   key<op>value        op: = == != < <= > >= :   e.g.  keys=7  sr>4.5  bpm<=200  length<2:30
  *                       status=ranked  mode=mania  creator=Shoegazer  grade>=A  played=no  ln>30
+ *                       pattern=jumpstream  peak>15   (from the chart analysis)
  */
 import type { MapRow, SetRow, Snapshot } from "./types";
 
@@ -14,9 +15,9 @@ type Op = "=" | "==" | "!=" | "<" | "<=" | ">" | ">=";
 
 type NumKey =
   | "sr" | "bpm" | "length" | "od" | "hp" | "ar" | "cs" | "keys" | "objects" | "ln" | "nps"
-  | "plays" | "acc" | "added" | "played" | "year" | "setid" | "mapid";
+  | "plays" | "acc" | "added" | "played" | "year" | "setid" | "mapid" | "peak";
 type StrKey = "creator" | "artist" | "title" | "source" | "tags" | "diff";
-type Key = NumKey | StrKey | "status" | "mode" | "grade";
+type Key = NumKey | StrKey | "status" | "mode" | "grade" | "pattern";
 
 const ALIASES: Record<string, Key> = {
   star: "sr", stars: "sr", sr: "sr",
@@ -27,6 +28,8 @@ const ALIASES: Record<string, Key> = {
   notes: "objects", objects: "objects", objs: "objects",
   ln: "ln", lns: "ln", holds: "ln",
   nps: "nps",
+  peak: "peak", peaknps: "peak",
+  pattern: "pattern", patterns: "pattern", skill: "pattern", style: "pattern",
   plays: "plays", playcount: "plays",
   added: "added", played: "played", lastplayed: "played",
   ranked: "year", year: "year",
@@ -60,6 +63,17 @@ const MODE_NAMES: Record<string, number> = {
   m: 3, mania: 3, "3": 3,
 };
 
+/** Pattern tags from the chart analysis, with the community's short forms. */
+const PATTERN_NAMES: Record<string, string> = {
+  stream: "stream", streams: "stream",
+  jumpstream: "jumpstream", js: "jumpstream",
+  handstream: "handstream", hs: "handstream",
+  chordjack: "chordjack", chordjacks: "chordjack", cj: "chordjack",
+  jack: "jacks", jacks: "jacks", jackhammer: "jacks",
+  ln: "ln", lns: "ln", longnote: "ln", longnotes: "ln",
+  stamina: "stamina", stam: "stamina",
+};
+
 /** lazer ScoreRank ordinal for grade comparisons (silver variants rank with their gold ones). */
 const GRADE_NAMES: Record<string, number> = { f: -1, d: 0, c: 1, b: 2, a: 3, s: 4, sh: 4, ss: 6, x: 6, xh: 6 };
 const gradeOrdinal = (rank: number): number => (rank === 5 ? 4 : rank === 7 ? 6 : rank);
@@ -68,7 +82,8 @@ interface NumCond { key: NumKey; op: Op; value: number; step: number }
 interface StrCond { key: StrKey; op: Op; value: string }
 interface SetCond { key: "status" | "mode"; op: Op; values: number[] }
 interface GradeCond { key: "grade"; op: Op; value: number }
-type Cond = NumCond | StrCond | SetCond | GradeCond;
+interface PatternCond { key: "pattern"; op: Op; value: string }
+type Cond = NumCond | StrCond | SetCond | GradeCond | PatternCond;
 
 export interface ParsedQuery {
   terms: string[];
@@ -117,6 +132,10 @@ function parseCond(rawKey: string, rawOp: string, rawValue: string): Cond | null
     }
     case "creator": case "artist": case "title": case "source": case "tags": case "diff":
       return lower ? { key, op, value: lower } : null;
+    case "pattern": {
+      const name = PATTERN_NAMES[lower];
+      return name ? { key, op: op === "!=" ? "!=" : "=", value: name } : null;
+    }
     case "length": {
       const secs = parseLength(lower);
       return secs === null ? null : { key, op, value: secs, step: lower.includes(":") || /[hms]/.test(lower) ? 1 : decimalsStep(lower) };
@@ -257,6 +276,7 @@ function numValue(key: NumKey, m: MapRow, s: SetRow, now: number): number {
     case "year": return s.ranked ? new Date(s.ranked).getFullYear() : NaN;
     case "setid": return s.onlineId ?? -1;
     case "mapid": return m.onlineId ?? -1;
+    case "peak": return m.peak ?? NaN;
   }
 }
 
@@ -326,6 +346,10 @@ function test(c: Cond, m: MapRow, s: SetRow, fields: LibIndex["setFields"][numbe
     case "source": return cmpStr(fields.source, c.op, c.value);
     case "tags": return cmpStr(fields.tags, c.op, c.value);
     case "diff": return cmpStr(version, c.op, c.value);
+    case "pattern": {
+      const hit = !!m.patterns && ` ${m.patterns} `.includes(` ${c.value} `);
+      return c.op === "!=" ? !hit : hit;
+    }
     default: {
       const x = numValue(c.key, m, s, now);
       return !Number.isNaN(x) && cmpNum(x, c.op, c.value, c.step);
