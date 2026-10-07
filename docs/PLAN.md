@@ -58,7 +58,7 @@ upgrade risk.
 
 | Version | Name | What you get |
 |---|---|---|
-| **0.1** | Library | lazer library in a fast grid/list; search; filters (mode, keys, SR, BPM, length, OD/HP, status); set page with all difficulties; local audio preview from preview point; backgrounds; lazer collections (read-only); settings (paths, accent, theme) |
+| **0.1** | Library | lazer library in a fast grid/list; search; filters (mode, keys, SR, BPM, length, OD/HP, status); set page with all difficulties; local audio playback; backgrounds; lazer collections (read-only); settings (paths, accent, theme) |
 | 0.2 | Charts | `.osu` hit-object parser; mania chart preview (scrolling playfield); density/NPS graph; LN %, chord/jack/stream stats; auto pattern tags ("jumpstream", "LN", "chordjack", "tech") |
 | 0.3 | Collections | Fumen collections + smart collections (saved filters); drag & drop; export to `collection.db` (stable / Collection Manager) and to lazer (lazer closed, backup first); stable source (`osu!.db` + Songs) |
 | 0.4 | You | lazer scores + osu! API v2 (OAuth); play history; per-pattern skill radar; "practice next" suggestions; goals |
@@ -82,7 +82,7 @@ upgrade risk.
 - [x] Home: greeting, shelves (recently played / added, most played, haven't played in a while), quick picks panel
 - [x] Library: virtualised cover grid + difficulty table; osu!-style query language (keys, sr, bpm, length, od, status, grade, played, …); mode + key-count chips; star range / status / played filters; sort
 - [x] Set view: large background, ambient blur, difficulty table (keys, SR colour, OD, HP, notes, LN %, length), play preview
-- [x] Player: preview from `PreviewTime`, queue from the list you played from, shuffle/repeat, seek, volume, media keys; accent from current cover
+- [x] Player: songs from the beginning, queue from the list you played from (shuffled by default), repeat, seek, volume, media keys; accent from current cover
 - [x] Collections view (lazer, read-only)
 - [x] Settings: paths, rescan, auto-rescan, accent (dynamic / fixed), theme, ambient, original-language metadata, reduced motion
 - [x] Empty / first-run state: detect lazer, one-click first scan with progress

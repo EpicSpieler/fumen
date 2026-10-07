@@ -1,7 +1,7 @@
-/* player.ts — audio preview of beatmap sets + the player under the content.
+/* player.ts — plays beatmap sets' songs + the player under the content.
  *
- * Plays the set's own audio file from lazer's store (no network), starting at the mapper's
- * preview point with a short fade-in. One player for the whole app; views subscribe to changes.
+ * Plays the set's own audio file from lazer's store (no network), from the beginning of the song.
+ * One player for the whole app; views subscribe to changes.
  * Whoever starts playback can hand over the list it came from (a library page, a carousel), so
  * next/previous and the end of a track continue through what the user was looking at.
  * The playback rate works like lazer's rate mods: it applies to whatever plays until it's reset,
@@ -79,9 +79,9 @@ class Player {
   }
 
   /**
-   * Plays a set's preview; toggles if it's already the current track.
+   * Plays a set's song; toggles if it's already the current track.
    * `queue` is the list the set was picked from (set indices, display order); `at` (seconds)
-   * starts somewhere other than the preview point.
+   * starts somewhere other than the beginning.
    */
   playSet(setIdx: number, mapIdx?: number, queue?: number[], opts: { at?: number } = {}): void {
     const snap = store.snap;
@@ -107,7 +107,7 @@ class Player {
     if (!this.load(setIdx, mapIdx, opts.at)) toast("This set has no audio file.");
   }
 
-  /** Starts a set at its preview point (or `at` seconds). False when the set has no audio. */
+  /** Starts a set's song from the beginning (or `at` seconds). False when the set has no audio. */
   private load(setIdx: number, mapIdx?: number, at?: number): boolean {
     const snap = store.snap;
     if (!snap) return false;
@@ -116,7 +116,6 @@ class Player {
     const map = snap.maps[mi];
     const audio = map?.audio ?? set.audio;
     if (!audio) return false;
-    const previewMs = (map?.audio ? map.preview : undefined) ?? set.preview ?? -1;
     this.now = { set: setIdx, map: mi, audio, bg: map?.bg ?? set.bg };
     this.bus.emit("track", this.now);
     this.bus.emit("queue", null);
@@ -128,7 +127,7 @@ class Player {
     const start = () => {
       a.removeEventListener("loadedmetadata", start);
       const d = a.duration;
-      const t = at ?? (previewMs >= 0 ? previewMs / 1000 : Number.isFinite(d) ? d * 0.4 : 0);
+      const t = Math.max(0, at ?? 0);
       this.startAt = Number.isFinite(d) ? Math.min(t, Math.max(0, d - 1)) : t;
       a.currentTime = this.startAt;
       a.playbackRate = this.rate;
@@ -180,9 +179,15 @@ class Player {
     if (!this.playing) this.fadeIn();
   }
 
+  /** Plays with a short fade-in, except from the very start, where a fade would swallow the first beat. */
   private fadeIn(): void {
     cancelAnimationFrame(this.fadeRaf);
     const target = this.targetVolume();
+    if (this.audio.currentTime < 0.05) {
+      this.audio.volume = target;
+      this.audio.play().catch(() => {});
+      return;
+    }
     this.audio.volume = 0;
     this.audio.play().catch(() => {});
     const t0 = performance.now();

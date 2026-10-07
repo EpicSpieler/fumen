@@ -289,7 +289,7 @@ export class LibraryView {
         <div class="card-art${set.bg ? "" : " img-missing"}">
           ${art}
           ${this.keysBadge(maps)}
-          <button class="card-play" type="button" aria-label="Play preview">${icon("play", "ic-play")}${icon("pause", "ic-pause")}</button>
+          <button class="card-play" type="button" aria-label="Play">${icon("play", "ic-play")}${icon("pause", "ic-pause")}</button>
         </div>
         <div class="card-title">${esc(displayTitle(set, unicode))}</div>
         <div class="card-sub">${esc(displayArtist(set, unicode))}</div>
@@ -316,7 +316,7 @@ export class LibraryView {
     const bg = m.bg ?? set.bg;
     const best = m.best ? rankInfo(m.best.rank) : null;
     return `
-      <div class="c-art"><div class="t-art${bg ? "" : " img-missing"}">${bg ? `<img src="${thumbUrl(bg, 160)}" alt="" loading="lazy" decoding="async" />` : ""}<button class="t-play" type="button" aria-label="Play preview">${icon("play", "ic-play")}${icon("pause", "ic-pause")}</button></div></div>
+      <div class="c-art"><div class="t-art${bg ? "" : " img-missing"}">${bg ? `<img src="${thumbUrl(bg, 160)}" alt="" loading="lazy" decoding="async" />` : ""}<button class="t-play" type="button" aria-label="Play">${icon("play", "ic-play")}${icon("pause", "ic-pause")}</button></div></div>
       <div class="c-title"><div class="t-title">${esc(displayTitle(set, unicode))}</div><div class="t-sub">${esc(displayArtist(set, unicode))}</div></div>
       <div class="c-version"><div class="t-version">${esc(m.version)}</div><div class="t-sub">${esc(set.creator)} · ${statusLabel(m.status)}${m.patterns ? ` · <span class="t-pat">${esc(patternWords(m.patterns))}</span>` : ""}</div></div>
       <div class="c-mode">${esc(keysOrMode(m))}</div>

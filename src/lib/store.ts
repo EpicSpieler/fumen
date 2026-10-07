@@ -35,7 +35,7 @@ export const DEFAULT_PREFS: UiPrefs = {
   keys: [],
   sidebarCollapsed: false,
   collapsedGroups: [],
-  shuffle: false,
+  shuffle: true,
   repeat: "off",
   defaultsApplied: false,
 };
