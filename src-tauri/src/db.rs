@@ -1,0 +1,162 @@
+//! SQLite cache of the imported library plus Fumen's own data (later: collections, analysis,
+//! pools). Migrations are append-only and tracked with `PRAGMA user_version`.
+
+use std::path::Path;
+
+use rusqlite::{Connection, OptionalExtension};
+
+use crate::error::Result;
+
+const MIGRATIONS: &[&str] = &[
+    // 1 — lazer import
+    r#"
+    CREATE TABLE sets (
+        id             TEXT PRIMARY KEY,
+        source         TEXT NOT NULL DEFAULT 'lazer',
+        online_id      INTEGER,
+        status         INTEGER,
+        date_added     INTEGER,
+        date_submitted INTEGER,
+        date_ranked    INTEGER,
+        protected      INTEGER NOT NULL DEFAULT 0,
+        title          TEXT NOT NULL DEFAULT '',
+        title_unicode  TEXT NOT NULL DEFAULT '',
+        artist         TEXT NOT NULL DEFAULT '',
+        artist_unicode TEXT NOT NULL DEFAULT '',
+        creator        TEXT NOT NULL DEFAULT '',
+        creator_id     INTEGER,
+        source_text    TEXT NOT NULL DEFAULT '',
+        tags           TEXT NOT NULL DEFAULT '',
+        bg             TEXT,
+        audio          TEXT,
+        preview_time   INTEGER
+    );
+    CREATE TABLE maps (
+        id           TEXT PRIMARY KEY,
+        set_id       TEXT NOT NULL REFERENCES sets(id) ON DELETE CASCADE,
+        online_id    INTEGER,
+        version      TEXT NOT NULL DEFAULT '',
+        ruleset      TEXT,
+        ruleset_id   INTEGER,
+        status       INTEGER,
+        hash         TEXT,
+        md5          TEXT,
+        sr           REAL,
+        bpm          REAL,
+        length       REAL,
+        objects      INTEGER,
+        end_objects  INTEGER,
+        last_played  INTEGER,
+        last_update  INTEGER,
+        hidden       INTEGER NOT NULL DEFAULT 0,
+        hp           REAL,
+        cs           REAL,
+        od           REAL,
+        ar           REAL,
+        bg           TEXT,
+        audio        TEXT,
+        preview_time INTEGER
+    );
+    CREATE INDEX maps_set ON maps(set_id);
+    CREATE INDEX maps_md5 ON maps(md5);
+    CREATE TABLE scores (
+        id                 TEXT PRIMARY KEY,
+        map_id             TEXT,
+        map_md5            TEXT,
+        ruleset            TEXT,
+        total_score        INTEGER,
+        accuracy           REAL,
+        max_combo          INTEGER,
+        rank               INTEGER,
+        pp                 REAL,
+        date               INTEGER,
+        mods               TEXT,
+        statistics         TEXT,
+        maximum_statistics TEXT,
+        online_id          INTEGER,
+        legacy             INTEGER NOT NULL DEFAULT 0,
+        user               TEXT,
+        user_id            INTEGER
+    );
+    CREATE INDEX scores_md5 ON scores(map_md5);
+    CREATE TABLE lazer_collections (
+        id       TEXT PRIMARY KEY,
+        name     TEXT NOT NULL,
+        modified INTEGER,
+        position INTEGER NOT NULL
+    );
+    CREATE TABLE lazer_collection_items (
+        collection_id TEXT NOT NULL REFERENCES lazer_collections(id) ON DELETE CASCADE,
+        md5           TEXT NOT NULL,
+        position      INTEGER NOT NULL
+    );
+    CREATE INDEX lazer_collection_items_c ON lazer_collection_items(collection_id);
+    CREATE TABLE meta (
+        key   TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+    );
+    "#,
+];
+
+pub fn open(path: &Path) -> Result<Connection> {
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    let mut conn = Connection::open(path)?;
+    conn.execute_batch(
+        "PRAGMA journal_mode = WAL;
+         PRAGMA synchronous = NORMAL;
+         PRAGMA foreign_keys = ON;
+         PRAGMA temp_store = MEMORY;",
+    )?;
+    migrate(&mut conn)?;
+    Ok(conn)
+}
+
+fn migrate(conn: &mut Connection) -> Result<()> {
+    let current: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
+    for (i, sql) in MIGRATIONS.iter().enumerate().skip(current.max(0) as usize) {
+        let tx = conn.transaction()?;
+        tx.execute_batch(sql)?;
+        tx.pragma_update(None, "user_version", (i + 1) as i64)?;
+        tx.commit()?;
+    }
+    Ok(())
+}
+
+pub fn get_meta(conn: &Connection, key: &str) -> Result<Option<String>> {
+    Ok(conn
+        .query_row("SELECT value FROM meta WHERE key = ?1", [key], |r| r.get(0))
+        .optional()?)
+}
+
+pub fn set_meta(conn: &Connection, key: &str, value: &str) -> Result<()> {
+    conn.execute(
+        "INSERT INTO meta (key, value) VALUES (?1, ?2)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        [key, value],
+    )?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn migrations_apply_and_are_idempotent() {
+        let dir = std::env::temp_dir().join(format!("fumen-db-test-{}", std::process::id()));
+        let path = dir.join("t.db");
+        let _ = std::fs::remove_dir_all(&dir);
+        {
+            let conn = open(&path).unwrap();
+            set_meta(&conn, "k", "v").unwrap();
+        }
+        let conn = open(&path).unwrap();
+        assert_eq!(get_meta(&conn, "k").unwrap().as_deref(), Some("v"));
+        let v: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
+        assert_eq!(v as usize, MIGRATIONS.len());
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}

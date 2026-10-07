@@ -1,0 +1,31 @@
+{
+  "name": "fumen",
+  "private": true,
+  "version": "0.1.0",
+  "description": "A beatmap library for osu!",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:browser": "vite --config tools/browser-preview/vite.config.ts",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.node.json",
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "app": "node scripts/build-sidecar.mjs --if-missing && tauri dev",
+    "sidecar": "node scripts/build-sidecar.mjs",
+    "test": "vitest run && cargo test --manifest-path src-tauri/Cargo.toml",
+    "test:ui": "vitest run"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.12.1",
+    "@tauri-apps/plugin-dialog": "^2.8.1",
+    "@tauri-apps/plugin-opener": "^2.7.0"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.12.1",
+    "@types/node": "^22.20.5",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.3",
+    "vitest": "^5.0.3"
+  }
+}

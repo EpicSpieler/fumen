@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "fumen-browser",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["vite", "--config", "tools/browser-preview/vite.config.ts"],
+      "port": 1431
+    }
+  ]
+}

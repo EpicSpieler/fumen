@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    fumen-realm: reads osu!lazer's client.realm (a copy of it) in dynamic, read-only mode and
+    writes the parts Fumen needs as one JSON document. Bundled with the app as a Tauri sidecar.
+    Keep the Realm version in step with osu!lazer's, otherwise the file format may not match.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>fumen-realm</AssemblyName>
+    <RootNamespace>FumenRealm</RootNamespace>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <DebugType>none</DebugType>
+  </PropertyGroup>
+
+  <!-- Single self-contained exe (~13 MB). Partial trimming is verified to produce byte-identical
+       exports; "full" trimming strips Realm's dynamic accessors. -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <PublishTrimmed>true</PublishTrimmed>
+    <TrimMode>partial</TrimMode>
+    <!-- Realm/Remotion.Linq report generic IL2104 warnings; output verified identical above. -->
+    <SuppressTrimAnalysisWarnings>true</SuppressTrimAnalysisWarnings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Realm" Version="20.1.0" />
+  </ItemGroup>
+
+</Project>

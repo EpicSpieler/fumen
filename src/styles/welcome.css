@@ -1,0 +1,65 @@
+/* ===========================================================================
+   First run
+   =========================================================================== */
+
+.welcome-view { display: grid; place-items: center; }
+.welcome {
+  width: min(560px, 100%);
+  padding: 48px 0;
+  text-align: center;
+}
+.welcome-mark { animation: hero-drop .6s var(--ease-out) both; }
+.welcome-mark .ic { width: 64px; height: 64px; margin: 0 auto; color: var(--accent); }
+@keyframes hero-drop { from { opacity: 0; transform: translateY(-22px) scale(.8); } }
+.welcome-title {
+  margin-top: 18px;
+  font-size: var(--fs-hero);
+  font-weight: 700;
+  letter-spacing: -.02em;
+  animation: rise-in .55s var(--ease-out) .12s both;
+}
+.welcome-sub { margin-top: 6px; color: var(--t2); font-size: var(--fs-14); animation: rise-in .55s var(--ease-out) .18s both; }
+
+.welcome-panel {
+  margin-top: 30px;
+  padding: 20px;
+  text-align: left;
+  animation: rise-in .55s var(--ease-out) .24s both;
+}
+.welcome-found .label-caps { margin-bottom: 6px; }
+.welcome-path {
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: var(--fs-12);
+  color: var(--t1);
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+.welcome-meta { margin-top: 4px; font-size: var(--fs-12); color: var(--t3); }
+.welcome-actions { display: flex; align-items: center; gap: 10px; margin-top: 18px; }
+
+.welcome-progress { margin-top: 18px; }
+.welcome-progress-row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: var(--fs-12); color: var(--t2); }
+.welcome-progress .bar > i { transform-origin: left; transition: transform .3s var(--ease-out); }
+
+.welcome-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 16px;
+  padding: 10px 12px;
+  border-radius: var(--r-lg);
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: var(--fs-12);
+}
+.welcome-error .ic { width: 16px; height: 16px; flex: none; margin-top: 1px; }
+
+.welcome-foot {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 18px;
+  font-size: var(--fs-12);
+  color: var(--t3);
+}
+.welcome-foot .ic { width: 15px; height: 15px; }

@@ -1,0 +1,146 @@
+/* ===========================================================================
+   Tokens — Kodama design language: dark, one accent, surfaces separated by
+   brightness steps instead of lines. Themes only override these values.
+   =========================================================================== */
+
+@font-face {
+  font-family: "Instrument Sans";
+  src: url(/fonts/instrument-sans-latin.woff2) format("woff2-variations"),
+       url(/fonts/instrument-sans-latin.woff2) format("woff2");
+  font-weight: 400 700; font-style: normal; font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Instrument Sans";
+  src: url(/fonts/instrument-sans-latin-ext.woff2) format("woff2-variations"),
+       url(/fonts/instrument-sans-latin-ext.woff2) format("woff2");
+  font-weight: 400 700; font-style: normal; font-display: swap;
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+/* registered → an accent change glides across the whole app */
+@property --accent     { syntax: "<color>"; inherits: true; initial-value: #8b7cff; }
+@property --accent-ink { syntax: "<color>"; inherits: true; initial-value: #c9c1ff; }
+
+:root {
+  color-scheme: dark;
+
+  /* surface ladder: each level a fixed, slightly lighter grey */
+  --bg-base:     #0d0d0d;
+  --bg-surface:  #141414;
+  --bg-elevated: #1c1c1c;
+  --bg-hover:    #222222;
+  --surface-1:   #1c1c1c;
+  --surface-2:   #313131;
+  --surface-3:   #3c3c3c;
+
+  /* lines — sparingly */
+  --stroke:     rgba(255, 255, 255, .082);
+  --stroke-dim: rgba(255, 255, 255, .050);
+  --stroke-med: rgba(255, 255, 255, .145);
+
+  /* state fills (transparent → work over any background) */
+  --fill-subtle: rgba(255, 255, 255, .055);
+  --fill-mod:    rgba(255, 255, 255, .093);
+  --fill-strong: rgba(255, 255, 255, .14);
+
+  /* text hierarchy through opacity only */
+  --t1: rgba(255, 255, 255, .886);
+  --t2: rgba(255, 255, 255, .544);
+  --t3: rgba(255, 255, 255, .373);
+  --t4: rgba(255, 255, 255, .200);
+  --tint-hover: color-mix(in srgb, var(--t1) 8%, transparent);
+  --tint-press: color-mix(in srgb, var(--t1) 14%, transparent);
+
+  /* accent: one colour, everything else is mixed from it (set at runtime) */
+  --accent: #8b7cff;
+  --accent-ink: #c9c1ff;
+  --on-accent: #0b0c0e;
+  --accent-dim:       color-mix(in srgb, var(--accent) 9%, transparent);
+  --accent-dim-hover: color-mix(in srgb, var(--accent) 15%, transparent);
+  --accent-soft:      color-mix(in srgb, var(--accent) 20%, transparent);
+  --accent-line:      color-mix(in srgb, var(--accent) 45%, transparent);
+
+  /* status: one colour per role */
+  --danger:  #ff7070;
+  --success: #6bdf96;
+  --warning: #f0b429;
+  --info:    #64b5f6;
+  --danger-soft:  color-mix(in srgb, var(--danger) 12%, transparent);
+  --success-soft: color-mix(in srgb, var(--success) 12%, transparent);
+  --warning-soft: color-mix(in srgb, var(--warning) 12%, transparent);
+
+  --placeholder-gradient: linear-gradient(135deg, #1d1c24, #121116);
+
+  /* form */
+  --r-xs: 3px; --r-sm: 4px; --r-md: 6px; --r-lg: 8px; --r-xl: 12px; --r-2xl: 16px; --r-full: 999px;
+
+  /* depth */
+  --elevation-1: 0 2px 8px rgba(0, 0, 0, .22);
+  --elevation-2: 0 4px 14px rgba(0, 0, 0, .28);
+  --elevation-3: 0 10px 24px rgba(0, 0, 0, .42);
+  --elevation-4: 0 18px 48px rgba(0, 0, 0, .50);
+  --elevation-5: 0 28px 70px rgba(0, 0, 0, .58);
+
+  /* motion */
+  --ease-std:    cubic-bezier(.4, 0, .2, 1);
+  --ease-out:    cubic-bezier(.22, 1, .36, 1);
+  --ease-spring: cubic-bezier(.34, 1.56, .64, 1);
+  --ease-switch: cubic-bezier(.32, .72, 0, 1);
+
+  /* type ladder: round(n × 14/13 × user scale) */
+  --fs: 1;
+  --fs-10: round(calc(10px * 14 / 13 * var(--fs)), 1px);
+  --fs-11: round(calc(11px * 14 / 13 * var(--fs)), 1px);
+  --fs-12: round(calc(12px * 14 / 13 * var(--fs)), 1px);
+  --fs-13: round(calc(13px * 14 / 13 * var(--fs)), 1px);
+  --fs-14: round(calc(14px * 14 / 13 * var(--fs)), 1px);
+  --fs-15: round(calc(15px * 14 / 13 * var(--fs)), 1px);
+  --fs-16: round(calc(16px * 14 / 13 * var(--fs)), 1px);
+  --fs-18: round(calc(18px * 14 / 13 * var(--fs)), 1px);
+  --fs-20: round(calc(20px * 14 / 13 * var(--fs)), 1px);
+  --fs-22: round(calc(22px * 14 / 13 * var(--fs)), 1px);
+  --fs-hero: round(calc(30px * var(--fs)), 1px);
+
+  --font: "Instrument Sans", "Segoe UI Variable Text", "Segoe UI", "Yu Gothic UI", "Meiryo",
+          "Hiragino Sans", "Noto Sans JP", "Microsoft YaHei UI", "Malgun Gothic", system-ui, sans-serif;
+
+  /* layout */
+  --topbar-h: 36px;
+  --sidebar-w: 264px;
+  --player-h: 104px;
+  --pad-x: 28px;
+}
+
+/* OLED theme */
+:root[data-theme="oled"] {
+  --bg-base: #000000; --bg-surface: #080808; --bg-elevated: #0f0f0f; --bg-hover: #141414;
+  --surface-1: #0f0f0f; --surface-2: #262626; --surface-3: #303030;
+  --stroke: rgba(255, 255, 255, .060); --stroke-dim: rgba(255, 255, 255, .035);
+  --t1: #fff; --t2: rgba(255, 255, 255, .50); --t3: rgba(255, 255, 255, .33);
+}
+
+/* high contrast — on top of any theme */
+:root.hc {
+  --t2: rgba(255, 255, 255, .85);
+  --t3: rgba(255, 255, 255, .63);
+  --stroke: rgba(255, 255, 255, .45);
+  --stroke-med: rgba(255, 255, 255, .55);
+  --accent-dim: transparent;
+  --accent-dim-hover: var(--fill-mod);
+  --accent-soft: var(--fill-strong);
+}
+
+/* reduced motion (setting or system) */
+:root.reduce-motion *, :root.reduce-motion *::before, :root.reduce-motion *::after {
+  animation-duration: .001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: .001ms !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+  }
+}
