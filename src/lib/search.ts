@@ -359,7 +359,7 @@ function test(c: Cond, m: MapRow, s: SetRow, fields: LibIndex["setFields"][numbe
 
 // ── sorting ────────────────────────────────────────────────────────────────
 
-export type SetSort = "added" | "title" | "artist" | "creator" | "sr" | "bpm" | "length" | "ranked" | "played";
+export type SetSort = "added" | "title" | "artist" | "creator" | "sr" | "bpm" | "length" | "ranked" | "played" | "peak";
 export type MapSort = SetSort | "version" | "keys" | "od" | "hp" | "objects" | "ln" | "nps" | "grade";
 
 const collator = new Intl.Collator("en", { sensitivity: "base", numeric: true });
@@ -383,6 +383,7 @@ function mapKey(key: MapSort, m: MapRow, s: SetRow): number | string {
     case "ln": return m.objects ? m.holds / m.objects : 0;
     case "nps": return m.length ? m.objects / m.length : 0;
     case "grade": return m.best ? gradeOrdinal(m.best.rank) * 1000 + m.best.acc : -10_000;
+    case "peak": return m.peak ?? -1;
   }
 }
 
@@ -397,7 +398,7 @@ export function sortSets(ix: LibIndex, results: SetResult[], key: SetSort, desc:
   const keyOf = (r: SetResult): number | string => {
     const s = sets[r.set];
     switch (key) {
-      case "sr": case "bpm": case "length": case "played": {
+      case "sr": case "bpm": case "length": case "played": case "peak": {
         let v = desc ? -Infinity : Infinity;
         for (const mi of r.maps) {
           const x = mapKey(key, maps[mi], s) as number;
