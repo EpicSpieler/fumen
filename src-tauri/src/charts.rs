@@ -118,6 +118,7 @@ pub struct Summary {
     longest_burst: i32,
     tags: String,
     patterns: String,
+    sr: Option<f32>,
     sr_ht: Option<f32>,
     sr_dt: Option<f32>,
     dan: Option<String>,
@@ -139,6 +140,7 @@ fn summarize(hash: &str, chart: &Chart) -> Summary {
         longest_burst: a.longest_burst,
         tags: a.tags.join(" "),
         patterns: serde_json::to_string(&a.patterns).unwrap_or_else(|_| "[]".into()),
+        sr: rated(1.0),
         sr_ht: rated(0.75),
         sr_dt: rated(1.5),
         dan: d.as_ref().map(dan::Dan::label),
@@ -177,8 +179,8 @@ pub fn store(conn: &mut Connection, rows: &[Summary]) -> Result<()> {
     {
         let mut st = tx.prepare(
             "INSERT OR REPLACE INTO chart_stats
-               (hash, version, nps_avg, nps_peak, ln_time, jack_ratio, longest_burst, tags, patterns, sr_ht, sr_dt, dan, dan_value, category)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+               (hash, version, nps_avg, nps_peak, ln_time, jack_ratio, longest_burst, tags, patterns, sr_ht, sr_dt, dan, dan_value, category, sr)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
         )?;
         for r in rows {
             st.execute(params![
@@ -195,7 +197,8 @@ pub fn store(conn: &mut Connection, rows: &[Summary]) -> Result<()> {
                 r.sr_dt,
                 r.dan,
                 r.dan_value,
-                r.category
+                r.category,
+                r.sr
             ])?;
         }
     }
