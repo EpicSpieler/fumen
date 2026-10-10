@@ -10,6 +10,7 @@ import "./styles/chart.css";
 import "./styles/player.css";
 import "./styles/settings.css";
 import "./styles/welcome.css";
+import "./styles/import.css";
 
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { api, asApiError, isTauri, onAnalysis, thumbUrl } from "./lib/api";
@@ -21,6 +22,8 @@ import { events, loadPrefs, refreshStatus, reloadLibrary, setPrefs, setSnapshot,
 import type { ScanProgress } from "./lib/types";
 import { mountPlayerBar } from "./player";
 import { openFullscreen } from "./views/fullscreen";
+import { importProgressText, isImporting, openImport } from "./views/import";
+import { readLinks } from "./lib/links";
 import { closeMenus, initControls, toast } from "./ui/controls";
 import { icon, injectIconSprite } from "./ui/icons";
 import { applyAppearance } from "./ui/theme";
@@ -58,6 +61,7 @@ app.innerHTML = `
     <div class="nav">
       <button class="nav-item reveal" type="button" data-nav="home">${icon("home")}<span class="nav-label">Home</span></button>
       <button class="nav-item reveal" type="button" data-nav="library">${icon("library")}<span class="nav-label">Library</span></button>
+      <button class="nav-item reveal" type="button" data-act="import">${icon("download")}<span class="nav-label">Add beatmaps</span></button>
     </div>
     <div class="side-sep"></div>
     <section class="side-box" data-group="collections" hidden>
@@ -232,6 +236,7 @@ function renderCollections(): void {
 }
 
 app.querySelector(".nav")!.addEventListener("click", (e) => {
+  if ((e.target as Element).closest("[data-act=\"import\"]")) return openImport();
   const b = (e.target as Element).closest<HTMLElement>("[data-nav]");
   if (!b) return;
   if (!store.snap) return goSection({ name: "welcome" });
@@ -277,7 +282,7 @@ function applySidebar(): void {
   const btn = $<HTMLElement>(".side-toggle");
   btn.dataset.tip = collapsed ? "Expand sidebar" : "Collapse sidebar";
   btn.setAttribute("aria-label", btn.dataset.tip);
-  app.querySelectorAll<HTMLElement>(".sidebar .nav-item[data-nav], .sidebar .side-item").forEach((el) => {
+  app.querySelectorAll<HTMLElement>(".sidebar .nav-item[data-nav], .sidebar .nav-item[data-act], .sidebar .side-item").forEach((el) => {
     const label = el.querySelector(".nav-label, .side-label")?.textContent ?? "";
     if (collapsed) el.dataset.tip = label;
     else delete el.dataset.tip;
@@ -471,7 +476,11 @@ let analysis: ScanProgress | null = null;
 function renderLibraryState(): void {
   const sub = $<HTMLElement>(".profile-sub");
   const p = store.scan;
-  if (p) {
+  const importing = importProgressText();
+  if (importing) {
+    sub.textContent = `Adding beatmaps · ${importing}`;
+    sub.dataset.tip = "Downloading and importing into osu!lazer";
+  } else if (p) {
     const { label, fraction } = describeScan(p);
     sub.textContent = `Updating · ${Math.round(fraction * 100)}%`;
     sub.dataset.tip = label;
@@ -483,7 +492,7 @@ function renderLibraryState(): void {
     sub.textContent = store.snap ? `${num(sets)} beatmap sets` : "No library yet";
     delete sub.dataset.tip;
   }
-  const busy = isScanning();
+  const busy = isScanning() || isImporting();
   refreshBtn.disabled = busy || !store.status?.install;
   refreshBtn.classList.toggle("busy", busy);
   refreshBtn.dataset.tip = busy ? "Updating library…" : "Update library";
@@ -496,6 +505,7 @@ refreshBtn.addEventListener("click", async () => {
 });
 events.on("scan", renderLibraryState);
 events.on("status", renderLibraryState);
+events.on("importing", renderLibraryState);
 
 // ── window ─────────────────────────────────────────────────────────────────
 
@@ -530,6 +540,15 @@ window.addEventListener("keydown", (e) => {
     e.preventDefault();
     focusSearch();
   }
+});
+
+// osu! links pasted anywhere outside a text field: add them
+window.addEventListener("paste", (e) => {
+  if ((e.target as HTMLElement).closest("input, textarea, [contenteditable]")) return;
+  const text = e.clipboardData?.getData("text") ?? "";
+  if (!readLinks(text).links.length) return;
+  e.preventDefault();
+  openImport(text);
 });
 
 // search requests from anywhere (tags, "more by this mapper", the player menu)
@@ -569,7 +588,8 @@ function applyFirstRunDefaults(): void {
 
 async function maybeAutoRescan(): Promise<void> {
   const st = await refreshStatus().catch(() => null);
-  if (!st?.changed || store.settings?.autoRescan === false) return;
+  // an import into lazer rescans by itself when it's done
+  if (!st?.changed || store.settings?.autoRescan === false || isImporting()) return;
   const res = await runScan();
   if (!res.ok) toast(`Couldn't update the library: ${res.error.message}`, { kind: "danger", timeout: 6000 });
 }

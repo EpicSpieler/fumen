@@ -1,0 +1,108 @@
+/* ===========================================================================
+   Add beatmaps — links in, one row per set on its way into osu!lazer
+   =========================================================================== */
+
+.imp {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 560px;
+  padding: 22px 22px 18px;
+}
+.imp-head { padding-right: 36px; }
+.imp-title { font-size: var(--fs-16); font-weight: 700; letter-spacing: -.01em; }
+.imp-sub { margin-top: 4px; font-size: var(--fs-12); line-height: 1.5; color: var(--t3); }
+
+/* lazer's state: words on a surface, tinted only when it's something to act on */
+.imp-lazer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 9px 14px;
+  border-radius: var(--r-xl);
+  background: var(--surface-1);
+  font-size: var(--fs-12);
+  color: var(--t2);
+  transition: background .2s var(--ease-std), color .2s var(--ease-std);
+}
+.imp-lazer-ic { flex: none; width: 16px; height: 16px; }
+.imp-lazer-text { min-width: 0; line-height: 1.45; }
+.imp-lazer.ok .imp-lazer-ic { color: var(--success); }
+.imp-lazer.wait { background: var(--warning-soft); color: var(--t1); }
+.imp-lazer.wait .imp-lazer-ic { color: var(--warning); }
+.imp-lazer.off { background: var(--danger-soft); color: var(--t1); }
+.imp-lazer.off .imp-lazer-ic { color: var(--danger); }
+
+.imp-input {
+  width: 100%;
+  min-height: 136px;
+  max-height: 320px;
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: var(--fs-11);
+}
+
+.imp-rows {
+  display: flex;
+  flex-direction: column;
+  max-height: 320px;
+  overflow-y: auto;
+  border-radius: var(--r-xl);
+  background: var(--surface-1);
+  animation: fade-in .2s var(--ease-std);
+}
+.imp-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 14px;
+  padding: 10px 14px;
+}
+.imp-row + .imp-row::before {
+  content: "";
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  top: 0;
+  height: 1px;
+  background: var(--stroke-dim);
+}
+.imp-row-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-12); font-weight: 600; }
+.imp-row-state {
+  max-width: 260px;
+  font-size: var(--fs-11);
+  font-variant-numeric: tabular-nums;
+  color: var(--t3);
+  text-align: right;
+  transition: color .2s var(--ease-std);
+}
+.imp-row[data-stage="waiting"] .imp-row-title { color: var(--t2); }
+.imp-row[data-stage="downloading"] .imp-row-state,
+.imp-row[data-stage="importing"] .imp-row-state { color: var(--t2); }
+.imp-row[data-stage="done"] .imp-row-state { color: var(--success); }
+.imp-row[data-stage="error"] .imp-row-state { color: var(--danger); }
+
+.imp-bar {
+  grid-column: 1 / -1;
+  height: 3px;
+  margin-top: 8px;
+  border-radius: var(--r-full);
+  background: var(--fill-mod);
+  overflow: hidden;
+}
+.imp-bar > i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transform-origin: left;
+  transform: scaleX(var(--p, 0));
+  transition: transform .2s var(--ease-out);
+}
+
+.imp-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 2px; }
+.imp-note { min-width: 0; font-size: var(--fs-12); line-height: 1.45; color: var(--t3); }
+.imp-note .warn { color: var(--warning); }
+.imp-note .bad, .imp-note.bad { color: var(--danger); }
+.imp-actions { display: flex; flex: none; gap: 8px; }

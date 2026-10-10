@@ -6,8 +6,10 @@ Fumen is a desktop beatmap library for osu!. It reads your osu!lazer library and
 search, filter and preview all of it quickly, and shows what each osu!mania chart asks of you.
 Later versions add collections and tournament pool building (see [docs/PLAN.md](docs/PLAN.md)).
 
-Fumen **only reads** osu!'s data. It works on a private copy of lazer's database and never writes
-to osu!'s files.
+Fumen reads osu!'s data from a private copy of lazer's database. The one thing it puts into lazer
+is beatmap sets you add through it, and that is done by lazer's own import code, only while lazer
+is closed, only on lazer versions tested with Fumen, and with a backup of lazer's database first
+(see [Adding beatmaps](#adding-beatmaps)).
 
 ## Features
 
@@ -49,6 +51,31 @@ to osu!'s files.
   minijacks, column lock, inverse …), the chart's category, rice / LN / hybrid and SV;
   search `category=…`
 
+**Adding beatmaps (v0.4)**
+- Paste osu! links (set or beatmap pages, `osu://` links, set IDs; several at once, or anywhere in
+  the app): Fumen downloads each set from a mirror (osu.direct, then catboy.best, then
+  nerinyan.moe) and imports it into osu!lazer, then into its own library. Sets you already have
+  are skipped; failed ones can be retried in one click
+- Star ratings for new osu!mania difficulties come from Fumen's calculator until lazer computes its
+  own on its next start
+
+## Adding beatmaps
+
+The import runs lazer's own `BeatmapImporter` (through `sidecar/FumenImport`, on the installed
+lazer's runtime), so sets land in lazer exactly as if lazer had imported them. Before every import:
+
+- lazer must be closed;
+- lazer's version must be listed in [`lazer-compat.json`](lazer-compat.json): after every lazer
+  update the import switches itself off until that version is tested. Fumen reads the list built
+  into it and the one on GitHub, so a version tested once works for every Fumen;
+- lazer's database must be at exactly the schema the installed lazer expects (after an update,
+  lazer migrates it on its next start, never Fumen);
+- `client.realm` is backed up (Fumen's data folder, `lazer-backups`, the last five).
+
+Testing a new lazer version (lazer closed): `npm run verify-lazer -- --push`. It checks the schema
+guard, imports a test set into a fresh library and into a copy of yours (exactly one set more,
+nothing else changed, every file intact), and on success lists the version and pushes the file.
+
 ## Development
 
 Requirements: Node 22+, Rust (stable), .NET 8 SDK, Windows (WebView2).
@@ -62,7 +89,8 @@ Other scripts:
 
 | Script | What it does |
 |---|---|
-| `npm run sidecar` | rebuild `fumen-realm` (the .NET lazer database reader) |
+| `npm run sidecar` | rebuild the .NET helpers: `fumen-realm` (lazer database reader) and `fumen-import` (lazer importer) |
+| `npm run verify-lazer` | test the import with the installed lazer and list its version (`--check`: only test, `--push`: commit and push) |
 | `npm run typecheck` | TypeScript checks |
 | `npm test` | UI and Rust unit tests |
 | `npm run dev:browser` | UI in a normal browser with Tauri shimmed (see `tools/browser-preview`) |
@@ -74,6 +102,8 @@ Other scripts:
 src/              UI (TypeScript, no framework)
 src-tauri/        Rust backend: SQLite cache, import, .osu parser + chart analysis, fumen:// protocol
 sidecar/          fumen-realm: reads lazer's client.realm (Realm .NET, dynamic + read-only)
+                  fumen-import: imports sets with lazer's own code
+lazer-compat.json lazer versions the import is tested with
 tools/            browser preview, CDP helper
 docs/PLAN.md      roadmap
 ```
@@ -82,6 +112,8 @@ docs/PLAN.md      roadmap
 
 - [osu!](https://github.com/ppy/osu) (MIT, ppy Pty Ltd): the star rating calculator and the mania
   skin components Fumen's ports follow
+- Beatmap mirrors [osu.direct](https://osu.direct), [catboy.best](https://catboy.best) and
+  [nerinyan.moe](https://nerinyan.moe) for the downloads
 - [ManiaMapAnalyser](https://github.com/LeoBlackMT/osumania_map_analyser) by Leo_Black (MIT): the
   pattern report and dan estimators in `src-tauri/src/mma` (licence alongside), which build on
   [Interlude](https://github.com/YAVSRG/YAVSRG)'s pattern analysis,

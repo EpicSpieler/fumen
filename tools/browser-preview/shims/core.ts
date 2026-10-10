@@ -81,6 +81,53 @@ export async function invoke<T>(cmd: string, args: Record<string, unknown> = {})
       localStorage.setItem("fumen-preview-scanned", "1");
       return { sets: 4505, maps: 21756, scores: 1430, collections: 5 } as T;
     }
+    case "lazer_import_status": {
+      // localStorage "fumen-preview-lazer": ready (default) | running | untested
+      const mode = localStorage.getItem("fumen-preview-lazer") ?? "ready";
+      const version = "2026.1005.0-lazer";
+      const reasons: Record<string, [string, string]> = {
+        running: ["running", "osu!lazer is running. Close it to import."],
+        untested: ["untested", "osu!lazer 2026.1012.0 isn't tested with Fumen's import yet; importing stays off until it is."],
+      };
+      const [reason, message] = reasons[mode] ?? [null, null];
+      return { ready: !reason, reason, message, version, tested: mode !== "untested", running: mode === "running", testedVersions: [version] } as T;
+    }
+    case "import_beatmaps": {
+      // pretend: lines with "fail" fail, set 1 is in the library, everything else downloads
+      const links = args.links as string[];
+      const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+      const summary = { imported: 0, skipped: 0, failed: 0 };
+      const ok: [number, number][] = [];
+      for (const [index, link] of links.entries()) {
+        const set = Number(/(\d+)/.exec(link)?.[1] ?? 0);
+        const base = { index, set, title: null, done: 0, total: 0, message: null };
+        if (/\/b(eatmaps)?\//.test(link)) {
+          emit("import-progress", { ...base, set: null, stage: "resolving" });
+          await wait(300);
+        }
+        if (set === 1) {
+          emit("import-progress", { ...base, stage: "skipped", title: "Camellia - Ghost", message: "Already in your library" });
+          summary.skipped++;
+          continue;
+        }
+        const total = 4_000_000 + (set % 7) * 1_300_000;
+        for (let done = 0; done <= total; done += total / 12) {
+          emit("import-progress", { ...base, stage: "downloading", done: Math.round(done), total });
+          await wait(70);
+        }
+        if (link.includes("fail")) {
+          emit("import-progress", { ...base, stage: "error", message: "No download mirror has this set (osu.direct 404, catboy.best 403, nerinyan.moe 404)" });
+          summary.failed++;
+        } else ok.push([index, set]);
+      }
+      for (const [index, set] of ok) emit("import-progress", { index, set, stage: "importing", title: null, done: 0, total: 0, message: null });
+      await wait(900);
+      for (const [index, set] of ok) {
+        emit("import-progress", { index, set, stage: "done", title: `Preview Artist - Song ${set}`, done: 0, total: 0, message: null });
+        summary.imported++;
+      }
+      return summary as T;
+    }
     default:
       throw { code: "preview", message: `${cmd} isn't available in the browser preview` };
   }
