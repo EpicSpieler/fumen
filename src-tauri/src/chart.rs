@@ -41,6 +41,8 @@ pub struct Chart {
     pub mode: u8,
     /// mania key count; 0 for other modes
     pub keys: u8,
+    /// overall difficulty (osu!'s default 5 when the file has none)
+    pub od: f64,
     pub timing: Vec<TimingPoint>,
     /// sorted by time
     pub objects: Vec<HitObject>,
@@ -60,6 +62,7 @@ enum Section {
 pub fn parse(text: &str) -> Chart {
     let mut mode = 0u8;
     let mut circle_size = 4.0f64;
+    let mut od = 5.0f64;
     let mut slider_multiplier = 1.4f64;
     let mut timing: Vec<TimingPoint> = Vec::new();
     let mut breaks: Vec<(i32, i32)> = Vec::new();
@@ -90,6 +93,7 @@ pub fn parse(text: &str) -> Chart {
                 match key.trim() {
                     "Mode" => mode = value.parse().unwrap_or(0),
                     "CircleSize" => circle_size = value.parse().unwrap_or(circle_size),
+                    "OverallDifficulty" => od = value.parse().unwrap_or(od),
                     "SliderMultiplier" => slider_multiplier = value.parse().unwrap_or(slider_multiplier),
                     _ => {}
                 }
@@ -135,7 +139,7 @@ pub fn parse(text: &str) -> Chart {
     objects.sort_by_key(|o| (o.time, o.lane));
     breaks.sort_unstable();
 
-    Chart { mode, keys, timing, objects, breaks }
+    Chart { mode, keys, od, timing, objects, breaks }
 }
 
 fn num(v: Option<&str>) -> Option<f64> {

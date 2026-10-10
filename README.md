@@ -40,6 +40,13 @@ to osu!'s files.
 - The playfield in your lazer skins: every skin in your lazer library is imported with it and can be
   picked in fullscreen (lazer's own skins and `.osk` skins, drawn like lazer draws them), played by
   lazer's autoplay
+- Dan rating for osu!mania: Azusa for 4K rice, Sunny's star rating on the 4K / 6K / 7K / 10K dan
+  tables otherwise (with an LN reading for long-note charts), at any rate. Shown in the chart panel
+  and the difficulty rows; search `dan=gamma`, `dan>=13`, `dan>="reform 8"`
+- Pattern report: the core patterns (stream, chordstream, jacks, LN coordination / density /
+  wildcard) with their speed and the specific patterns inside (jumpstream, handstream, rolls,
+  minijacks, column lock, inverse …), the chart's category, rice / LN / hybrid and SV;
+  search `category=…`
 
 ## Development
 
@@ -74,3 +81,8 @@ docs/PLAN.md      roadmap
 
 - [osu!](https://github.com/ppy/osu) (MIT, ppy Pty Ltd): the star rating calculator and the mania
   skin components Fumen's ports follow
+- [ManiaMapAnalyser](https://github.com/LeoBlackMT/osumania_map_analyser) by Leo_Black (MIT): the
+  pattern report and dan estimators in `src-tauri/src/mma` (licence alongside), which build on
+  [Interlude](https://github.com/YAVSRG/YAVSRG)'s pattern analysis,
+  [Star-Rating-Rebirth](https://github.com/sunnyxxy/Star-Rating-Rebirth) (Sunny) and
+  [Daniel](https://thebagelofman.github.io/Daniel/)

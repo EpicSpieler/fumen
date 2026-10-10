@@ -135,3 +135,6 @@ const PATTERN_WORDS: Record<string, string> = {
 };
 export const patternWords = (tags: string): string =>
   tags.split(" ").filter(Boolean).map((t) => PATTERN_WORDS[t] ?? t).join(", ");
+
+/** What a difficulty's chart is, in a few words: the pattern report's category, else the tags. */
+export const mapPatternText = (m: MapRow): string => m.category ?? (m.patterns ? patternWords(m.patterns) : "");

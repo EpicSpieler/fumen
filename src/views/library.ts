@@ -7,8 +7,9 @@
  * under it, and a difficulty opens the set page on that difficulty.
  */
 import { thumbUrl } from "../lib/api";
+import { shortDan } from "../lib/dan";
 import {
-  bpm, date, displayArtist, displayTitle, duration, esc, holdRatio, keysOrMode, modeLabel, num, patternWords, rankInfo,
+  bpm, date, displayArtist, displayTitle, duration, esc, holdRatio, keysOrMode, mapPatternText, modeLabel, num, rankInfo,
   relativeTime, srChip, srColor, stars,
 } from "../lib/format";
 import {
@@ -429,11 +430,12 @@ export class LibraryView {
     const m = store.snap!.maps[mi];
     const best = m.best ? rankInfo(m.best.rank) : null;
     const mania = m.mode === 3;
+    const pat = mapPatternText(m);
     return `
       <div class="lmap">
         <span class="d-keys">${esc(keysOrMode(m))}</span>
         <span class="d-sr">${srChip(m.sr)}</span>
-        <span class="d-name"><b>${esc(m.version)}</b>${m.patterns ? `<span class="t-pat">${esc(patternWords(m.patterns))}</span>` : ""}</span>
+        <span class="d-name"><b>${esc(m.version)}</b>${m.dan || pat ? `<span class="t-pat">${esc([m.dan ? shortDan(m.dan, holdRatio(m)) : "", pat].filter(Boolean).join(" · "))}</span>` : ""}</span>
         <span class="d-num hide-2"><i>OD</i>${fmt1(m.od)}</span>
         <span class="d-num hide-1"><i>HP</i>${fmt1(m.hp)}</span>
         <span class="d-num">${num(m.objects)}<i>${mania ? "notes" : "objects"}</i></span>

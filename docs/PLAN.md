@@ -95,7 +95,8 @@ upgrade risk.
 - [x] `.osu` parser (Rust): timing points, hit objects incl. slider/hold ends, breaks, kiai; tolerant of old formats
 - [x] Analysis: density per second, peak (densest 2 s), longest burst; mania: rows/chords, jacks, LN coverage,
       one-second windows classified as stream / jumpstream / handstream / chordjack / jacks / LN; tags ≥ 15 % + stamina
-- [x] Library-wide cache `chart_stats` keyed by `.osu` hash, background job after imports and on start (~2 s for 22k charts)
+- [x] Library-wide cache `chart_stats` keyed by `.osu` hash, background job after imports and on start (~10 s for 22k charts
+      with the dan rating and pattern report, ~2 s without)
 - [x] Chart panel on the set page: density graph with seek, stats, patterns, chords, columns
 - [x] Fullscreen player over the app window (from the player bar or the panel), playfield laid out in
       lazer's 768-unit stage space so it scales uniformly: visualizer (art + Web Audio frequency bars)
@@ -111,8 +112,15 @@ upgrade risk.
 - [x] Playfield in lazer's skins: every skin of the lazer library (imported with it), lazer's own
       argon / argon pro / triangles / classic / retro and legacy `.osk` skins drawn like lazer's
       mania components (skin.ini [Mania] per key count, @2x, animations, classic fallback), autoplay
+- [x] Pattern report and dan rating, ported from ManiaMapAnalyser (MIT, `src-tauri/src/mma`):
+      Interlude-style pattern clusters (core + specific patterns, speed, category, RC / LN / HB / Mix,
+      SV), Azusa's dan for 4K rice (with Daniel and Sunny), Sunny on the 4K / 6K / 7K / 10K dan
+      tables otherwise; checked against the analyser's own JS on 420 charts (same dans, star
+      ratings within 1e-14). Dan in the chart panel at any rate, in the set and library rows,
+      search `dan=gamma`, `dan>=13`, `category=…`
+- [ ] Azusa's marathon correction (needs Etterna's MinaCalc), the analyser's Roxy / Mixed estimators
 - [ ] Taiko / catch / osu! previews
-- [ ] "tech" detection (irregular snaps, SV) — needs a better definition than a heuristic guess
+- [x] "tech" detection: the pattern report's "Tech" (mixed speeds) and SV
 
 ## Workflow
 

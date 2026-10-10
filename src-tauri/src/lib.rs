@@ -4,6 +4,7 @@ mod charts;
 mod db;
 mod error;
 mod lazer;
+mod mma;
 mod library;
 mod paths;
 mod protocol;
@@ -245,25 +246,35 @@ fn run_analysis(app: &AppHandle, state: &AppState) -> Result<bool> {
     Ok(true)
 }
 
+/// A difficulty's chart, read from lazer's files.
+fn load_chart(app: &AppHandle, id: &str) -> Result<chart::Chart> {
+    let state = app.state::<AppState>();
+    let hash: Option<String> = state
+        .db()
+        .query_row("SELECT hash FROM maps WHERE id = ?1", [id], |r| r.get(0))
+        .optional()?
+        .flatten();
+    let hash = hash.ok_or_else(|| Error::known("chart-missing", "This difficulty isn't in the library anymore."))?;
+    let storage = state
+        .storage()
+        .ok_or_else(|| Error::known("lazer-not-found", "osu!lazer's data folder wasn't found. Pick it in Settings."))?;
+    charts::load(&storage, &hash)
+}
+
 /// One difficulty's notes, timing and full analysis as raw JSON (see `charts.rs`).
 #[tauri::command]
 async fn get_chart(app: AppHandle, id: String) -> Result<tauri::ipc::Response> {
-    tauri::async_runtime::spawn_blocking(move || {
-        let state = app.state::<AppState>();
-        let hash: Option<String> = state
-            .db()
-            .query_row("SELECT hash FROM maps WHERE id = ?1", [&id], |r| r.get(0))
-            .optional()?
-            .flatten();
-        let hash = hash.ok_or_else(|| Error::known("chart-missing", "This difficulty isn't in the library anymore."))?;
-        let storage = state
-            .storage()
-            .ok_or_else(|| Error::known("lazer-not-found", "osu!lazer's data folder wasn't found. Pick it in Settings."))?;
-        let chart = charts::load(&storage, &hash)?;
-        charts::chart_json(&chart).map(tauri::ipc::Response::new)
-    })
-    .await
-    .map_err(|e| Error::known("internal", e.to_string()))?
+    tauri::async_runtime::spawn_blocking(move || charts::chart_json(&load_chart(&app, &id)?).map(tauri::ipc::Response::new))
+        .await
+        .map_err(|e| Error::known("internal", e.to_string()))?
+}
+
+/// An osu!mania difficulty's dan at a clock rate (the chart comes with the one at 1×).
+#[tauri::command]
+async fn get_dan(app: AppHandle, id: String, rate: f64) -> Result<Option<mma::dan::Dan>> {
+    tauri::async_runtime::spawn_blocking(move || Ok(mma::dan::rate(&load_chart(&app, &id)?, rate.clamp(0.25, 4.0))))
+        .await
+        .map_err(|e| Error::known("internal", e.to_string()))?
 }
 
 /// lazer's skins (without their files), the selected one and the built-in textures at hand.
@@ -346,6 +357,7 @@ pub fn run() {
             scan_library,
             get_library,
             get_chart,
+            get_dan,
             get_skins,
             get_skin_files,
         ])

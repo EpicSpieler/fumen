@@ -70,13 +70,25 @@
 .cstat-k { font-size: var(--fs-11); color: var(--t3); }
 .cstat b { margin-top: 2px; font-size: var(--fs-18); font-weight: 700; color: var(--t1); }
 .cstat-s { font-size: var(--fs-11); color: var(--t3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* osu!mania: the dan leads, wider for names like "CloverWisp Theta mid/high" */
+.chart-stats.has-dan { grid-template-columns: minmax(0, 1.6fr) repeat(5, minmax(0, 1fr)); }
+.cstat-dan { background: var(--accent-soft); }
+.cstat-dan b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--accent-ink); }
+.cstat-dan.is-loading > * { opacity: .45; transition: opacity .2s var(--ease-std); }
 
 /* ---------- Patterns / chords / columns ---------- */
 .chart-cols { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 28px; margin-top: 18px; }
 .chart-block .label-caps { margin-bottom: 10px; }
+.pat-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.pat-head .label-caps { margin-bottom: 0; }
+.pat-tags { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0 6px; min-width: 0; font-size: var(--fs-12); color: var(--t3); }
+.pat-tags b { color: var(--t1); font-weight: 600; }
+.pat-tags > * + *::before { content: "·"; margin-right: 6px; color: var(--t4); }
+.pat-item + .pat-item { margin-top: 4px; }
+.pat-spec { margin: -3px 0 0 106px; font-size: var(--fs-11); color: var(--t3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pat-row {
   display: grid;
-  grid-template-columns: 96px minmax(0, 1fr) 38px;
+  grid-template-columns: 96px minmax(0, 1fr) 72px;
   align-items: center;
   gap: 10px;
   height: 26px;
@@ -121,6 +133,6 @@
 .chart-help { font-size: var(--fs-11); color: var(--t3); }
 
 @media (max-width: 1280px) {
-  .chart-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .chart-stats, .chart-stats.has-dan { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .chart-cols { grid-template-columns: minmax(0, 1fr); gap: 18px; }
 }

@@ -137,6 +137,15 @@ struct MapOut {
     sr_ht: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     sr_dt: Option<f64>,
+    /// osu!mania dan at 1× ("Gamma mid", "Reform 7 high || LN 9 low")
+    #[serde(skip_serializing_if = "Option::is_none")]
+    dan: Option<String>,
+    /// Azusa's dan number for 4K rice (Reform 1–10 = 1–10, Alpha = 11 …)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    dan_value: Option<f64>,
+    /// pattern category ("Jumpstream", "Chordjacks Tech", "… SV")
+    #[serde(skip_serializing_if = "Option::is_none")]
+    category: Option<String>,
 }
 
 #[derive(Serialize, Clone)]
@@ -248,7 +257,8 @@ pub fn snapshot_json(conn: &Connection) -> Result<Vec<u8>> {
         let mut st = conn.prepare(
             "SELECT m.set_id, m.id, m.online_id, m.version, m.ruleset, m.ruleset_id, m.status, m.sr, m.bpm,
                     m.length, m.objects, m.end_objects, m.hp, m.cs, m.od, m.ar, m.md5, m.bg, m.audio,
-                    m.preview_time, m.last_played, m.hidden, c.nps_peak, c.tags, c.sr_ht, c.sr_dt
+                    m.preview_time, m.last_played, m.hidden, c.nps_peak, c.tags, c.sr_ht, c.sr_dt,
+                    c.dan, c.dan_value, c.category
              FROM maps m LEFT JOIN chart_stats c ON c.hash = m.hash AND c.version = ?1
              ORDER BY m.set_id, m.ruleset_id, m.sr",
         )?;
@@ -292,6 +302,9 @@ pub fn snapshot_json(conn: &Connection) -> Result<Vec<u8>> {
                 // stored as f32: round away the float noise
                 sr_ht: r.get::<_, Option<f64>>(24)?.map(|v| (v * 100.0).round() / 100.0),
                 sr_dt: r.get::<_, Option<f64>>(25)?.map(|v| (v * 100.0).round() / 100.0),
+                dan: r.get(26)?,
+                dan_value: r.get::<_, Option<f64>>(27)?.map(|v| (v * 100.0).round() / 100.0),
+                category: r.get(28)?,
             };
             let mi = maps.len() as u32;
             if let Some(h) = md5 {

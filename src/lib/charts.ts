@@ -1,8 +1,8 @@
-/* charts.ts — chart data shared by the chart panel and the fullscreen playfield: a small cache,
+/* charts.ts — chart data shared by the chart panel and the fullscreen playfield: small caches (charts, dans at rates),
  * pattern names, lookups over the flat note/timing arrays, and lazer's scroll speed. */
 import { api } from "./api";
 import { store } from "./store";
-import type { ChartData, PatternName } from "./types";
+import type { ChartData, DanRating, PatternName } from "./types";
 
 const cache = new Map<string, Promise<ChartData>>();
 
@@ -13,6 +13,22 @@ export function loadChart(id: string): Promise<ChartData> {
     p.catch(() => cache.delete(id));
     cache.set(id, p);
     if (cache.size > 24) cache.delete(cache.keys().next().value!);
+  }
+  return p;
+}
+
+const danCache = new Map<string, Promise<DanRating | null>>();
+
+/** The dan at a clock rate: 1× comes with the chart, other rates are asked for once each. */
+export function danAt(mapId: string, d: ChartData, rate: number): Promise<DanRating | null> {
+  if (Math.abs(rate - 1) < 1e-6) return Promise.resolve(d.dan ?? null);
+  const key = `${mapId}@${rate.toFixed(2)}`;
+  let p = danCache.get(key);
+  if (!p) {
+    p = api.getDan(mapId, rate);
+    p.catch(() => danCache.delete(key));
+    danCache.set(key, p);
+    if (danCache.size > 200) danCache.delete(danCache.keys().next().value!);
   }
   return p;
 }

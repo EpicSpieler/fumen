@@ -6,7 +6,9 @@
  *   key<op>value        op: = == != < <= > >= :   e.g.  keys=7  sr>4.5  bpm<=200  length<2:30
  *                       status=ranked  mode=mania  creator=Shoegazer  grade>=A  played=no  ln>30
  *                       pattern=jumpstream  peak>15  dt=5  ht<3   (from the chart analysis)
+ *                       dan=gamma  dan>=13  dan>="reform 8"  category=jumpstream   (osu!mania dan / report)
  */
+import { danNumber } from "./dan";
 import type { MapRow, SetRow, Snapshot } from "./types";
 
 // ── query parsing ──────────────────────────────────────────────────────────
@@ -16,8 +18,8 @@ type Op = "=" | "==" | "!=" | "<" | "<=" | ">" | ">=";
 type NumKey =
   | "sr" | "bpm" | "length" | "od" | "hp" | "ar" | "cs" | "keys" | "objects" | "ln" | "nps"
   | "plays" | "acc" | "added" | "played" | "year" | "setid" | "mapid" | "peak" | "srdt" | "srht";
-type StrKey = "creator" | "artist" | "title" | "source" | "tags" | "diff";
-type Key = NumKey | StrKey | "status" | "mode" | "grade" | "pattern";
+type StrKey = "creator" | "artist" | "title" | "source" | "tags" | "diff" | "category";
+type Key = NumKey | StrKey | "status" | "mode" | "grade" | "pattern" | "dan";
 
 const ALIASES: Record<string, Key> = {
   star: "sr", stars: "sr", sr: "sr",
@@ -31,6 +33,8 @@ const ALIASES: Record<string, Key> = {
   peak: "peak", peaknps: "peak",
   dt: "srdt", dtsr: "srdt", dtstars: "srdt", ht: "srht", htsr: "srht", htstars: "srht",
   pattern: "pattern", patterns: "pattern", skill: "pattern", style: "pattern",
+  dan: "dan", tier: "dan",
+  category: "category", cat: "category",
   plays: "plays", playcount: "plays",
   added: "added", played: "played", lastplayed: "played",
   ranked: "year", year: "year",
@@ -84,7 +88,9 @@ interface StrCond { key: StrKey; op: Op; value: string }
 interface SetCond { key: "status" | "mode"; op: Op; values: number[] }
 interface GradeCond { key: "grade"; op: Op; value: number }
 interface PatternCond { key: "pattern"; op: Op; value: string }
-type Cond = NumCond | StrCond | SetCond | GradeCond | PatternCond;
+/** a dan by number or name (on the rice scale: Reform N = N, Alpha = 11 …), else words of the label */
+interface DanCond { key: "dan"; op: Op; value: number | null; tier: boolean; text: string }
+type Cond = NumCond | StrCond | SetCond | GradeCond | PatternCond | DanCond;
 
 export interface ParsedQuery {
   terms: string[];
@@ -131,8 +137,11 @@ function parseCond(rawKey: string, rawOp: string, rawValue: string): Cond | null
       const g = GRADE_NAMES[lower];
       return g === undefined ? null : { key, op, value: g };
     }
-    case "creator": case "artist": case "title": case "source": case "tags": case "diff":
+    case "creator": case "artist": case "title": case "source": case "tags": case "diff": case "category":
       return lower ? { key, op, value: lower } : null;
+    case "dan":
+      // LN dans have their own scale: those match by name
+      return lower ? { key, op, value: /\bln\b/.test(lower) ? null : danNumber(lower), tier: /\b(low|mid|high)\b/.test(lower), text: lower } : null;
     case "pattern": {
       const name = PATTERN_NAMES[lower];
       return name ? { key, op: op === "!=" ? "!=" : "=", value: name } : null;
@@ -349,6 +358,23 @@ function test(c: Cond, m: MapRow, s: SetRow, fields: LibIndex["setFields"][numbe
     case "source": return cmpStr(fields.source, c.op, c.value);
     case "tags": return cmpStr(fields.tags, c.op, c.value);
     case "diff": return cmpStr(version, c.op, c.value);
+    case "category": return cmpStr((m.category ?? "").toLowerCase(), c.op, c.value);
+    case "dan": {
+      if (!m.dan) return c.op === "!=";
+      if (c.value === null) return cmpStr(m.dan.toLowerCase(), c.op, c.text);
+      const x = m.danValue ?? danNumber(m.dan);
+      if (x === null) return c.op === "!=";
+      // "dan=gamma" is the whole dan (12.6–13.4), "dan=gamma high" just that part of it
+      const near = Math.abs(x - c.value) < (c.tier ? 0.1 : 0.5);
+      switch (c.op) {
+        case "=": case "==": return near;
+        case "!=": return !near;
+        case "<": return x < c.value - (c.tier ? 0.1 : 0.5);
+        case "<=": return x < c.value + (c.tier ? 0.1 : 0.5);
+        case ">": return x >= c.value + (c.tier ? 0.1 : 0.5);
+        case ">=": return x >= c.value - (c.tier ? 0.1 : 0.5);
+      }
+    }
     case "pattern": {
       const hit = !!m.patterns && ` ${m.patterns} `.includes(` ${c.value} `);
       return c.op === "!=" ? !hit : hit;

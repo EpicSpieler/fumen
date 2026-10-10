@@ -13,6 +13,7 @@ use serde::Serialize;
 use crate::analysis::{self, Analysis};
 use crate::chart::{self, Chart};
 use crate::error::{Error, Result};
+use crate::mma::{dan, patterns};
 use crate::paths;
 use crate::stars;
 
@@ -42,6 +43,12 @@ struct ChartOut<'a> {
     /// osu!mania star rating at 0.5×, 0.55× … 2.0× (empty for other modes)
     stars: Vec<f32>,
     analysis: &'a Analysis,
+    /// osu!mania: the pattern report (ManiaMapAnalyser)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    report: Option<patterns::Report>,
+    /// osu!mania: the dan at 1×
+    #[serde(skip_serializing_if = "Option::is_none")]
+    dan: Option<dan::Dan>,
 }
 
 pub fn chart_json(chart: &Chart) -> Result<Vec<u8>> {
@@ -61,6 +68,8 @@ pub fn chart_json(chart: &Chart) -> Result<Vec<u8>> {
         kiai: kiai_sections(chart, analysis.end),
         stars: stars::mania_rates(chart),
         analysis: &analysis,
+        report: patterns::report(chart),
+        dan: dan::rate(chart, 1.0),
     };
     Ok(serde_json::to_vec(&out)?)
 }
@@ -111,11 +120,16 @@ pub struct Summary {
     patterns: String,
     sr_ht: Option<f32>,
     sr_dt: Option<f32>,
+    dan: Option<String>,
+    dan_value: Option<f32>,
+    category: Option<String>,
 }
 
 fn summarize(hash: &str, chart: &Chart) -> Summary {
     let a = analysis::analyse(chart);
     let rated = |rate: f64| (chart.mode == 3).then(|| stars::round2(stars::mania(chart, rate)));
+    let d = dan::rate(chart, 1.0);
+    let report = patterns::report(chart);
     Summary {
         hash: hash.to_owned(),
         nps_avg: a.nps_avg,
@@ -127,6 +141,9 @@ fn summarize(hash: &str, chart: &Chart) -> Summary {
         patterns: serde_json::to_string(&a.patterns).unwrap_or_else(|_| "[]".into()),
         sr_ht: rated(0.75),
         sr_dt: rated(1.5),
+        dan: d.as_ref().map(dan::Dan::label),
+        dan_value: d.and_then(|d| d.value),
+        category: report.map(|r| if r.sv() { format!("{} SV", r.category) } else { r.category }),
     }
 }
 
@@ -160,8 +177,8 @@ pub fn store(conn: &mut Connection, rows: &[Summary]) -> Result<()> {
     {
         let mut st = tx.prepare(
             "INSERT OR REPLACE INTO chart_stats
-               (hash, version, nps_avg, nps_peak, ln_time, jack_ratio, longest_burst, tags, patterns, sr_ht, sr_dt)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+               (hash, version, nps_avg, nps_peak, ln_time, jack_ratio, longest_burst, tags, patterns, sr_ht, sr_dt, dan, dan_value, category)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
         )?;
         for r in rows {
             st.execute(params![
@@ -175,7 +192,10 @@ pub fn store(conn: &mut Connection, rows: &[Summary]) -> Result<()> {
                 r.tags,
                 r.patterns,
                 r.sr_ht,
-                r.sr_dt
+                r.sr_dt,
+                r.dan,
+                r.dan_value,
+                r.category
             ])?;
         }
     }
@@ -229,7 +249,9 @@ mod tests {
     }
 
     /// Chart files for the browser preview (tools/browser-preview), for every difficulty whose
-    /// title contains one of the comma-separated `FUMEN_PREVIEW_TITLES`:
+    /// title contains one of the comma-separated `FUMEN_PREVIEW_TITLES` (and every one already
+    /// there, refreshed). osu!mania charts also get `dans`: the dan at every rate the panel offers,
+    /// for the preview's `get_dan`:
     /// `FUMEN_TEST_STORAGE=… FUMEN_TEST_EXPORT=… FUMEN_PREVIEW_TITLES="FREEDOM DiVE,Ready Steady"
     ///  FUMEN_PREVIEW_CHARTS=../tools/browser-preview/.cache/charts cargo test preview_charts -- --ignored`
     #[test]
@@ -251,12 +273,21 @@ mod tests {
         for set in export["sets"].as_array().unwrap() {
             for m in set["maps"].as_array().unwrap() {
                 let title = m["title"].as_str().unwrap_or_default().to_lowercase();
-                if !wanted.iter().any(|w| title.contains(w.as_str())) {
+                let (Some(id), Some(hash)) = (m["id"].as_str(), m["hash"].as_str()) else { continue };
+                let file = out.join(format!("{id}.json"));
+                if !wanted.iter().any(|w| title.contains(w.as_str())) && !file.exists() {
                     continue;
                 }
-                let (Some(id), Some(hash)) = (m["id"].as_str(), m["hash"].as_str()) else { continue };
                 let Ok(chart) = load(&storage, hash) else { continue };
-                std::fs::write(out.join(format!("{id}.json")), chart_json(&chart).unwrap()).unwrap();
+                let mut v: serde_json::Value = serde_json::from_slice(&chart_json(&chart).unwrap()).unwrap();
+                if chart.mode == 3 {
+                    let dans: serde_json::Map<String, serde_json::Value> = stars::RATES
+                        .map(|r| r as f64 * stars::RATE_STEP)
+                        .map(|r| (format!("{r:.2}"), serde_json::to_value(dan::rate(&chart, r)).unwrap()))
+                        .collect();
+                    v["dans"] = dans.into();
+                }
+                std::fs::write(file, serde_json::to_vec(&v).unwrap()).unwrap();
                 written += 1;
             }
         }

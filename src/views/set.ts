@@ -2,9 +2,10 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { osuSetUrl, thumbUrl } from "../lib/api";
 import {
-  bpm, date, displayArtist, displayTitle, duration, esc, holdRatio, keysOrMode, modeLabel, nps, num, patternWords,
+  bpm, date, displayArtist, displayTitle, duration, esc, holdRatio, keysOrMode, mapPatternText, modeLabel, nps, num,
   rankInfo, relativeTime, srChip, statusLabel,
 } from "../lib/format";
+import { shortDan } from "../lib/dan";
 import { back, canGoBack, goSection } from "../lib/router";
 import { events, store } from "../lib/store";
 import type { MapRow, SetRow } from "../lib/types";
@@ -191,13 +192,16 @@ export class SetView {
       ...(m.mode === 0 || m.mode === 2 ? [`CS ${fmt1(m.cs)}`, `AR ${fmt1(m.ar)}`] : []),
     ];
     const holdLabel = m.mode === 3 ? "long notes" : "sliders";
-    const patterns = m.patterns ? patternWords(m.patterns) : "";
+    const patterns = mapPatternText(m);
+    const dan = m.dan
+      ? `<span class="diff-dan" data-tip="${esc(m.dan.includes("||") ? `Estimated dan: ${m.dan.replace(" || ", ", ")}` : "Estimated dan")}">${esc(shortDan(m.dan, holdRatio(m)))}</span>`
+      : "";
     return `
       <div class="diff${m.hidden ? " is-hidden" : ""}" data-map="${mi}" data-id="${esc(m.id)}" role="button" tabindex="0" aria-expanded="false">
         ${srChip(m.sr, "lg", icon("star-fill"))}
         <div class="diff-main">
           <div class="diff-name">${esc(m.version)}${m.hidden ? `<span class="diff-flag">hidden in osu!</span>` : ""}</div>
-          <div class="diff-facts">${facts.map((f) => `<span>${esc(f)}</span>`).join("")}${patterns ? `<span class="diff-pat">${esc(patterns)}</span>` : ""}</div>
+          <div class="diff-facts">${facts.map((f) => `<span>${esc(f)}</span>`).join("")}${dan}${patterns ? `<span class="diff-pat">${esc(patterns)}</span>` : ""}</div>
         </div>
         <div class="diff-stats num">
           <div><b>${num(m.objects)}</b><span>notes</span></div>
