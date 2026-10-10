@@ -255,12 +255,13 @@ pub fn snapshot_json(conn: &Connection) -> Result<Vec<u8>> {
     let mut md5_index: HashMap<String, u32> = HashMap::new();
     {
         let mut st = conn.prepare(
-            "SELECT m.set_id, m.id, m.online_id, m.version, m.ruleset, m.ruleset_id, m.status, m.sr, m.bpm,
+            "SELECT m.set_id, m.id, m.online_id, m.version, m.ruleset, m.ruleset_id, m.status,
+                    CASE WHEN m.sr IS NULL OR m.sr < 0 THEN c.sr ELSE m.sr END AS sr, m.bpm,
                     m.length, m.objects, m.end_objects, m.hp, m.cs, m.od, m.ar, m.md5, m.bg, m.audio,
                     m.preview_time, m.last_played, m.hidden, c.nps_peak, c.tags, c.sr_ht, c.sr_dt,
                     c.dan, c.dan_value, c.category
              FROM maps m LEFT JOIN chart_stats c ON c.hash = m.hash AND c.version = ?1
-             ORDER BY m.set_id, m.ruleset_id, m.sr",
+             ORDER BY m.set_id, m.ruleset_id, sr",
         )?;
         let mut rows = st.query([analysis::VERSION])?;
         while let Some(r) = rows.next()? {

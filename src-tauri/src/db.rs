@@ -137,6 +137,11 @@ const MIGRATIONS: &[&str] = &[
     r#"
     ALTER TABLE sets ADD COLUMN sounds TEXT NOT NULL DEFAULT '[]';
     "#,
+    // 7 — osu!mania star rating at 1× from Fumen's calculator: stands in until lazer has its own
+    //     (sets imported through Fumen get theirs on lazer's next start)
+    r#"
+    ALTER TABLE chart_stats ADD COLUMN sr REAL;
+    "#,
 ];
 
 pub fn open(path: &Path) -> Result<Connection> {
