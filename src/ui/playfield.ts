@@ -48,6 +48,22 @@ export function fitCanvas(c: HTMLCanvasElement): { ctx: CanvasRenderingContext2D
   return { ctx, w, h };
 }
 
+/*
+ * Layout like lazer's: the stage is laid out in a 768-unit-tall space and scaled uniformly to the
+ * height it gets, so columns, notes and keys keep their proportions at any window size.
+ */
+const STAGE_H = 768;
+const COLUMN_W = 60;
+/** judgement line, from the bottom (lazer's hit target position) */
+const HIT_POSITION = 110;
+const NOTE_H = 18;
+const KEY_H = 46;
+
+/** Width of one column at a playfield height of `h` px. */
+export function columnWidth(h: number): number {
+  return Math.max(24, (h / STAGE_H) * COLUMN_W);
+}
+
 export class Playfield {
   private readonly maxHold: number;
   private readonly colors = new AccentColors();
@@ -75,16 +91,18 @@ export class Playfield {
 
     const keys = d.keys;
     const laneW = W / keys;
-    // lazer's default hit position: about a sixth of the height from the edge
-    const judge = Math.max(44, Math.round(H * 0.1625));
+    // one stage unit in px; columns may be narrower when the stage doesn't fit the width
+    const u = Math.min(H / STAGE_H, laneW / COLUMN_W);
+    const judge = Math.round((H / STAGE_H) * HIT_POSITION);
     const judgeY = up ? judge : H - judge;
     const pxPerMs = (H - judge) / span;
     const dir = up ? 1 : -1;
     const y = (ms: number) => judgeY + dir * (ms - t) * pxPerMs;
     const tFar = t + span;
     const tNear = t - judge / pxPerMs;
-    const noteH = Math.max(8, Math.min(18, laneW * 0.2));
-    const radius = Math.min(5, noteH / 2);
+    const noteH = Math.max(6, NOTE_H * u);
+    const radius = noteH * 0.3;
+    const pad = Math.max(1.5, 3 * u);
 
     // columns
     ctx.fillStyle = "rgba(255,255,255,.045)";
@@ -120,26 +138,27 @@ export class Playfield {
       if (Math.abs(start - t) < 70 || (len > 0 && start <= t && end >= t)) lit[lane] = true;
       ctx.fillStyle = color;
       if (len > 0) {
-        const bodyW = laneW * 0.62;
+        const bodyW = (laneW - 2 * pad) * 0.7;
         const a = y(start);
         const e = y(end);
         ctx.globalAlpha = passed ? 0.12 : 0.38;
         ctx.fillRect(x + (laneW - bodyW) / 2, Math.min(a, e), bodyW, Math.abs(a - e));
         ctx.globalAlpha = passed ? 0.22 : 0.9;
-        roundRect(ctx, x + (laneW - bodyW) / 2, e - 3, bodyW, 6, 3);
+        roundRect(ctx, x + (laneW - bodyW) / 2, e - noteH / 4, bodyW, noteH / 2, noteH / 4);
       }
       ctx.globalAlpha = passed ? 0.22 : 1;
-      roundRect(ctx, x + 3, y(start) - noteH / 2, laneW - 6, noteH, radius);
+      roundRect(ctx, x + pad, y(start) - noteH / 2, laneW - 2 * pad, noteH, radius);
     }
     ctx.globalAlpha = 1;
 
-    // keys + judgement line
-    const keyTop = up ? 8 : judgeY + 10;
-    const keyH = judge - 18;
+    // keys just past the judgement line, light up while their column is hit
+    const keyH = Math.min(KEY_H * u, judge - 8 * u);
+    const gap = 8 * u;
+    const keyTop = up ? judgeY - gap - keyH : judgeY + gap;
     for (let i = 0; i < keys; i++) {
-      ctx.fillStyle = lit[i] ? colors.tone(laneTone(i, keys)) : "rgba(255,255,255,.06)";
-      ctx.globalAlpha = lit[i] ? 0.35 : 1;
-      roundRect(ctx, i * laneW + 3, keyTop, laneW - 6, keyH, 6);
+      ctx.fillStyle = lit[i] ? colors.tone(laneTone(i, keys)) : "rgba(255,255,255,.07)";
+      ctx.globalAlpha = lit[i] ? 0.45 : 1;
+      roundRect(ctx, i * laneW + pad, keyTop, laneW - 2 * pad, keyH, Math.max(3, 8 * u));
     }
     ctx.globalAlpha = 1;
     ctx.fillStyle = colors.accent;

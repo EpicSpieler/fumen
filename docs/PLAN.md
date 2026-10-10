@@ -97,7 +97,8 @@ upgrade risk.
       one-second windows classified as stream / jumpstream / handstream / chordjack / jacks / LN; tags ≥ 15 % + stamina
 - [x] Library-wide cache `chart_stats` keyed by `.osu` hash, background job after imports and on start (~2 s for 22k charts)
 - [x] Chart panel on the set page: density graph with seek, stats, patterns, chords, columns
-- [x] Fullscreen player (from the player bar or the panel): visualizer (art + Web Audio frequency bars)
+- [x] Fullscreen player over the app window (from the player bar or the panel), playfield laid out in
+      lazer's 768-unit stage space so it scales uniformly: visualizer (art + Web Audio frequency bars)
       or the playfield at full height with live NPS / pattern / BPM / notes and the density graph;
       scroll speed and direction imported from lazer's `RulesetSetting`s (time = 11485 ms / speed,
       × rate), F3 / F4 override stored in Fumen only

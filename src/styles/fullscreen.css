@@ -46,7 +46,9 @@
 .fs-now-sub { font-size: var(--fs-12); color: var(--t3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .fs-modes { background: rgba(255, 255, 255, .08); }
 .fs-modes > button { padding: 0 16px; }
-.fs-top-r { display: flex; justify-content: flex-end; }
+/* it fills the app window, not the screen: the window's own controls move in beside the exit */
+.fs-top-r { display: flex; align-items: center; justify-content: flex-end; gap: 14px; }
+.fs-top:has(.win-controls) { padding-top: 6px; padding-right: 6px; }
 .fs-exit .ic { width: 20px; height: 20px; }
 
 .fs-body { position: relative; min-height: 0; }

@@ -9,8 +9,7 @@
  * Esc leaves; Space plays/pauses; ←/→ seek 5 s; F3/F4 lower/raise the scroll speed as in lazer.
  * Nothing animates while the song is paused.
  */
-import { getCurrentWindow } from "@tauri-apps/api/window";
-import { isTauri, thumbUrl } from "../lib/api";
+import { thumbUrl } from "../lib/api";
 import { bpmAt, loadChart, lowerBound, PATTERNS, SCROLL_SPEED_MAX, SCROLL_SPEED_MIN, scrollSpeed, scrollTime, scrollUp } from "../lib/charts";
 import { readBars, startAnalyser } from "../lib/eq";
 import { bpm, displayArtist, displayTitle, duration, esc, keysOrMode, num, srChip } from "../lib/format";
@@ -19,7 +18,7 @@ import type { ChartData } from "../lib/types";
 import { dragSlider, player } from "../player";
 import { attachSegIndicator, openMenu, reduceMotion, type MenuEntry } from "../ui/controls";
 import { icon } from "../ui/icons";
-import { AccentColors, drawDensity, fitCanvas, Playfield } from "../ui/playfield";
+import { AccentColors, columnWidth, drawDensity, fitCanvas, Playfield } from "../ui/playfield";
 import { rateClick, rateControlHtml, starsAtRate, syncRateControl } from "../ui/rate";
 
 export type FullscreenMode = "visual" | "field";
@@ -34,8 +33,8 @@ class Fullscreen {
   private lastFrame = 0;
   private offs: (() => void)[] = [];
   private colors = new AccentColors();
-  /** we put the window into fullscreen, so we take it out again */
-  private ownsWindowFullscreen = false;
+  /** where the window controls live outside the overlay */
+  private wcHome: HTMLElement | null = null;
 
   // visualizer
   private levels = new Float32Array(BARS);
@@ -54,7 +53,7 @@ class Fullscreen {
     return this.isOpen;
   }
 
-  async show(mode?: FullscreenMode): Promise<void> {
+  show(mode?: FullscreenMode): void {
     if (!player.now) return;
     this.mount();
     this.setMode(mode ?? store.prefs.fullscreenMode, !!mode);
@@ -63,25 +62,20 @@ class Fullscreen {
     this.isOpen = true;
     el.hidden = false;
     document.body.classList.add("fs-open");
+    // the window's own controls move into the overlay while it's open (it covers the title bar)
+    const wc = document.querySelector<HTMLElement>(".win-controls");
+    if (wc) {
+      this.wcHome = wc.parentElement;
+      el.querySelector(".fs-top-r")!.append(wc);
+    }
     requestAnimationFrame(() => el.classList.add("on"));
     this.eq = startAnalyser();
     this.subscribe();
     this.onTrack();
     el.querySelector<HTMLElement>(".fs-exit")!.focus({ preventScroll: true });
-    if (isTauri) {
-      try {
-        const win = getCurrentWindow();
-        if (!(await win.isFullscreen())) {
-          await win.setFullscreen(true);
-          this.ownsWindowFullscreen = true;
-        }
-      } catch (e) {
-        console.warn("[fullscreen] window", e);
-      }
-    }
   }
 
-  async hide(): Promise<void> {
+  hide(): void {
     if (!this.isOpen) return;
     const el = this.el!;
     this.isOpen = false;
@@ -91,15 +85,9 @@ class Fullscreen {
     this.offs = [];
     el.classList.remove("on");
     document.body.classList.remove("fs-open");
+    const wc = el.querySelector<HTMLElement>(".win-controls");
+    if (wc && this.wcHome) this.wcHome.append(wc);
     setTimeout(() => !this.isOpen && (el.hidden = true), reduceMotion() ? 0 : 240);
-    if (this.ownsWindowFullscreen) {
-      this.ownsWindowFullscreen = false;
-      try {
-        await getCurrentWindow().setFullscreen(false);
-      } catch {
-        /* the window is already back */
-      }
-    }
   }
 
   // ── structure ─────────────────────────────────────────────────────────
@@ -113,8 +101,8 @@ class Fullscreen {
     el.setAttribute("aria-label", "Now playing, fullscreen");
     el.innerHTML = `
       <div class="fs-bg" aria-hidden="true"><img alt="" /></div>
-      <header class="fs-top">
-        <div class="fs-now"><div class="fs-now-title"></div><div class="fs-now-sub"></div></div>
+      <header class="fs-top" data-tauri-drag-region>
+        <div class="fs-now" data-tauri-drag-region><div class="fs-now-title" data-tauri-drag-region></div><div class="fs-now-sub" data-tauri-drag-region></div></div>
         <div class="seg-pill fs-modes" role="tablist" aria-label="View">
           <button type="button" role="tab" data-mode="visual">Visualizer</button>
           <button type="button" role="tab" data-mode="field">Playfield</button>
@@ -231,7 +219,7 @@ class Fullscreen {
     const np = player.now;
     const snap = store.snap;
     if (!np || !snap) {
-      void this.hide();
+      this.hide();
       return;
     }
     const el = this.el!;
@@ -467,10 +455,9 @@ class Fullscreen {
     const r = player.rate;
     const t = player.audio.currentTime * 1000;
 
-    // the playfield is as wide as lazer's for this many keys at this height
+    // the playfield is as wide as lazer's for this many keys at this height (scaled like lazer)
     const stage = el.querySelector<HTMLElement>(".fs-stage")!;
-    const colW = Math.max(40, Math.min(96, stage.clientHeight * 0.085));
-    stage.style.setProperty("--pf-w", `${Math.round(colW * d.keys)}px`);
+    stage.style.setProperty("--pf-w", `${Math.round(columnWidth(stage.clientHeight) * d.keys)}px`);
     field.draw(t, scrollTime(scrollSpeed().speed) * r, scrollUp());
 
     // live numbers
@@ -511,7 +498,7 @@ class Fullscreen {
       const t = e.target as Element;
       const mode = t.closest<HTMLElement>(".fs-modes [data-mode]");
       if (mode) return this.setMode(mode.dataset.mode as FullscreenMode);
-      if (t.closest(".fs-exit")) return void this.hide();
+      if (t.closest(".fs-exit")) return this.hide();
       if (t.closest(".fs-play")) return player.toggle();
       if (t.closest(".fs-prev")) return player.prev();
       if (t.closest(".fs-next")) return player.next();
@@ -574,7 +561,7 @@ class Fullscreen {
           case "Escape":
             e.preventDefault();
             e.stopPropagation();
-            void this.hide();
+            this.hide();
             break;
           case "F3":
           case "F4":
@@ -615,5 +602,5 @@ const fullscreen = new Fullscreen();
 
 /** Opens the fullscreen player (in `mode`, or the one used last). */
 export function openFullscreen(mode?: FullscreenMode): void {
-  void fullscreen.show(mode);
+  fullscreen.show(mode);
 }
