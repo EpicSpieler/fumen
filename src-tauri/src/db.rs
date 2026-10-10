@@ -127,6 +127,12 @@ const MIGRATIONS: &[&str] = &[
         files     TEXT NOT NULL DEFAULT '[]'
     );
     "#,
+    // 5 — dan rating (label and, for 4K rice, Azusa's number) and pattern category, at 1×
+    r#"
+    ALTER TABLE chart_stats ADD COLUMN dan TEXT;
+    ALTER TABLE chart_stats ADD COLUMN dan_value REAL;
+    ALTER TABLE chart_stats ADD COLUMN category TEXT;
+    "#,
 ];
 
 pub fn open(path: &Path) -> Result<Connection> {

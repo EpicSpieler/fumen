@@ -11,7 +11,8 @@ use crate::chart::{Chart, Kind};
 
 /// Bump when the analysis changes, so cached results are recomputed.
 /// 2: osu!mania star ratings at HT and DT joined the cached summary.
-pub const VERSION: i64 = 2;
+/// 3: the dan rating and pattern category (ManiaMapAnalyser port, `mma`) too.
+pub const VERSION: i64 = 3;
 
 const WINDOW: i32 = 1000;
 /// rows per window below which a window counts as light
@@ -288,7 +289,7 @@ mod tests {
             t += gap;
             i += 1;
         }
-        Chart { mode: 3, keys: 4, timing: vec![], objects, breaks: vec![] }
+        Chart { mode: 3, keys: 4, od: 8.0, timing: vec![], objects, breaks: vec![] }
     }
 
     fn top(c: &Chart) -> Pattern {

@@ -45,6 +45,13 @@ export async function invoke<T>(cmd: string, args: Record<string, unknown> = {})
       if (!res.ok) throw { code: "chart-missing", message: "This chart wasn't exported for the browser preview (see preview_charts)." };
       return (await res.arrayBuffer()) as T;
     }
+    case "get_dan": {
+      // preview chart files carry the dan at every rate the panel offers (see preview_charts)
+      const res = await fetch(`/__fumen/chart/${args.id as string}`);
+      if (!res.ok) throw { code: "chart-missing", message: "This chart wasn't exported for the browser preview." };
+      const chart = (await res.json()) as { dans?: Record<string, unknown> };
+      return (chart.dans?.[(args.rate as number).toFixed(2)] ?? null) as T;
+    }
     case "get_skins": {
       const list = (await (await fetch("/__fumen/skins")).json()) as { skins: { files?: unknown }[] };
       return { ...list, skins: list.skins.map(({ files: _files, ...s }) => s) } as T;

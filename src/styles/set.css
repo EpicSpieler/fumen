@@ -124,12 +124,14 @@ body:not(.ambient-off) .set-hero-scrim {
 .diff:hover .diff-chev { color: var(--t1); }
 .diff.open .diff-chev { transform: rotate(180deg); color: var(--accent-ink); }
 .diff-pat { color: var(--accent-ink); }
+.diff-dan { color: var(--t1); font-weight: 600; }
 .diff.playing .diff-name { color: var(--accent-ink); }
 .diff.is-hidden { opacity: .6; }
 .sr-chip.lg { height: 26px; padding: 0 10px; font-size: var(--fs-12); justify-self: start; }
 .diff-name { font-size: var(--fs-14); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .diff-flag { margin-left: 8px; font-size: var(--fs-11); font-weight: 500; color: var(--t3); }
 .diff-facts { margin-top: 2px; font-size: var(--fs-12); color: var(--t3); }
+.diff-facts > * { white-space: nowrap; }
 .diff-facts > * + *::before { content: "·"; margin: 0 6px; color: var(--t4); }
 .diff-stats { display: grid; grid-template-columns: repeat(4, 74px); gap: 6px; }
 .diff-stats > div, .diff-best > div { display: flex; flex-direction: column; line-height: 1.25; }

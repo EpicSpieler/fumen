@@ -1,7 +1,7 @@
 /* Typed wrappers around the Tauri commands, plus fumen:// URLs. */
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import type { ApiError, ChartData, LazerInstall, LibraryStatus, ScanProgress, Settings, SkinList, Snapshot } from "./types";
+import type { ApiError, ChartData, DanRating, LazerInstall, LibraryStatus, ScanProgress, Settings, SkinList, Snapshot } from "./types";
 
 export const isTauri = "__TAURI_INTERNALS__" in window;
 
@@ -22,6 +22,8 @@ export const api = {
     if (raw instanceof ArrayBuffer) return JSON.parse(new TextDecoder().decode(raw)) as ChartData;
     return raw;
   },
+  /** an osu!mania difficulty's dan at a clock rate */
+  getDan: (id: string, rate: number) => invoke<DanRating | null>("get_dan", { id, rate }),
   getSkins: () => invoke<SkinList>("get_skins"),
   /** [filename, sha256] per file */
   async getSkinFiles(id: string): Promise<[string, string][]> {

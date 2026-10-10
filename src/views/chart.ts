@@ -2,6 +2,10 @@
  * time, key numbers, and what the patterns ask of you. The osu!mania playfield itself opens in
  * fullscreen ("Open playfield").
  *
+ * For osu!mania the dan rating and the pattern report come from Fumen's port of ManiaMapAnalyser
+ * by Leo_Black (MIT; src-tauri/src/mma): Azusa's dan for 4K rice, Sunny's star rating on the dan
+ * tables otherwise, and its pattern clusters merged per core pattern.
+ *
  * The graph's playhead follows the audio whenever this set is playing; otherwise it sits at a
  * cursor you set by clicking the graph.
  *
@@ -10,10 +14,11 @@
  * come with the chart from Fumen's own calculator; 1× shows lazer's value.
  */
 import { asApiError } from "../lib/api";
-import { loadChart, PATTERNS } from "../lib/charts";
+import { danAt, loadChart } from "../lib/charts";
+import { CORE_PATTERNS, danReadings, MODE_LABEL, patternGroups, SV_AMOUNT } from "../lib/dan";
 import { bpm, duration, esc, num, srChip } from "../lib/format";
 import { store } from "../lib/store";
-import type { ChartData } from "../lib/types";
+import type { ChartData, DanRating } from "../lib/types";
 import { player } from "../player";
 import { attachSegIndicator } from "../ui/controls";
 import { icon } from "../ui/icons";
@@ -32,6 +37,10 @@ export class ChartPanel {
   private resize: ResizeObserver | null = null;
   private colors = new AccentColors();
   private readonly audio: string | undefined;
+  /** bumped per dan request, so a late answer for another rate is dropped */
+  private danJob = 0;
+  /** the dan card's last content, kept while the next rate's dan loads */
+  private danHtml = "";
 
   constructor(
     private setIdx: number,
@@ -115,7 +124,7 @@ export class ChartPanel {
           <div class="graph-tip num"></div>
         </div>
         <div class="graph-axis num"><span>0:00</span><span class="graph-hint">Notes per second${d.kiai.length ? " · kiai shaded" : ""}</span><span class="axis-end">${duration(this.total() / player.rate)}</span></div>
-        <div class="chart-stats">${this.statsHtml(d)}</div>
+        <div class="chart-stats${mania ? " has-dan" : ""}">${this.statsHtml(d)}</div>
         ${mania ? this.maniaBlocks(d) : `<p class="chart-note">Pattern analysis covers osu!mania for now.</p>`}
         <div class="chart-actions">
           ${mania ? `<button class="btn btn-primary btn-sm chart-field" type="button">${icon("fullscreen")}<span>Open playfield</span></button>` : ""}
@@ -127,6 +136,7 @@ export class ChartPanel {
     this.graph = this.el.querySelector(".graph-canvas");
     attachSegIndicator(this.el.querySelector(".rate-presets")!);
     this.renderRate();
+    this.renderDan();
     this.bind();
     this.resize = new ResizeObserver(() => this.drawGraph());
     this.resize.observe(this.el.querySelector(".chart-graph")!);
@@ -134,10 +144,14 @@ export class ChartPanel {
     this.syncLoop();
   }
 
-  /** Key numbers at the current rate. */
+  /** Key numbers at the current rate (the dan card fills in by `renderDan`). */
   private statsHtml(d: ChartData): string {
     const a = d.analysis;
     const r = player.rate;
+    const dan =
+      d.mode === 3 && d.keys > 0
+        ? `<div class="cstat cstat-dan is-loading" data-tip="Estimated dan (course tier), from ManiaMapAnalyser by Leo_Black: Azusa for 4K rice, Sunny's star rating on the dan tables otherwise. A guide, not a verdict.">${this.danHtml || `<span class="cstat-k">Dan</span><b>–</b><span class="cstat-s">&nbsp;</span>`}</div>`
+        : "";
     const stats: [string, string, string][] = [
       ["Peak", (a.npsPeak * r).toFixed(1), "notes/s"],
       ["Average", (a.npsAvg * r).toFixed(1), "notes/s"],
@@ -148,7 +162,43 @@ export class ChartPanel {
     } else {
       stats.push(["Objects", num(a.notes), `${num(a.holds)} with a length`]);
     }
-    return stats.map(([k, v, s]) => `<div class="cstat"><span class="cstat-k">${k}</span><b class="num">${v}</b><span class="cstat-s">${s}</span></div>`).join("");
+    return dan + stats.map(([k, v, s]) => `<div class="cstat"><span class="cstat-k">${k}</span><b class="num">${v}</b><span class="cstat-s">${s}</span></div>`).join("");
+  }
+
+  /** The dan at the current rate (1× comes with the chart, other rates are asked for). */
+  private renderDan(): void {
+    const d = this.data;
+    if (!d || d.mode !== 3 || !d.keys) return;
+    const job = ++this.danJob;
+    const rate = player.rate;
+    const map = store.snap!.maps[this.mapIdx];
+    const fill = (dan: DanRating | null, failed = false) => {
+      if (job !== this.danJob || this.dead) return;
+      this.danHtml = this.danCard(d, dan, failed, rate);
+      const el = this.el.querySelector(".cstat-dan");
+      if (!el) return;
+      el.innerHTML = this.danHtml;
+      el.classList.remove("is-loading");
+    };
+    danAt(map.id, d, rate).then(
+      (dan) => fill(dan),
+      () => fill(null, true),
+    );
+  }
+
+  private danCard(d: ChartData, dan: DanRating | null, failed: boolean, rate: number): string {
+    const k = `<span class="cstat-k">Dan${rate !== 1 ? ` at ${rate.toFixed(2)}×` : ""}</span>`;
+    if (!dan) {
+      const why = failed ? "couldn't be rated" : [4, 6, 7, 10].includes(d.keys) ? "too short to rate" : `no dan tables for ${d.keys}K`;
+      return `${k}<b>–</b><span class="cstat-s">${why}</span>`;
+    }
+    const { main, other, otherKind } = danReadings(dan, d.report);
+    const sub = other
+      ? `${otherKind}: ${esc(other)}`
+      : dan.by === "azusa" && dan.value !== undefined
+        ? `Azusa <span class="num">${dan.value.toFixed(2)}</span>`
+        : `Sunny <span class="num">${dan.sunny.toFixed(2)}★</span>`;
+    return `${k}<b class="dan-main">${esc(main)}</b><span class="cstat-s">${sub}</span>`;
   }
 
   /** Rate controls plus star rating, length and BPM at the rate. */
@@ -170,23 +220,49 @@ export class ChartPanel {
     if (!this.data) return;
     this.renderRate();
     this.el.querySelector(".chart-stats")!.innerHTML = this.statsHtml(this.data);
+    this.renderDan();
+    for (const el of this.el.querySelectorAll<HTMLElement>(".pat-bpm[data-bpm]")) el.textContent = String(Math.round(+el.dataset.bpm! * player.rate));
     this.el.querySelector(".axis-end")!.textContent = duration(this.total() / player.rate);
+  }
+
+  /** ManiaMapAnalyser's pattern report: category, kind of chart, and the core patterns by the
+   * time they cover, with their speed (at the rate) and the specific patterns inside. */
+  private patternsHtml(d: ChartData): string {
+    const rep = d.report;
+    const groups = rep ? patternGroups(rep) : [];
+    const head = rep
+      ? `<div class="pat-tags"><b>${esc(rep.category)}</b><span>${MODE_LABEL[rep.mode]}</span>${rep.svAmount >= SV_AMOUNT ? `<span data-tip="Scroll speed changes for ${Math.round(rep.svAmount / 1000)} s of the chart">SV</span>` : ""}</div>`
+      : "";
+    const top = `<div class="pat-head"><div class="label-caps">Patterns</div>${head}</div>`;
+    if (!groups.length) return `${top}<p class="chart-note">Light throughout: no pattern stands out.</p>`;
+    const max = Math.max(1, ...groups.map((g) => g.amount));
+    const r = player.rate;
+    const rows = groups
+      .map((g) => {
+        const info = CORE_PATTERNS[g.pattern];
+        const spec = g.specific
+          .filter(([, s]) => s >= 0.01)
+          .slice(0, 3)
+          .map(([n, s]) => `${esc(n)} <span class="num">${Math.round(s * 100)}%</span>`)
+          .join(" · ");
+        const speed = g.bpm
+          ? `<span class="pat-val num">${g.mixed ? "~" : ""}<span class="pat-bpm" data-bpm="${g.bpm}">${Math.round(g.bpm * r)}</span> BPM</span>`
+          : `<span class="pat-val"></span>`;
+        return `<div class="pat-item" data-tip="${esc(info.hint)}${g.mixed ? " (mixed speeds, around this one)" : ""}">
+              <div class="pat-row">
+                <span class="pat-name">${info.label}</span>
+                <div class="bar"><i style="width:${((g.amount / max) * 100).toFixed(1)}%"></i></div>
+                ${speed}
+              </div>
+              ${spec ? `<div class="pat-spec">${spec}</div>` : ""}
+            </div>`;
+      })
+      .join("");
+    return top + rows;
   }
 
   private maniaBlocks(d: ChartData): string {
     const a = d.analysis;
-    const shown = a.patterns.filter((p) => p.share >= 0.005);
-    const patterns = shown.length
-      ? shown
-          .map(
-            (p) => `<div class="pat-row" data-tip="${esc(PATTERNS[p.pattern].hint)}">
-              <span class="pat-name">${PATTERNS[p.pattern].label}</span>
-              <div class="bar"><i style="width:${(p.share * 100).toFixed(1)}%"></i></div>
-              <span class="pat-val num">${Math.round(p.share * 100)}%</span>
-            </div>`,
-          )
-          .join("")
-      : `<p class="chart-note">Light throughout: no pattern stands out.</p>`;
 
     const rows = a.chords.reduce((s, n) => s + n, 0) || 1;
     const chordNames = ["Singles", "Jumps", "Hands", "Quads+"];
@@ -204,8 +280,7 @@ export class ChartPanel {
     return `
       <div class="chart-cols">
         <section class="chart-block">
-          <div class="label-caps">Patterns</div>
-          ${patterns}
+          ${this.patternsHtml(d)}
         </section>
         <section class="chart-block">
           <div class="label-caps">Chords</div>

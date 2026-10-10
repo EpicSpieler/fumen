@@ -66,6 +66,12 @@ export interface MapRow {
   /** osu!mania star rating with Half Time (0.75×) / Double Time (1.5×), Fumen's own calculation */
   srHt?: number;
   srDt?: number;
+  /** osu!mania dan at 1×: the rice reading, then " || " and the LN one for long-note charts */
+  dan?: string;
+  /** Azusa's dan number (4K rice): Reform 1–10 = 1–10, Alpha = 11 … */
+  danValue?: number;
+  /** pattern category from the pattern report ("Jumpstream", "Chordjacks Tech", "… SV") */
+  category?: string;
 }
 
 export interface CollectionRow {
@@ -128,6 +134,48 @@ export interface ChartData {
   /** osu!mania star rating at 0.5×, 0.55× … 2.0× (empty for other modes) */
   stars: number[];
   analysis: ChartAnalysis;
+  /** osu!mania: ManiaMapAnalyser's pattern report */
+  report?: PatternReport;
+  /** osu!mania: the dan at 1× */
+  dan?: DanRating;
+}
+
+export type CorePattern = "Stream" | "Chordstream" | "Jacks" | "Coordination" | "Density" | "Wildcard";
+
+/** Matches of one core pattern at one speed (see src-tauri/src/mma/patterns.rs). */
+export interface PatternCluster {
+  pattern: CorePattern;
+  /** specific patterns inside, with their share of the matches, biggest first */
+  specific: [string, number][];
+  /** speed as the BPM of 1/4 notes at it (0 = none) */
+  bpm: number;
+  /** its matches don't hold one speed */
+  mixed: boolean;
+  /** chart ms it covers */
+  amount: number;
+}
+
+export interface PatternReport {
+  category: string;
+  /** rice, long notes, hybrid (notes and heads in the same rows), mixed */
+  mode: "RC" | "LN" | "HB" | "Mix";
+  lnRatio: number;
+  /** ms at a scroll speed away from 1× */
+  svAmount: number;
+  /** most important first */
+  clusters: PatternCluster[];
+}
+
+export interface DanRating {
+  /** rice reading, e.g. "Gamma mid", "Reform 7 high", "< Intro 1 low" */
+  rc: string;
+  /** long-note reading, for charts with 15 % long notes or more */
+  ln?: string;
+  /** Azusa's number for 4K rice */
+  value?: number;
+  by: "azusa" | "sunny";
+  /** Sunny's star rating */
+  sunny: number;
 }
 
 export type SkinKind = "legacy" | "classic" | "retro" | "triangles" | "argon" | "argon-pro";
