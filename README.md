@@ -27,7 +27,7 @@ to osu!'s files.
 - Every difficulty's `.osu` is analysed once in the background (all ~22k in a few seconds)
 - Chart panel on the set page: a notes-per-second graph (kiai and breaks marked) you can click to
   jump, peak / average density, longest burst
-- Fullscreen player, switchable at the top: a visualizer (the art and frequency bars from the song)
+- Fullscreen player (fills the app window), switchable at the top: a visualizer (the art and frequency bars from the song)
   or the osu!mania playfield at full height with the live numbers beside it (notes per second, the
   pattern of this second, BPM, notes so far, density graph). It scrolls at your lazer scroll speed
   and direction (read from lazer's settings, rate mods included); F3 / F4 change it for Fumen only
