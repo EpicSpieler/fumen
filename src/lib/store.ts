@@ -37,6 +37,8 @@ export const DEFAULT_PREFS: UiPrefs = {
   collapsedGroups: [],
   shuffle: true,
   repeat: "off",
+  scrollSpeed: null,
+  fullscreenMode: "visual",
   defaultsApplied: false,
 };
 

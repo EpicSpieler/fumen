@@ -185,6 +185,28 @@ internal static class Exporter
         Program.Progress("collections", count, count);
         return count;
     }
+
+    // ── Ruleset settings (scroll speed and direction for the mania preview) ──
+
+    public static void WriteRulesetSettings(Realm realm, Utf8JsonWriter w)
+    {
+        w.WriteStartArray("rulesetSettings");
+        // lazer maps RealmRulesetSetting to "RulesetSetting"; older schemas used the class name
+        var name = new[] { "RulesetSetting", "RealmRulesetSetting" }.FirstOrDefault(n => realm.Schema.TryFindObjectSchema(n, out _));
+        if (name != null)
+        {
+            foreach (var s in realm.DynamicApi.All(name))
+            {
+                w.WriteStartObject();
+                F.WriteStr(w, "ruleset", F.Str(s, "RulesetName"));
+                F.WriteInt(w, "variant", F.Int(s, "Variant"));
+                F.WriteStr(w, "key", F.Str(s, "Key"));
+                F.WriteStr(w, "value", F.Str(s, "Value"));
+                w.WriteEndObject();
+            }
+        }
+        w.WriteEndArray();
+    }
 }
 
 /// Tolerant field access over dynamic Realm objects.

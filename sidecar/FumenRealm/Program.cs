@@ -95,6 +95,7 @@ internal static class Program
             (sets, maps) = Exporter.WriteSets(session.Realm, w);
             scores = Exporter.WriteScores(session.Realm, w);
             collections = Exporter.WriteCollections(session.Realm, w);
+            Exporter.WriteRulesetSettings(session.Realm, w);
 
             w.WriteEndObject();
         }

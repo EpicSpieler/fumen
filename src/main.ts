@@ -4,6 +4,7 @@ import "./styles/components.css";
 import "./styles/shell.css";
 import "./styles/library.css";
 import "./styles/home.css";
+import "./styles/fullscreen.css";
 import "./styles/set.css";
 import "./styles/chart.css";
 import "./styles/player.css";
@@ -18,6 +19,7 @@ import { describeScan, isScanning, runScan } from "./lib/scan";
 import { events, loadPrefs, refreshStatus, reloadLibrary, setPrefs, setSnapshot, store } from "./lib/store";
 import type { ScanProgress } from "./lib/types";
 import { mountPlayerBar } from "./player";
+import { openFullscreen } from "./views/fullscreen";
 import { closeMenus, initControls, toast } from "./ui/controls";
 import { icon, injectIconSprite } from "./ui/icons";
 import { applyAppearance } from "./ui/theme";
@@ -572,7 +574,7 @@ async function boot(): Promise<void> {
   injectIconSprite();
   initControls();
   initRouterInput();
-  mountPlayerBar($(".player-bar"));
+  mountPlayerBar($(".player-bar"), { onFullscreen: () => openFullscreen() });
   void initWindow();
   if (isTauri) {
     void onAnalysis(

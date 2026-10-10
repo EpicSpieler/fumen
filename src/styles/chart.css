@@ -1,6 +1,6 @@
 /* ===========================================================================
-   Chart panel — opens under a difficulty row: playfield, density graph,
-   key numbers, patterns, chords and columns
+   Chart panel — opens under a difficulty row: density graph, key numbers,
+   patterns, chords and columns (the playfield itself opens in fullscreen)
    =========================================================================== */
 
 .chart { padding: 6px 18px 20px; }
@@ -8,40 +8,7 @@
 .chart-error { display: flex; align-items: center; gap: 10px; padding: 12px 0; font-size: var(--fs-12); color: var(--t2); }
 .chart-error .ic { width: 18px; height: 18px; color: var(--warning); }
 
-.chart-grid {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 24px;
-  align-items: start;
-  animation: fade-in .3s var(--ease-std);
-}
-.chart-grid.no-field { grid-template-columns: minmax(0, 1fr); }
-
-/* ---------- Playfield ---------- */
-.chart-field {
-  position: relative;
-  width: var(--field-w);
-  height: 440px;
-  border-radius: var(--r-xl);
-  background: rgba(0, 0, 0, .34);
-  overflow: hidden;
-}
-.field-canvas { display: block; width: 100%; height: 440px; }
-.field-time {
-  position: absolute;
-  top: 8px;
-  left: 8px;
-  padding: 2px 8px;
-  border-radius: var(--r-full);
-  background: rgba(0, 0, 0, .5);
-  font-size: var(--fs-11);
-  font-weight: 600;
-  color: var(--t1);
-  pointer-events: none;
-}
-.field-zoom { position: absolute; top: 4px; right: 4px; display: flex; gap: 2px; }
-.field-zoom .icon-btn { background: rgba(0, 0, 0, .45); color: rgba(255, 255, 255, .8); }
-.field-zoom .icon-btn:hover { background: rgba(0, 0, 0, .65); color: #fff; }
+.chart-grid { animation: fade-in .3s var(--ease-std); }
 
 /* ---------- Rate ---------- */
 .chart-rate { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; margin-bottom: 14px; }
@@ -51,7 +18,6 @@
 .rate-info .sr-chip { transition: background-color .2s var(--ease-std); }
 
 /* ---------- Density graph ---------- */
-.chart-side { min-width: 0; }
 .chart-graph {
   position: relative;
   height: 72px;
@@ -60,14 +26,7 @@
   overflow: hidden;
   touch-action: none;
 }
-.graph-canvas { display: block; width: 100%; height: 72px; }
-.graph-window {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
-  pointer-events: none;
-}
+.graph-canvas { display: block; width: 100%; height: 100%; }
 .graph-head {
   position: absolute;
   top: 0;
@@ -156,7 +115,7 @@
 
 .chart-note { margin-top: 14px; font-size: var(--fs-12); color: var(--t3); }
 .chart-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; margin-top: 18px; }
-.chart-play .ic { width: 14px; height: 14px; }
+.chart-play .ic, .chart-field .ic { width: 14px; height: 14px; }
 .chart-play .ic-pause, .chart-play.is-playing .ic-play { display: none; }
 .chart-play.is-playing .ic-pause { display: block; }
 .chart-help { font-size: var(--fs-11); color: var(--t3); }

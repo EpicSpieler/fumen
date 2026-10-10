@@ -116,6 +116,8 @@ fn library_status(state: State<'_, AppState>) -> Result<LibraryStatus> {
             db::get_meta(&conn, "lazer.realmModified")?.as_deref() != Some(&i.realm_modified.to_string())
                 || db::get_meta(&conn, "lazer.realmSize")?.as_deref() != Some(&i.realm_size.to_string())
                 || db::get_meta(&conn, "lazer.storage")?.as_deref() != Some(i.storage.as_str())
+                // imported before Fumen read lazer's mania settings: worth one more import
+                || db::get_meta(&conn, "lazer.maniaSettings")?.is_none()
         }
         _ => false,
     };
