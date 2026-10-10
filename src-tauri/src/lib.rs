@@ -2,9 +2,11 @@ mod analysis;
 mod chart;
 mod charts;
 mod db;
+mod downloads;
 mod error;
 mod hitsounds;
 mod lazer;
+mod lazer_import;
 mod mma;
 mod library;
 mod paths;
@@ -33,6 +35,9 @@ pub struct AppState {
     settings: Mutex<Settings>,
     settings_path: PathBuf,
     cache_dir: PathBuf,
+    data_dir: PathBuf,
+    /// GitHub's list of lazer versions tested with the import (None: unreachable), and when it was read
+    remote_compat: Mutex<Option<(std::time::Instant, Option<lazer_import::Compat>)>>,
     /// lazer's resolved storage folder (holds client.realm + files/), for the protocol handler.
     storage: RwLock<Option<PathBuf>>,
     scanning: AtomicBool,
@@ -52,6 +57,23 @@ impl AppState {
 
     fn cache_dir(&self) -> &std::path::Path {
         &self.cache_dir
+    }
+
+    /// The tested-lazer-versions list: Fumen's own, plus GitHub's (read again after 10 minutes).
+    fn compat(&self) -> lazer_import::Compat {
+        let fresh = |at: &std::time::Instant| at.elapsed() < std::time::Duration::from_secs(600);
+        let cached = self.remote_compat.lock().ok().and_then(|g| g.clone()).filter(|(at, _)| fresh(at));
+        let remote = match cached {
+            Some((_, remote)) => remote,
+            None => {
+                let remote = lazer_import::Compat::remote();
+                if let Ok(mut c) = self.remote_compat.lock() {
+                    *c = Some((std::time::Instant::now(), remote.clone()));
+                }
+                remote
+            }
+        };
+        lazer_import::Compat::bundled().merge(remote)
     }
 
     fn settings(&self) -> Settings {
@@ -296,6 +318,196 @@ async fn get_hitsounds(app: AppHandle, id: String) -> Result<hitsounds::Sounds> 
     .map_err(|e| Error::known("internal", e.to_string()))?
 }
 
+// ── Import into lazer ───────────────────────────────────────────────────────
+
+/// Whether beatmap sets can be imported into lazer right now, and why not.
+#[tauri::command]
+async fn lazer_import_status(app: AppHandle) -> Result<lazer_import::Status> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let compat = state.compat();
+        Ok(lazer_import::status(state.storage().as_deref(), &compat))
+    })
+    .await
+    .map_err(|e| Error::known("internal", e.to_string()))?
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ImportProgress {
+    /// which of the pasted lines
+    index: usize,
+    /// resolving | downloading | importing | done | skipped | error
+    stage: &'static str,
+    set: Option<u32>,
+    title: Option<String>,
+    done: u64,
+    total: u64,
+    message: Option<String>,
+}
+
+#[derive(Serialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct ImportSummary {
+    imported: usize,
+    skipped: usize,
+    failed: usize,
+}
+
+/// Downloads the sets behind pasted osu! links and imports them into lazer (see
+/// `lazer_import.rs` for when that's allowed), then updates Fumen's library. Emits
+/// `import-progress` per line along the way.
+#[tauri::command]
+async fn import_beatmaps(app: AppHandle, links: Vec<String>) -> Result<ImportSummary> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        if state.scanning.swap(true, Ordering::SeqCst) {
+            return Err(Error::known("busy", "The library is being updated; try again in a moment."));
+        }
+        let result = run_import(&app, &state, &links);
+        state.scanning.store(false, Ordering::SeqCst);
+        result
+    })
+    .await
+    .map_err(|e| Error::known("internal", e.to_string()))?
+}
+
+fn run_import(app: &AppHandle, state: &AppState, links: &[String]) -> Result<ImportSummary> {
+    let emit = |index: usize, stage: &'static str, set: Option<u32>, title: Option<String>, message: Option<String>| {
+        let p = ImportProgress { index, stage, set, title, done: 0, total: 0, message };
+        let _ = app.emit("import-progress", p);
+    };
+    let mut summary = ImportSummary::default();
+
+    let storage = state
+        .storage()
+        .ok_or_else(|| Error::known("lazer-not-found", "osu!lazer's data folder wasn't found. Pick it in Settings."))?;
+    let compat = state.compat();
+    // nothing gets downloaded for an import that couldn't happen anyway
+    let st = lazer_import::status(Some(&storage), &compat);
+    if let Some(reason) = st.reason {
+        return Err(Error::known(lazer_import::error_code(reason), st.message.unwrap_or_default()));
+    }
+
+    // links → sets (each set once)
+    let mut sets: Vec<(usize, u32)> = Vec::new();
+    for (i, line) in links.iter().enumerate() {
+        let set = match downloads::parse_link(line) {
+            None => {
+                emit(i, "error", None, None, Some("Not an osu! beatmap link".into()));
+                summary.failed += 1;
+                continue;
+            }
+            Some(downloads::Target::Set(id)) => id,
+            Some(downloads::Target::Beatmap(b)) => {
+                emit(i, "resolving", None, None, None);
+                match downloads::set_of_beatmap(b) {
+                    Ok(id) => id,
+                    Err(e) => {
+                        emit(i, "error", None, None, Some(e.to_string()));
+                        summary.failed += 1;
+                        continue;
+                    }
+                }
+            }
+        };
+        if sets.iter().any(|&(_, s)| s == set) {
+            emit(i, "skipped", Some(set), None, Some("Same set as above".into()));
+            summary.skipped += 1;
+        } else {
+            sets.push((i, set));
+        }
+    }
+
+    // already in the library: nothing to do
+    let title_of = |set: u32| -> Option<String> {
+        state
+            .db()
+            .query_row(
+                "SELECT artist || ' - ' || title FROM sets WHERE online_id = ?1 AND source = 'lazer' LIMIT 1",
+                [set],
+                |r| r.get::<_, String>(0),
+            )
+            .optional()
+            .ok()
+            .flatten()
+    };
+    sets.retain(|&(i, set)| match title_of(set) {
+        Some(title) => {
+            emit(i, "skipped", Some(set), Some(title), Some("Already in your library".into()));
+            summary.skipped += 1;
+            false
+        }
+        None => true,
+    });
+
+    // downloads
+    let dl_dir = state.cache_dir.join("downloads");
+    let mut files: Vec<(usize, u32, PathBuf)> = Vec::new();
+    for &(i, set) in &sets {
+        let mut last: Option<std::time::Instant> = None;
+        let result = downloads::download_set(set, &dl_dir, |done, total| {
+            if last.map_or(true, |t| t.elapsed() >= std::time::Duration::from_millis(120)) || Some(done) == total {
+                last = Some(std::time::Instant::now());
+                let p = ImportProgress { index: i, stage: "downloading", set: Some(set), title: None, done, total: total.unwrap_or(0), message: None };
+                let _ = app.emit("import-progress", p);
+            }
+        });
+        match result {
+            Ok((path, _mirror)) => files.push((i, set, path)),
+            Err(e) => {
+                emit(i, "error", Some(set), None, Some(e.to_string()));
+                summary.failed += 1;
+            }
+        }
+    }
+    if files.is_empty() {
+        return Ok(summary);
+    }
+
+    // into lazer, all at once (one backup, one start of the importer)
+    for &(i, set, _) in &files {
+        emit(i, "importing", Some(set), None, None);
+    }
+    let paths: Vec<PathBuf> = files.iter().map(|(_, _, p)| p.clone()).collect();
+    let results = lazer_import::import(&storage, &state.cache_dir, &state.data_dir.join("lazer-backups"), &paths, &compat);
+    for p in &paths {
+        let _ = std::fs::remove_file(p);
+    }
+    let results = match results {
+        Ok(r) => r,
+        Err(e) => {
+            for &(i, set, _) in &files {
+                emit(i, "error", Some(set), None, Some(e.to_string()));
+            }
+            return Err(e);
+        }
+    };
+
+    // Fumen's library catches up, then every line gets its title
+    if let Err(e) = run_scan(app, state) {
+        eprintln!("[import] library update after import: {e}");
+    }
+    for (i, set, path) in &files {
+        match results.iter().find(|r| r.file.file_name() == path.file_name()) {
+            Some(r) if r.ok && !r.sets.is_empty() => {
+                emit(*i, "done", Some(*set), title_of(*set), None);
+                summary.imported += 1;
+            }
+            Some(r) => {
+                let why = r.message.clone().unwrap_or_else(|| "lazer found no beatmaps in the download".into());
+                emit(*i, "error", Some(*set), None, Some(why));
+                summary.failed += 1;
+            }
+            None => {
+                emit(*i, "error", Some(*set), None, Some("The importer didn't report on this set".into()));
+                summary.failed += 1;
+            }
+        }
+    }
+    Ok(summary)
+}
+
 /// lazer's skins (without their files), the selected one and the built-in textures at hand.
 #[tauri::command]
 async fn get_skins(app: AppHandle) -> Result<skins::SkinList> {
@@ -357,6 +569,8 @@ pub fn run() {
                 settings: Mutex::new(settings),
                 settings_path,
                 cache_dir,
+                data_dir,
+                remote_compat: Mutex::new(None),
                 storage: RwLock::new(None),
                 scanning: AtomicBool::new(false),
                 analysing: AtomicBool::new(false),
@@ -380,6 +594,8 @@ pub fn run() {
             get_hitsounds,
             get_skins,
             get_skin_files,
+            lazer_import_status,
+            import_beatmaps,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Fumen");

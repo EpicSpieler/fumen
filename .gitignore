@@ -8,6 +8,8 @@ src-tauri/gen/
 sidecar/out/
 sidecar/FumenRealm/bin/
 sidecar/FumenRealm/obj/
+sidecar/FumenImport/bin/
+sidecar/FumenImport/obj/
 src-tauri/binaries/
 
 # local preview data (contains the developer's library)

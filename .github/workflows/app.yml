@@ -4,9 +4,9 @@ name: Backend
 on:
   push:
     branches: [main]
-    paths: ["src-tauri/**", "sidecar/**", "scripts/**", ".github/workflows/app.yml"]
+    paths: ["src-tauri/**", "sidecar/**", "scripts/**", "lazer-compat.json", ".github/workflows/app.yml"]
   pull_request:
-    paths: ["src-tauri/**", "sidecar/**", "scripts/**", ".github/workflows/app.yml"]
+    paths: ["src-tauri/**", "sidecar/**", "scripts/**", "lazer-compat.json", ".github/workflows/app.yml"]
 
 concurrency:
   group: app-${{ github.ref }}
