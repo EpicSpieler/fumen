@@ -57,6 +57,8 @@ export const events = new Emitter<{
   library: Snapshot;
   prefs: Partial<UiPrefs>;
   scan: ScanProgress | null;
+  /** an import into lazer started, moved on or ended (views/import.ts) */
+  importing: boolean;
   status: LibraryStatus;
   /** "search the library for this" from anywhere (tags, mapper links) */
   search: string;

@@ -275,6 +275,38 @@ export interface UiPrefs {
   defaultsApplied: boolean;
 }
 
+/** Whether sets can go into osu!lazer right now (see src-tauri/src/lazer_import.rs). */
+export interface LazerImportStatus {
+  ready: boolean;
+  reason: "not-installed" | "untested" | "running" | "no-library" | null;
+  message: string | null;
+  /** the installed lazer, as in its sq.version ("2026.1005.0-lazer") */
+  version: string | null;
+  tested: boolean;
+  running: boolean;
+  testedVersions: string[];
+}
+
+export type ImportStage = "resolving" | "downloading" | "importing" | "done" | "skipped" | "error";
+
+/** `import-progress`: one pasted line moving along */
+export interface ImportProgress {
+  index: number;
+  stage: ImportStage;
+  set: number | null;
+  title: string | null;
+  /** bytes, while downloading */
+  done: number;
+  total: number;
+  message: string | null;
+}
+
+export interface ImportSummary {
+  imported: number;
+  skipped: number;
+  failed: number;
+}
+
 export interface ApiError {
   code: string;
   message: string;

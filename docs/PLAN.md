@@ -11,8 +11,9 @@ around that: browsing a 20k-difficulty library, understanding what a chart actua
 organising it, practising with intent, and building tournament pools.
 
 Principles:
-1. **Your library, read-only and safe.** Fumen never writes to osu!'s live database. Every
-   write (collections, exports) goes through an explicit export step with a backup.
+1. **Your library, safe.** Fumen reads a copy of lazer's database. Writes into lazer (beatmap
+   imports now, collections later) run lazer's own code, only while lazer is closed, only on lazer
+   versions tested with Fumen, at exactly lazer's database schema, with a backup first.
 2. **Fast at 20k+ maps.** Everything is cached in SQLite; the UI is virtualised; a rescan of an
    unchanged library costs nothing.
 3. **mania first, other modes welcome.** Filters and analysis lead with mania (keys, LN %,
@@ -32,11 +33,15 @@ fumen/
 │  ├─ views/            library, collections, settings (one module per view)
 │  └─ lib/              api (typed invoke wrappers), store, format helpers
 ├─ src-tauri/           Backend — Rust, Tauri v2
-│  ├─ src/library/      SQLite cache (rusqlite), queries, filters
-│  ├─ src/sources/      lazer (via sidecar), stable (osu!.db) later
+│  ├─ src/db.rs, library.rs   SQLite cache (rusqlite) and the library snapshot
+│  ├─ src/lazer.rs      lazer import (via fumen-realm)
+│  ├─ src/lazer_import.rs, downloads.rs   sets into lazer (via fumen-import), mirror downloads
+│  ├─ src/chart.rs, charts.rs, analysis.rs, stars.rs, mma/   .osu parser and chart analysis
 │  ├─ src/protocol.rs   fumen:// scheme: serves osu! files by hash, with Range support
-│  └─ binaries/         bundled sidecar exe
+│  └─ binaries/         built helpers (fumen-realm sidecar, fumen-import)
 ├─ sidecar/FumenRealm/  .NET 8 + Realm 20.1 — exports lazer's client.realm to JSON
+├─ sidecar/FumenImport/ .NET — runs lazer's BeatmapImporter on lazer's own runtime
+├─ lazer-compat.json    lazer versions the import is tested with
 └─ docs/
 ```
 
@@ -46,6 +51,14 @@ copy **read-only in dynamic mode** (schema-agnostic, so lazer updates that add f
 it), and emits one JSON document: sets, difficulties, metadata, file-hash maps, scores,
 collections. Rust ingests that into SQLite. The live database is never opened, so there's no lock or
 upgrade risk.
+
+**Writing to lazer.** Imports run lazer's own `BeatmapImporter`: `fumen-import` is started from a
+folder of hard links to the installed lazer (plus lazer's `deps.json` / `runtimeconfig.json`), so it
+runs on lazer's .NET with lazer's assemblies and reaches them by reflection — no lazer code is
+copied and nothing is pinned to a version. Guards: lazer closed (process check), version in
+`lazer-compat.json` (built-in copy + the one on GitHub), database schema exactly lazer's (lazer's
+`RealmAccess` would migrate an older file without a backup and replace a newer one), backup of
+`client.realm`. `npm run verify-lazer` tests a new lazer version end to end and lists it.
 
 **Files.** lazer stores files content-addressed (`files/a/ab/<sha256>`). The realm gives
 `Filename → Hash` per set, so backgrounds and audio are resolved to paths and served through
@@ -61,7 +74,7 @@ upgrade risk.
 | **0.1** | Library | lazer library in a fast grid/list; search; filters (mode, keys, SR, BPM, length, OD/HP, status); set page with all difficulties; local audio playback; backgrounds; lazer collections (read-only); settings (paths, accent, theme) |
 | 0.2 | Charts | `.osu` hit-object parser; mania chart preview (scrolling playfield); density/NPS graph; LN %, chord/jack/stream stats; auto pattern tags ("jumpstream", "LN", "chordjack", "tech") |
 | 0.3 | Collections | Fumen collections + smart collections (saved filters); drag & drop; export to `collection.db` (stable / Collection Manager) and to lazer (lazer closed, backup first); stable source (`osu!.db` + Songs) |
-| 0.4 | You | lazer scores + osu! API v2 (OAuth); play history; per-pattern skill radar; "practice next" suggestions; goals |
+| 0.4 | You | adding beatmaps from osu! links straight into lazer; lazer scores + osu! API v2 (OAuth); play history; per-pattern skill radar; "practice next" suggestions; goals |
 | 0.5 | Pools | Pool builder: NM/HD/HR/DT/FM/TB slots, mod-adjusted SR/BPM/length, look up maps you don't own via API, export to JSON/CSV/sheet + RPRO bot, pool showcase image |
 | 0.6 | Tournament | Schedule, mp-link parsing + match results, OBS overlay served locally |
 | 1.0 | Release | Installer, auto-update (GitHub Releases), de/en, OLED/Light/High-contrast themes, website |
@@ -125,10 +138,26 @@ upgrade risk.
 - [ ] Taiko / catch / osu! previews
 - [x] "tech" detection: the pattern report's "Tech" (mixed speeds) and SV
 
+## v0.4 — you (in progress)
+
+- [x] Adding beatmaps: osu! links (set / beatmap pages, `osu://`, IDs) → set IDs (beatmap links via
+      osu.ppy.sh's redirect) → `.osz` from mirrors (osu.direct, catboy.best, nerinyan.moe, checked to
+      be a zip) → lazer's own import (see *Writing to lazer*) → library rescan; sets already there
+      skipped; per-line progress, retry of failed lines; paste anywhere in the app
+- [x] Tested-version list `lazer-compat.json` + `npm run verify-lazer` (schema guard both ways,
+      fresh-library import twice, import into a copy of the real library: +1 set, all else identical,
+      every file's hash checked)
+- [x] 1× star rating from Fumen's calculator for difficulties lazer hasn't rated yet
+- [ ] osu! API v2 login (Fumen's own OAuth app; client ID/secret injected at build time, never in git)
+- [ ] Scores and play history (lazer's local scores + the API's)
+- [ ] Per-pattern skill radar, "practice next" suggestions, goals
+
 ## Workflow
 
 - GitHub repo `fumen` (private until 0.1 is solid), `main` branch, small focused commits.
-- CI (GitHub Actions, windows-latest): `tsc --noEmit`, `vite build`, `cargo clippy`, sidecar build.
+- CI (GitHub Actions): frontend (typecheck, UI tests, build) and backend (windows-latest: helpers
+  build, `cargo clippy`, Rust tests), each only when its side changes.
+- After a lazer update: `npm run verify-lazer -- --push` with lazer closed.
 - Releases later via `tauri-action` with the updater.
 
 ## Risks
@@ -138,4 +167,5 @@ upgrade risk.
 | lazer bumps Realm file format | Pin Realm NuGet to lazer's version; sidecar fails loudly with a clear message; update NuGet |
 | Sidecar size | Trimmed single-file publish: ~13 MB. A native Rust Realm reader stays a long-term option |
 | Schema field renames in lazer | Dynamic access with per-field fallbacks; missing fields become null, never crash |
+| A lazer update changes the import | Imports switch off for untested versions; the importer finds lazer's classes by name and fails loudly; the schema guard never opens a database lazer would migrate; backup before every import; `verify-lazer` before listing a version |
 | Large library memory | Compact snapshot (indices instead of ids, no duplicate fields) + virtualised lists; revisit paging if libraries far beyond 50k difficulties show up |

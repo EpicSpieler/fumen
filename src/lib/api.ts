@@ -1,7 +1,21 @@
 /* Typed wrappers around the Tauri commands, plus fumen:// URLs. */
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import type { ApiError, ChartData, ChartSounds, DanRating, LazerInstall, LibraryStatus, ScanProgress, Settings, SkinList, Snapshot } from "./types";
+import type {
+  ApiError,
+  ChartData,
+  ChartSounds,
+  DanRating,
+  ImportProgress,
+  ImportSummary,
+  LazerImportStatus,
+  LazerInstall,
+  LibraryStatus,
+  ScanProgress,
+  Settings,
+  SkinList,
+  Snapshot,
+} from "./types";
 
 export const isTauri = "__TAURI_INTERNALS__" in window;
 
@@ -33,10 +47,18 @@ export const api = {
     if (raw instanceof ArrayBuffer) return JSON.parse(new TextDecoder().decode(raw)) as [string, string][];
     return raw;
   },
+  /** whether sets can be imported into osu!lazer right now */
+  lazerImportStatus: () => invoke<LazerImportStatus>("lazer_import_status"),
+  /** downloads the sets behind osu! links and imports them into lazer (progress: onImportProgress) */
+  importBeatmaps: (links: string[]) => invoke<ImportSummary>("import_beatmaps", { links }),
 };
 
 export function onScanProgress(cb: (p: ScanProgress) => void): Promise<UnlistenFn> {
   return listen<ScanProgress>("scan-progress", (e) => cb(e.payload));
+}
+
+export function onImportProgress(cb: (p: ImportProgress) => void): Promise<UnlistenFn> {
+  return listen<ImportProgress>("import-progress", (e) => cb(e.payload));
 }
 
 /** Background chart analysis of the whole library (after imports and on start). */
