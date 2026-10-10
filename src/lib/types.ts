@@ -155,7 +155,7 @@ export interface Settings {
 }
 
 export type AccentMode = "dynamic" | "fixed";
-export type LibraryLayout = "grid" | "table";
+export type LibraryLayout = "grid" | "list";
 export type RepeatMode = "off" | "all" | "one";
 
 export interface UiPrefs {

@@ -80,7 +80,7 @@ upgrade risk.
 **Frontend**
 - [x] Shell (Kodama layout): full-height sidebar with search, Home/Library, collections box, profile; floating window controls; player under the content
 - [x] Home: greeting, shelves (recently played / added, most played, haven't played in a while), quick picks panel
-- [x] Library: virtualised cover grid + difficulty table; osu!-style query language (keys, sr, bpm, length, od, status, grade, played, …); mode + key-count chips; star range / status / played filters; sort
+- [x] Library: virtualised cover grid + set list (sets open to show their difficulties); osu!-style query language (keys, sr, bpm, length, od, status, grade, played, …); mode + key-count chips; star range / status / played filters; sort
 - [x] Set view: large background, ambient blur, difficulty table (keys, SR colour, OD, HP, notes, LN %, length), play preview
 - [x] Player: songs from the beginning, queue from the list you played from (shuffled by default), repeat, seek, volume, media keys; accent from current cover
 - [x] Collections view (lazer, read-only)

@@ -12,7 +12,8 @@ to osu!'s files.
 ## Features
 
 - Imports the osu!lazer library: sets, difficulties, local scores and collections
-- Cover grid and sortable difficulty table, both virtualised (stays smooth at 20k+ difficulties)
+- Cover grid and a list of beatmap sets that open to show their difficulties, both virtualised
+  (stays smooth at 20k+ difficulties)
 - osu!-style search: `keys=7 sr>4.5 status=ranked creator=… length<2:30 grade>=A played=no`
 - Ruleset and key-count filters, star range, status, played / not played
 - Set pages with every difficulty, notes, long-note share, notes per second and your best grade

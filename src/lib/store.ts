@@ -78,6 +78,8 @@ export async function refreshStatus(): Promise<LibraryStatus> {
 export function loadPrefs(settings: Settings): void {
   store.settings = settings;
   store.prefs = { ...DEFAULT_PREFS, ...(settings.ui as Partial<UiPrefs>) };
+  // the difficulty table became the set list (0.2)
+  if ((store.prefs.layout as string) === "table") store.prefs.layout = "list";
 }
 
 // Preference writes are applied immediately and persisted in one debounced batch.
