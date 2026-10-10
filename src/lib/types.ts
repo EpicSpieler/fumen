@@ -178,6 +178,16 @@ export interface DanRating {
   sunny: number;
 }
 
+/** A sound of the playing chart: one of its set's files, or a skin sample ("soft-hitclap"). */
+export type HitSample = { file: string } | { skin: string };
+
+/** An osu!mania chart's hitsounds (see src-tauri/src/hitsounds.rs). */
+export interface ChartSounds {
+  samples: HitSample[];
+  /** [time, sample index, volume 0–100] per sound, by time */
+  events: number[];
+}
+
 export type SkinKind = "legacy" | "classic" | "retro" | "triangles" | "argon" | "argon-pro";
 
 export interface SkinEntry {
@@ -195,6 +205,10 @@ export interface SkinList {
   /** file names of lazer's built-in classic / retro textures */
   classic: string[];
   retro: string[];
+  /** file names of the built-in hit sounds of triangles, argon and argon pro */
+  triangles: string[];
+  argon: string[];
+  argonPro: string[];
 }
 
 export interface LazerInstall {
@@ -253,6 +267,8 @@ export interface UiPrefs {
   scrollSpeed: number | null;
   /** skin of the playfield (a lazer skin id); null = the one selected in lazer */
   playfieldSkin: string | null;
+  /** volume of the playfield's hitsounds, 0–1, relative to the music */
+  hitsoundVolume: number;
   /** fullscreen view used last */
   fullscreenMode: "visual" | "field";
   /** set once the first-run defaults (e.g. mode from play history) were applied */

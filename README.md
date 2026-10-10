@@ -39,7 +39,8 @@ to osu!'s files.
 - Search by it: `pattern=jumpstream`, `pattern=cj`, `peak>15`, `dt>6`, `ht<3`
 - The playfield in your lazer skins: every skin in your lazer library is imported with it and can be
   picked in fullscreen (lazer's own skins and `.osk` skins, drawn like lazer draws them), played by
-  lazer's autoplay
+  lazer's autoplay with the beatmap's hitsounds (custom samples and keysounds included) at their
+  own volume
 - Dan rating for osu!mania: Azusa for 4K rice, Sunny's star rating on the 4K / 6K / 7K / 10K dan
   tables otherwise (with an LN reading for long-note charts), at any rate. Shown in the chart panel
   and the difficulty rows; search `dan=gamma`, `dan>=13`, `dan>="reform 8"`

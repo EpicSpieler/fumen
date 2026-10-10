@@ -41,6 +41,19 @@ internal static class Exporter
             }
             w.WriteEndArray();
 
+            // sound files and the storyboard: custom hitsounds and storyboard samples for the
+            // playfield, as [filename, hash] pairs
+            w.WriteStartArray("sounds");
+            foreach (var (name, hash) in files)
+            {
+                if (!IsSound(name)) continue;
+                w.WriteStartArray();
+                w.WriteStringValue(name);
+                w.WriteStringValue(hash);
+                w.WriteEndArray();
+            }
+            w.WriteEndArray();
+
             w.WriteEndObject();
             setCount++;
         }
@@ -63,6 +76,12 @@ internal static class Exporter
     }
 
     private static string NormalisePath(string p) => p.Replace('\\', '/').Trim();
+
+    private static bool IsSound(string name) =>
+        name.EndsWith(".wav", StringComparison.OrdinalIgnoreCase)
+        || name.EndsWith(".ogg", StringComparison.OrdinalIgnoreCase)
+        || name.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase)
+        || name.EndsWith(".osb", StringComparison.OrdinalIgnoreCase);
 
     private static void WriteMap(Utf8JsonWriter w, IRealmObjectBase map, Dictionary<string, string> files)
     {

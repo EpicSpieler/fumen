@@ -1,4 +1,6 @@
-/* eq.ts — frequency bars for the fullscreen visualizer, read from the player's own audio.
+/* eq.ts — the song in Web Audio: frequency bars for the fullscreen visualizer, read from the
+ * player's own audio, and the context the playfield's hitsounds play in (on the song's clock and
+ * output path, so they line up with it).
  *
  * The audio element is routed through Web Audio once, on first use (it must start from a user
  * gesture). The element loads with CORS ("anonymous"; fumen:// answers with
@@ -9,6 +11,11 @@ import { player } from "../player";
 let ctx: AudioContext | null = null;
 let analyser: AnalyserNode | null = null;
 let bins: Uint8Array<ArrayBuffer> = new Uint8Array(0);
+
+/** The context the song plays through (set up on first use), or null without Web Audio. */
+export function audioContext(): AudioContext | null {
+  return startAnalyser() ? ctx : null;
+}
 
 /** Starts (or resumes) the analyser; false when Web Audio isn't available. */
 export function startAnalyser(): boolean {

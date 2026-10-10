@@ -1,7 +1,7 @@
 /* Typed wrappers around the Tauri commands, plus fumen:// URLs. */
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import type { ApiError, ChartData, DanRating, LazerInstall, LibraryStatus, ScanProgress, Settings, SkinList, Snapshot } from "./types";
+import type { ApiError, ChartData, ChartSounds, DanRating, LazerInstall, LibraryStatus, ScanProgress, Settings, SkinList, Snapshot } from "./types";
 
 export const isTauri = "__TAURI_INTERNALS__" in window;
 
@@ -24,6 +24,8 @@ export const api = {
   },
   /** an osu!mania difficulty's dan at a clock rate */
   getDan: (id: string, rate: number) => invoke<DanRating | null>("get_dan", { id, rate }),
+  /** an osu!mania difficulty's hitsounds */
+  getHitsounds: (id: string) => invoke<ChartSounds>("get_hitsounds", { id }),
   getSkins: () => invoke<SkinList>("get_skins"),
   /** [filename, sha256] per file */
   async getSkinFiles(id: string): Promise<[string, string][]> {
@@ -62,8 +64,9 @@ const BASE =
 
 export const fileUrl = (hash: string): string => `${BASE}file/${hash}`;
 export const thumbUrl = (hash: string, width: number): string => `${BASE}thumb/${width}/${hash}`;
-/** lazer's built-in classic / retro skin textures */
-export const builtinSkinUrl = (skin: "classic" | "retro", name: string): string => `${BASE}skin/${skin}/${encodeURIComponent(name)}`;
+/** lazer's built-in skin files: classic / retro textures, hit sounds of all of them */
+export type BuiltinSkin = "classic" | "retro" | "triangles" | "argon" | "argon-pro";
+export const builtinSkinUrl = (skin: BuiltinSkin, name: string): string => `${BASE}skin/${skin}/${encodeURIComponent(name)}`;
 
 export const osuSetUrl = (onlineId: number): string => `https://osu.ppy.sh/beatmapsets/${onlineId}`;
 export const osuMapUrl = (setId: number, mapId: number, mode: number): string =>

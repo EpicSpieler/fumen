@@ -1,12 +1,15 @@
-/* skins.ts — lazer's skins for the playfield: the list, which one is used, and texture lookups
- * the way lazer's LegacySkin does them (MIT, ppy Pty Ltd):
+/* skins.ts — lazer's skins for the playfield: the list, which one is used, and texture and sound
+ * lookups the way lazer's skins do them (MIT, ppy Pty Ltd):
  *
- *  - a name is looked up as itself, then with .png and .jpg, case-insensitively;
+ *  - a texture is looked up as itself, then with .png and .jpg, case-insensitively;
  *  - "@2x" versions win and count as half size;
  *  - animations are name-0, name-1, … from the first skin that has frame 0 or the plain name;
- *  - a legacy skin falls back to lazer's "classic" textures for anything it doesn't have.
+ *  - a legacy skin falls back to lazer's "classic" textures for anything it doesn't have;
+ *  - a hit sound ("soft-hitclap") is looked up as itself, then without its bank ("hitclap"), as
+ *    .wav / .mp3 / .ogg, in each skin of the chain in turn: a legacy skin, then classic, then
+ *    triangles (lazer's last resort); argon pro, then argon, then triangles.
  */
-import { api, builtinSkinUrl, fileUrl } from "../api";
+import { api, builtinSkinUrl, fileUrl, type BuiltinSkin } from "../api";
 import { store } from "../store";
 import type { SkinEntry, SkinList } from "../types";
 import { LATEST_VERSION, parseSkinIni, type SkinIni } from "./ini";
@@ -72,6 +75,12 @@ export class FileSource {
   find(name: string): string | undefined {
     const k = key(name);
     return this.files.get(k) ?? this.files.get(`${k}.png`) ?? this.files.get(`${k}.jpg`);
+  }
+
+  /** SampleStore.Get: the name, then name.wav, name.mp3, name.ogg */
+  sound(name: string): string | undefined {
+    const k = key(name);
+    return this.files.get(k) ?? this.files.get(`${k}.wav`) ?? this.files.get(`${k}.mp3`) ?? this.files.get(`${k}.ogg`);
   }
 
   /** LegacySkin.GetTexture: "@2x" first */
@@ -206,6 +215,12 @@ async function fetchIni(url: string | undefined): Promise<SkinIni | null> {
   return parseSkinIni(new TextDecoder().decode(await res.arrayBuffer()));
 }
 
+/** A built-in skin's extracted files (no skin.ini). */
+function builtinFiles(l: SkinList, skin: BuiltinSkin): FileSource | null {
+  const names = { classic: l.classic, retro: l.retro, triangles: l.triangles, argon: l.argon, "argon-pro": l.argonPro }[skin] ?? [];
+  return names.length ? new FileSource(names.map((n): [string, string] => [n, builtinSkinUrl(skin, n)]), null) : null;
+}
+
 async function builtinSource(l: SkinList, skin: "classic" | "retro"): Promise<FileSource | null> {
   const names = skin === "classic" ? l.classic : l.retro;
   if (!names.length) return null;
@@ -237,6 +252,34 @@ export function loadSkin(entry: SkinEntry, l: SkinList): Promise<LoadedSkin> {
     loaded.set(entry.id, p);
   }
   return p;
+}
+
+// ── sounds ────────────────────────────────────────────────────────────────
+
+/** The skins a skin's hit sounds come from, in lookup order (lazer's ISkinSource for samples). */
+export class SoundChain {
+  constructor(readonly sources: FileSource[]) {}
+
+  /** A skin sample ("soft-hitclap"): each skin in turn, with the bank, then without it. */
+  find(name: string): string | undefined {
+    const bare = name.slice(name.indexOf("-") + 1);
+    for (const s of this.sources) {
+      const url = s.sound(name) ?? s.sound(bare);
+      if (url) return url;
+    }
+    return undefined;
+  }
+}
+
+export async function loadSkinSounds(entry: SkinEntry, l: SkinList): Promise<SoundChain> {
+  const triangles = builtinFiles(l, "triangles");
+  let chain: (FileSource | null)[];
+  if (entry.kind === "triangles") chain = [];
+  else if (entry.kind === "argon") chain = [builtinFiles(l, "argon")];
+  else if (entry.kind === "argon-pro") chain = [builtinFiles(l, "argon-pro"), builtinFiles(l, "argon")];
+  // legacy, classic, retro: the skin, then classic (as for textures)
+  else chain = (await loadSkin(entry, l)).chain;
+  return new SoundChain([...chain, triangles].filter((s): s is FileSource => !!s));
 }
 
 /** Forget loaded skins (after a re-import, files may have changed). */
