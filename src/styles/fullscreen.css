@@ -1,0 +1,221 @@
+/* ===========================================================================
+   Fullscreen player — visualizer (art + frequency bars) or the osu!mania playfield
+   =========================================================================== */
+
+.fs {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  background: #08080b;
+  color: var(--t1);
+  opacity: 0;
+  transition: opacity .24s var(--ease-std);
+}
+.fs.on { opacity: 1; }
+.fs > header, .fs > main, .fs > footer { position: relative; z-index: 1; }
+
+/* the art, blurred, behind everything */
+.fs-bg { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+.fs-bg img {
+  position: absolute;
+  inset: -8%;
+  width: 116%;
+  height: 116%;
+  object-fit: cover;
+  filter: blur(64px) saturate(1.25) brightness(.42);
+  opacity: 0;
+  transition: opacity .6s var(--ease-std);
+}
+.fs-bg img.loaded { opacity: 1; }
+.fs-bg::after { content: ""; position: absolute; inset: 0; background: radial-gradient(ellipse 80% 70% at 50% 42%, transparent, rgba(0, 0, 0, .58)); }
+.fs[data-mode="field"] .fs-bg img { filter: blur(72px) saturate(1.1) brightness(.26); }
+
+/* ---------- Top ---------- */
+.fs-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 24px;
+  padding: 18px 24px 10px;
+}
+.fs-now { min-width: 0; opacity: 0; transition: opacity .2s var(--ease-std); }
+.fs[data-mode="field"] .fs-now { opacity: 1; }
+.fs-now-title { font-size: var(--fs-14); font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fs-now-sub { font-size: var(--fs-12); color: var(--t3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fs-modes { background: rgba(255, 255, 255, .08); }
+.fs-modes > button { padding: 0 16px; }
+.fs-top-r { display: flex; justify-content: flex-end; }
+.fs-exit .ic { width: 20px; height: 20px; }
+
+.fs-body { position: relative; min-height: 0; }
+.fs-visual, .fs-field { position: absolute; inset: 0; }
+.fs[data-mode="visual"] .fs-field, .fs[data-mode="field"] .fs-visual { display: none; }
+.fs-visual, .fs-field { animation: fade-in .3s var(--ease-std); }
+
+/* ---------- Visualizer ---------- */
+.fs-visual {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 26px;
+  padding: 0 32px 21vh;
+}
+.fs-art {
+  position: relative;
+  width: min(56vw, calc(46vh * 16 / 9));
+  aspect-ratio: 16 / 9;
+  border-radius: 20px;
+  overflow: hidden;
+  background: var(--placeholder-gradient);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, .55), 0 0 0 .5px rgba(255, 255, 255, .06);
+}
+.fs-art img { width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .4s var(--ease-std); }
+.fs-art img.loaded { opacity: 1; }
+.fs-meta { max-width: min(70vw, 900px); text-align: center; }
+.fs-title { font-size: clamp(22px, 2.4vw, 34px); font-weight: 700; line-height: 1.2; letter-spacing: -.01em; }
+.fs-artist { margin-top: 6px; font-size: clamp(14px, 1.3vw, 18px); color: var(--t2); }
+.fs-version { margin-top: 4px; font-size: var(--fs-13); color: var(--t3); }
+.fs-eq {
+  position: absolute;
+  left: 4vw;
+  right: 4vw;
+  bottom: 0;
+  width: 92vw;
+  height: 19vh;
+}
+
+/* ---------- Playfield ---------- */
+.fs-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(340px, 440px);
+  gap: 40px;
+  padding: 0 56px 0 24px;
+}
+.fs-stage { position: relative; display: flex; justify-content: center; min-height: 0; }
+.fs-pf {
+  display: block;
+  width: var(--pf-w, 360px);
+  max-width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, .5);
+  box-shadow: 0 0 0 .5px rgba(255, 255, 255, .05);
+}
+.fs-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  text-align: center;
+  color: var(--t2);
+}
+.fs-empty > .ic { width: 44px; height: 44px; margin-bottom: 6px; color: var(--accent-ink); }
+.fs-empty-title { font-size: var(--fs-16); font-weight: 650; color: var(--t1); }
+.fs-empty p { margin: 0; max-width: 360px; }
+.fs-empty-list { display: flex; flex-direction: column; gap: 4px; width: min(360px, 100%); margin-top: 10px; }
+.fs-pick {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 40px;
+  padding: 0 12px;
+  border-radius: var(--r-lg);
+  background: rgba(255, 255, 255, .06);
+  text-align: left;
+  transition: background .12s var(--ease-std);
+}
+.fs-pick:hover { background: rgba(255, 255, 255, .11); }
+.fs-pick span { flex: 1; min-width: 0; font-weight: 600; color: var(--t1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fs-pick i { font-style: normal; font-size: var(--fs-12); color: var(--t3); }
+
+/* info beside the playfield */
+.fs-info {
+  align-self: center;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+  max-height: 100%;
+  overflow-y: auto;
+  scrollbar-width: none;
+  transition: opacity .2s var(--ease-std);
+}
+.fs-info.dim { opacity: .35; pointer-events: none; }
+.fs-info.off { visibility: hidden; opacity: 0; }
+.fs-diff {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 10px 12px;
+  margin: 0 -12px;
+  border-radius: var(--r-lg);
+  text-align: left;
+  transition: background .12s var(--ease-std);
+}
+.fs-diff:hover { background: rgba(255, 255, 255, .06); }
+.fs-diff > .ic { width: 18px; height: 18px; margin-left: auto; color: var(--t3); }
+.fs-diff-name { display: flex; flex-direction: column; min-width: 0; }
+.fs-diff-name b { font-size: var(--fs-16); font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fs-diff-name span { font-size: var(--fs-12); color: var(--t3); }
+
+.fs-live { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.fs-stat {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 14px 16px;
+  border-radius: var(--r-xl);
+  background: rgba(255, 255, 255, .05);
+}
+.fs-k { font-size: var(--fs-11); font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--t3); }
+.fs-stat b { margin-top: 4px; font-size: 30px; font-weight: 700; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fs-stat b[data-live="pattern"] { font-size: 24px; color: var(--accent-ink); }
+.fs-s { min-height: 1.4em; margin-top: 2px; font-size: var(--fs-12); color: var(--t3); }
+
+.fs-graph {
+  position: relative;
+  height: 84px;
+  border-radius: var(--r-lg);
+  background: rgba(255, 255, 255, .04);
+  overflow: hidden;
+  cursor: pointer;
+}
+.fs-graph canvas { display: block; width: 100%; height: 100%; }
+.fs-axis { display: flex; justify-content: space-between; gap: 12px; margin-top: -10px; font-size: var(--fs-11); color: var(--t3); }
+
+.fs-setting { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; }
+.fs-setting > .fs-k { width: 100%; }
+.fs-speed { display: inline-flex; align-items: center; gap: 2px; }
+.fs-speed-val { min-width: 44px; text-align: center; font-size: var(--fs-16); font-weight: 700; }
+.fs-speed-sub { font-size: var(--fs-12); color: var(--t3); }
+.fs-speed-reset { font: inherit; color: var(--accent-ink); transition: color .12s; }
+.fs-speed-reset:hover { color: var(--t1); }
+.fs-rate-ctl { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; }
+.fs .seg-pill { background: rgba(255, 255, 255, .08); }
+
+/* ---------- Transport ---------- */
+.fs-bar { padding: 0 28px 18px; }
+/* moved every frame here, so no easing behind the song */
+.fs-seek .pb-seek-fill { transition: none; }
+.fs-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 24px;
+  margin-top: 6px;
+}
+.fs-time { font-size: var(--fs-12); color: var(--t2); }
+.fs-rate { margin-left: 10px; font-weight: 600; color: var(--accent-ink); }
+.fs-ctrl { display: flex; align-items: center; gap: 10px; }
+
+@media (max-width: 1100px) {
+  .fs-field { grid-template-columns: minmax(0, 1fr) minmax(300px, 360px); gap: 24px; padding: 0 24px 0 12px; }
+  .fs-stat b { font-size: 24px; }
+}

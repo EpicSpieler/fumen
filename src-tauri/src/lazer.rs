@@ -101,6 +101,17 @@ struct Export {
     scores: Vec<LScore>,
     #[serde(default)]
     collections: Vec<LCollection>,
+    #[serde(default)]
+    ruleset_settings: Vec<LSetting>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LSetting {
+    ruleset: Option<String>,
+    variant: Option<i64>,
+    key: Option<String>,
+    value: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -346,6 +357,15 @@ pub fn import(conn: &mut Connection, json: &Path, install: &LazerInstall) -> Res
             counts.collections += 1;
         }
     }
+
+    // osu!mania settings (scroll speed and direction) for the playfield preview
+    let mania: serde_json::Map<String, serde_json::Value> = export
+        .ruleset_settings
+        .iter()
+        .filter(|s| s.ruleset.as_deref() == Some("mania") && s.variant.unwrap_or(0) == 0)
+        .filter_map(|s| Some((s.key.clone()?, serde_json::Value::String(s.value.clone().unwrap_or_default()))))
+        .collect();
+    db::set_meta(&tx, "lazer.maniaSettings", &serde_json::Value::Object(mania).to_string())?;
 
     db::set_meta(&tx, "lazer.storage", &install.storage)?;
     db::set_meta(&tx, "lazer.realmSize", &install.realm_size.to_string())?;

@@ -24,6 +24,28 @@ struct Snapshot {
     /// The player these local scores belong to (most frequent score owner).
     #[serde(skip_serializing_if = "Option::is_none")]
     user: Option<UserOut>,
+    /// lazer's osu!mania settings that the playfield preview follows
+    mania: ManiaSettings,
+}
+
+#[derive(Serialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct ManiaSettings {
+    /// 1–40; notes take 11485 / speed ms to fall to the judgement line
+    #[serde(skip_serializing_if = "Option::is_none")]
+    scroll_speed: Option<f64>,
+    /// "Down" or "Up"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    scroll_direction: Option<String>,
+}
+
+fn mania_settings(conn: &Connection) -> Result<ManiaSettings> {
+    let Some(raw) = db::get_meta(conn, "lazer.maniaSettings")? else { return Ok(ManiaSettings::default()) };
+    let v: serde_json::Value = serde_json::from_str(&raw).unwrap_or_default();
+    Ok(ManiaSettings {
+        scroll_speed: v["ScrollSpeed"].as_str().and_then(|s| s.trim().parse::<f64>().ok()).filter(|s| s.is_finite() && *s > 0.0),
+        scroll_direction: v["ScrollDirection"].as_str().filter(|s| matches!(*s, "Down" | "Up")).map(str::to_owned),
+    })
 }
 
 #[derive(Serialize)]
@@ -313,7 +335,8 @@ pub fn snapshot_json(conn: &Connection) -> Result<Vec<u8>> {
         )
         .optional()?;
 
-    Ok(serde_json::to_vec(&Snapshot { source: "lazer", scanned_at, sets, maps, collections, user })?)
+    let mania = mania_settings(conn)?;
+    Ok(serde_json::to_vec(&Snapshot { source: "lazer", scanned_at, sets, maps, collections, user, mania })?)
 }
 
 #[cfg(test)]

@@ -47,6 +47,8 @@ class Player {
 
   constructor() {
     this.audio.preload = "auto";
+    // CORS mode, so the fullscreen visualizer can read the audio (fumen:// allows any origin)
+    this.audio.crossOrigin = "anonymous";
     this.audio.addEventListener("play", () => this.bus.emit("state", true));
     this.audio.addEventListener("pause", () => this.bus.emit("state", false));
     this.audio.addEventListener("ended", () => {
@@ -105,6 +107,20 @@ class Player {
       return;
     }
     if (!this.load(setIdx, mapIdx, opts.at)) toast("This set has no audio file.");
+  }
+
+  /** Switches the playing difficulty within the set; keeps playing when it's the same song. */
+  selectMap(mi: number): void {
+    const snap = store.snap;
+    const np = this.now;
+    if (!snap || !np) return;
+    const m = snap.maps[mi];
+    if (!m || m.set !== np.set) return;
+    const set = snap.sets[m.set];
+    if ((m.audio ?? set.audio) === np.audio) {
+      this.now = { ...np, map: mi, bg: m.bg ?? set.bg };
+      this.bus.emit("track", this.now);
+    } else this.playSet(m.set, mi);
   }
 
   /** Starts a set's song from the beginning (or `at` seconds). False when the set has no audio. */
@@ -268,7 +284,7 @@ const REPEAT_TIP: Record<RepeatMode, string> = {
   one: "Repeat: this song",
 };
 
-export function mountPlayerBar(host: HTMLElement): void {
+export function mountPlayerBar(host: HTMLElement, opts: { onFullscreen: () => void }): void {
   host.innerHTML = `
     <div class="pb-seek" role="slider" aria-label="Seek" tabindex="0">
       <div class="pb-seek-track"><div class="pb-seek-fill"></div></div>
@@ -294,6 +310,7 @@ export function mountPlayerBar(host: HTMLElement): void {
       <div class="pb-right">
         <button class="pb-btn pb-mute" type="button" aria-label="Mute"></button>
         <div class="pb-vol" role="slider" aria-label="Volume" aria-valuemin="0" aria-valuemax="100" tabindex="0"><div class="pb-vol-fill"></div></div>
+        <button class="pb-btn pb-full" type="button" data-tip="Fullscreen" aria-label="Fullscreen">${icon("fullscreen")}</button>
         <button class="pb-btn pb-more" type="button" data-tip="More" aria-label="More">${icon("more-vert")}</button>
         <button class="pb-btn pb-close" type="button" data-tip="Close player" aria-label="Close player">${icon("x")}</button>
       </div>
@@ -430,6 +447,7 @@ export function mountPlayerBar(host: HTMLElement): void {
   title.addEventListener("click", () => openCurrent());
   $<HTMLButtonElement>(".pb-art").addEventListener("click", () => openCurrent());
   $<HTMLButtonElement>(".pb-close").addEventListener("click", () => player.stop());
+  $<HTMLButtonElement>(".pb-full").addEventListener("click", () => opts.onFullscreen());
   $<HTMLButtonElement>(".pb-more").addEventListener("click", (e) => {
     const np = player.now;
     if (np) setMenu(e.currentTarget as HTMLElement, np.set, np.map, { onSearch: (q) => events.emit("search", q) });
@@ -494,7 +512,7 @@ export function mountPlayerBar(host: HTMLElement): void {
 }
 
 /** Click or drag along a horizontal track; reports the fraction (0–1). */
-function dragSlider(el: HTMLElement, onValue: (f: number, done: boolean) => void, enabled: () => boolean = () => true): void {
+export function dragSlider(el: HTMLElement, onValue: (f: number, done: boolean) => void, enabled: () => boolean = () => true): void {
   let active = false;
   const at = (x: number) => {
     const r = el.getBoundingClientRect();

@@ -83,6 +83,8 @@ export interface Snapshot {
   collections: CollectionRow[];
   /** owner of the local scores, if any */
   user?: { name: string; id?: number };
+  /** lazer's osu!mania settings the playfield preview follows */
+  mania: { scrollSpeed?: number; scrollDirection?: "Down" | "Up" };
 }
 
 export type PatternName = "stream" | "jumpstream" | "handstream" | "chordjack" | "jacks" | "ln";
@@ -108,6 +110,8 @@ export interface ChartAnalysis {
   lnTime: number;
   patterns: { pattern: PatternName; share: number }[];
   tags: string[];
+  /** the pattern of every one-second window from `start` (null = light or empty) */
+  windows?: (PatternName | null)[];
 }
 
 /** One difficulty's chart (see src-tauri/src/charts.rs). Flat arrays keep the payload small. */
@@ -178,6 +182,10 @@ export interface UiPrefs {
   collapsedGroups: string[];
   shuffle: boolean;
   repeat: RepeatMode;
+  /** osu!mania scroll speed for the playfield preview; null = follow lazer's setting */
+  scrollSpeed: number | null;
+  /** fullscreen view used last */
+  fullscreenMode: "visual" | "field";
   /** set once the first-run defaults (e.g. mode from play history) were applied */
   defaultsApplied: boolean;
 }

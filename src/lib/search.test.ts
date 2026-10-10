@@ -23,7 +23,7 @@ function snapshot(): Snapshot {
     map(2, { version: "Taiko Oni", status: -3, mode: 1, sr: 5.5, bpm: 150, cs: 5 }),
   ];
   maps.forEach((m, i) => sets[m.set].maps.push(i));
-  return { source: "lazer", sets, maps, collections: [] };
+  return { source: "lazer", sets, maps, collections: [], mania: {} };
 }
 
 const ix = buildIndex(snapshot());

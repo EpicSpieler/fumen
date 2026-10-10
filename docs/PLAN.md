@@ -96,7 +96,11 @@ upgrade risk.
 - [x] Analysis: density per second, peak (densest 2 s), longest burst; mania: rows/chords, jacks, LN coverage,
       one-second windows classified as stream / jumpstream / handstream / chordjack / jacks / LN; tags ≥ 15 % + stamina
 - [x] Library-wide cache `chart_stats` keyed by `.osu` hash, background job after imports and on start (~2 s for 22k charts)
-- [x] Chart panel on the set page: playfield synced to the player, density graph with seek, stats, patterns, chords, columns
+- [x] Chart panel on the set page: density graph with seek, stats, patterns, chords, columns
+- [x] Fullscreen player (from the player bar or the panel): visualizer (art + Web Audio frequency bars)
+      or the playfield at full height with live NPS / pattern / BPM / notes and the density graph;
+      scroll speed and direction imported from lazer's `RulesetSetting`s (time = 11485 ms / speed,
+      × rate), F3 / F4 override stored in Fumen only
 - [x] Search: `pattern=…` (with short forms js/hs/cj), `peak`
 - [x] Pattern tags and peak in the library table, sort by peak
 - [x] Rate-adjusted view: HT / DT presets and 0.5×–2× in 0.05 steps, shared with the player (like

@@ -82,6 +82,9 @@ pub struct Analysis {
     pub ln_time: f32,
     /// share of one-second windows per pattern, biggest first
     pub patterns: Vec<Share>,
+    /// the pattern of every one-second window from `start` (null = light or empty)
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub windows: Vec<Option<Pattern>>,
     pub tags: Vec<&'static str>,
 }
 
@@ -186,6 +189,7 @@ fn mania(chart: &Chart, a: &mut Analysis) {
     let mut counts = [0usize; 6];
     let mut considered = 0usize;
     let mut dense: Vec<bool> = Vec::with_capacity(windows);
+    let mut labels: Vec<Option<Pattern>> = Vec::with_capacity(windows);
     let mut ri = 0usize;
     let mut mi = 0usize;
     for w in 0..windows {
@@ -203,6 +207,7 @@ fn mania(chart: &Chart, a: &mut Analysis) {
         let ln: i32 = merged[mi..].iter().take_while(|m| m.0 < w1).map(|&(s, e)| e.min(w1) - s.max(w0)).sum();
 
         if in_window.is_empty() && ln == 0 {
+            labels.push(None);
             if !in_break(w0) {
                 dense.push(false);
             }
@@ -211,6 +216,7 @@ fn mania(chart: &Chart, a: &mut Analysis) {
         considered += 1;
         let pattern = classify(&rows, in_window, ln as f32 / WINDOW as f32, &jack);
         dense.push(pattern.is_some());
+        labels.push(pattern);
         if let Some(p) = pattern {
             counts[Pattern::ALL.iter().position(|x| *x == p).unwrap()] += 1;
         }
@@ -229,6 +235,7 @@ fn mania(chart: &Chart, a: &mut Analysis) {
         a.tags.push("stamina");
     }
     a.patterns = patterns;
+    a.windows = labels;
 }
 
 /// The dominant shape of one window, or `None` if it's light.
@@ -340,5 +347,18 @@ mod tests {
         assert_eq!(a.patterns[0].pattern, Pattern::Stream);
         // the gap is a break, so both halves count as one burst minus the uncovered edges
         assert!(a.drain < 22_000);
+    }
+
+    #[test]
+    fn every_second_has_a_label() {
+        let mut c = chart(&[&[0], &[1], &[2], &[3]], 100, 10);
+        let tail: Vec<HitObject> = c.objects.iter().map(|o| HitObject { time: o.time + 20_000, end: o.end + 20_000, ..*o }).collect();
+        c.objects.extend(tail);
+        let a = analyse(&c);
+        assert_eq!(a.windows.len(), a.density.len());
+        assert_eq!(a.windows[3], Some(Pattern::Stream));
+        // the empty stretch between the halves has no pattern
+        assert_eq!(a.windows[15], None);
+        assert_eq!(a.windows[25], Some(Pattern::Stream));
     }
 }
