@@ -13,6 +13,7 @@
     "tauri": "tauri",
     "app": "node scripts/build-sidecar.mjs --if-missing && tauri dev",
     "sidecar": "node scripts/build-sidecar.mjs",
+    "verify-lazer": "node scripts/verify-lazer.mjs",
     "test": "vitest run && cargo test --manifest-path src-tauri/Cargo.toml",
     "test:ui": "vitest run"
   },
