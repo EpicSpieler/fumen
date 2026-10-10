@@ -271,6 +271,7 @@ mod tests {
         let export: serde_json::Value = serde_json::from_slice(&std::fs::read(export).unwrap()).unwrap();
         let mut written = 0;
         for set in export["sets"].as_array().unwrap() {
+            let files = crate::hitsounds::SetFiles::new(serde_json::from_value::<Vec<(String, String)>>(set["sounds"].clone()).unwrap_or_default());
             for m in set["maps"].as_array().unwrap() {
                 let title = m["title"].as_str().unwrap_or_default().to_lowercase();
                 let (Some(id), Some(hash)) = (m["id"].as_str(), m["hash"].as_str()) else { continue };
@@ -286,6 +287,11 @@ mod tests {
                         .map(|r| (format!("{r:.2}"), serde_json::to_value(dan::rate(&chart, r)).unwrap()))
                         .collect();
                     v["dans"] = dans.into();
+                    let read = |h: &str| paths::lazer_file(&storage, h).and_then(|p| std::fs::read(p).ok()).map(|b| String::from_utf8_lossy(&b).into_owned());
+                    if let Some(osu) = read(hash) {
+                        let osb = files.storyboard().and_then(read);
+                        v["hitsounds"] = serde_json::to_value(crate::hitsounds::resolve(&osu, osb.as_deref(), &files)).unwrap();
+                    }
                 }
                 std::fs::write(file, serde_json::to_vec(&v).unwrap()).unwrap();
                 written += 1;

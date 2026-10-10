@@ -3,9 +3,11 @@
  *  - Visualizer: the song's art, big, with frequency bars from the audio itself.
  *  - Playfield: the playing difficulty's osu!mania playfield at full height, in your lazer skin
  *    (or any other you pick here), scrolling like lazer does for you (your lazer scroll speed and
- *    direction, rate mods included), played by lazer's autoplay, next to what matters while you
- *    watch it: notes per second right now, the pattern of this second, BPM, notes so far, and the
- *    density graph. The numbers about the whole chart stay in the set page's panel.
+ *    direction, rate mods included), played by lazer's autoplay with the beatmap's hitsounds
+ *    (its own samples first, then the skin's; only here, at their own volume), next to what
+ *    matters while you watch it: notes per second right now, the pattern of this second, BPM,
+ *    notes so far, and the density graph. The numbers about the whole chart stay in the set
+ *    page's panel.
  *
  * Esc leaves; Space plays/pauses; ←/→ seek 5 s; F3/F4 lower/raise the scroll speed as in lazer.
  * Nothing animates while the song is paused.
@@ -13,8 +15,9 @@
 import { thumbUrl } from "../lib/api";
 import { bpmAt, loadChart, lowerBound, PATTERNS, SCROLL_SPEED_MAX, SCROLL_SPEED_MIN, scrollSpeed, scrollTime, scrollUp } from "../lib/charts";
 import { readBars, startAnalyser } from "../lib/eq";
+import { hitsounds } from "../lib/hitsounds";
 import { bpm, displayArtist, displayTitle, duration, esc, keysOrMode, num, srChip } from "../lib/format";
-import { currentSkin, loadSkin, loadSkinList } from "../lib/skin/skins";
+import { currentSkin, loadSkin, loadSkinList, loadSkinSounds } from "../lib/skin/skins";
 import { setPrefs, store } from "../lib/store";
 import type { ChartData, SkinList } from "../lib/types";
 import { dragSlider, player } from "../player";
@@ -29,6 +32,8 @@ import { rateClick, rateControlHtml, starsAtRate, syncRateControl } from "../ui/
 export type FullscreenMode = "visual" | "field";
 
 const BARS = 72;
+
+const NO_SKINS: SkinList = { skins: [], selected: null, classic: [], retro: [], triangles: [], argon: [], argonPro: [] };
 
 class Fullscreen {
   private el: HTMLElement | null = null;
@@ -81,6 +86,7 @@ class Fullscreen {
     this.eq = startAnalyser();
     this.subscribe();
     this.onTrack();
+    this.syncSounds();
     el.querySelector<HTMLElement>(".fs-exit")!.focus({ preventScroll: true });
   }
 
@@ -92,6 +98,7 @@ class Fullscreen {
     this.raf = 0;
     this.offs.forEach((f) => f());
     this.offs = [];
+    this.syncSounds();
     el.classList.remove("on");
     document.body.classList.remove("fs-open");
     const wc = el.querySelector<HTMLElement>(".win-controls");
@@ -163,6 +170,14 @@ class Fullscreen {
               <span class="fs-skin-sub"></span>
             </div>
             <div class="fs-setting">
+              <span class="fs-k">Hitsounds</span>
+              <div class="fs-hs">
+                <div class="pb-vol fs-hs-vol" role="slider" aria-label="Hitsound volume" aria-valuemin="0" aria-valuemax="100" tabindex="0"><div class="pb-vol-fill"></div></div>
+                <b class="num fs-hs-val"></b>
+              </div>
+              <span class="fs-hs-sub"></span>
+            </div>
+            <div class="fs-setting">
               <span class="fs-k">Rate</span>
               <div class="fs-rate-ctl">${rateControlHtml()}</div>
             </div>
@@ -208,6 +223,7 @@ class Fullscreen {
     this.graphDrawn = "";
     this.live.clear();
     if (mode === "field") this.loadField();
+    this.syncSounds();
     this.kick();
   }
 
@@ -266,6 +282,7 @@ class Fullscreen {
     this.renderDiff();
     this.renderSpeed();
     this.renderSkin();
+    this.renderHitsounds();
     this.live.clear();
     this.kick();
   }
@@ -283,6 +300,9 @@ class Fullscreen {
       this.mapId = "";
       this.data = null;
       this.field = null;
+      hitsounds.clear();
+      this.syncSounds();
+      this.renderHitsounds();
       this.showEmpty(map.mode);
       return;
     }
@@ -290,6 +310,9 @@ class Fullscreen {
     this.mapId = map.id;
     this.data = null;
     this.field = null;
+    hitsounds.clear();
+    this.syncSounds();
+    this.renderHitsounds();
     this.showEmpty(null, "Loading the chart…");
     const job = ++this.skinJob;
     loadChart(map.id)
@@ -299,6 +322,8 @@ class Fullscreen {
         this.data = d;
         this.field = new ManiaPlayfield(this.el!.querySelector(".fs-pf")!, d, renderer);
         this.showEmpty(null);
+        this.syncSounds();
+        void this.loadSounds();
         this.graphDrawn = "";
         this.live.clear();
         this.kick();
@@ -315,7 +340,7 @@ class Fullscreen {
     this.renderSkin();
     const entry = currentSkin(this.skins);
     try {
-      const skin = await loadSkin(entry, this.skins ?? { skins: [], selected: null, classic: [], retro: [] });
+      const skin = await loadSkin(entry, this.skins ?? NO_SKINS);
       return await createRenderer(skin, keys);
     } catch (e) {
       console.warn("[skin]", entry.name, e);
@@ -345,6 +370,45 @@ class Fullscreen {
     if (job !== this.skinJob || this.field !== field) return;
     field.setRenderer(renderer);
     this.kick();
+    void this.loadSounds();
+  }
+
+  // ── hitsounds ─────────────────────────────────────────────────────────
+
+  /** Hitsounds play while the playfield shows a chart. */
+  private syncSounds(): void {
+    hitsounds.setActive(this.isOpen && this.mode === "field" && !!this.field);
+  }
+
+  /** The playing chart's hitsounds, with the playfield skin's samples. */
+  private async loadSounds(): Promise<void> {
+    const field = this.field;
+    if (!field) return;
+    const entry = currentSkin(this.skins);
+    const chain = await loadSkinSounds(entry, this.skins ?? NO_SKINS).catch((e) => {
+      console.warn("[hitsounds] skin", entry.name, e);
+      return null;
+    });
+    if (!chain || this.field !== field) return;
+    await hitsounds.load(this.mapId, chain, entry.id);
+    this.renderHitsounds();
+  }
+
+  private renderHitsounds(): void {
+    const el = this.el;
+    if (!el) return;
+    const v = store.prefs.hitsoundVolume;
+    const slider = el.querySelector<HTMLElement>(".fs-hs-vol")!;
+    slider.style.setProperty("--v", `${v * 100}%`);
+    slider.setAttribute("aria-valuenow", String(Math.round(v * 100)));
+    el.querySelector(".fs-hs-val")!.textContent = v === 0 ? "Off" : `${Math.round(v * 100)} %`;
+    const custom = this.field ? hitsounds.custom : null;
+    el.querySelector(".fs-hs-sub")!.textContent = custom === null ? "" : custom > 0 ? "the beatmap's own samples, then the skin's" : "from the skin";
+  }
+
+  private setHitsoundVolume(v: number): void {
+    setPrefs({ hitsoundVolume: Math.round(Math.max(0, Math.min(1, v)) * 100) / 100 });
+    this.renderHitsounds();
   }
 
   private skinMenu(anchor: HTMLElement): void {
@@ -594,6 +658,25 @@ class Fullscreen {
       const diff = t.closest<HTMLElement>(".fs-diff");
       if (diff && this.maniaMaps().length > 1) this.diffMenu(diff);
     });
+
+    // hitsound volume
+    const hs = el.querySelector<HTMLElement>(".fs-hs-vol")!;
+    dragSlider(hs, (f) => this.setHitsoundVolume(f));
+    hs.addEventListener("keydown", (e) => {
+      const step = e.key === "ArrowRight" || e.key === "ArrowUp" ? 0.05 : e.key === "ArrowLeft" || e.key === "ArrowDown" ? -0.05 : 0;
+      if (!step) return;
+      e.preventDefault();
+      e.stopPropagation();
+      this.setHitsoundVolume(store.prefs.hitsoundVolume + step);
+    });
+    hs.addEventListener(
+      "wheel",
+      (e) => {
+        e.preventDefault();
+        this.setHitsoundVolume(store.prefs.hitsoundVolume + ((e as WheelEvent).deltaY < 0 ? 0.05 : -0.05));
+      },
+      { passive: false },
+    );
 
     // seeking: the bar, and the density graph
     const seek = el.querySelector<HTMLElement>(".fs-seek")!;

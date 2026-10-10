@@ -2,7 +2,7 @@
 //!
 //!   fumen://localhost/file/<sha256>          raw file from lazer's store (Range-capable, for audio)
 //!   fumen://localhost/thumb/<width>/<sha256> cached JPEG thumbnail of an image file
-//!   fumen://localhost/skin/<classic|retro>/<file> lazer's built-in skin textures (see skins.rs)
+//!   fumen://localhost/skin/<skin>/<file>       lazer's built-in skin textures and hit sounds (see skins.rs)
 //!
 //! On Windows the webview sees these as `http://fumen.localhost/...`. Files are content-addressed,
 //! so responses are cacheable forever. CORS is open so canvases can sample colours from images.

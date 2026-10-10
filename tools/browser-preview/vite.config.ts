@@ -7,7 +7,7 @@
  * FUMEN_TEST_STORAGE=<lazer folder> for the chart analysis). Chart panels need
  * .cache/charts/<map id>.json, written by the `preview_charts` test in src-tauri/src/charts.rs.
  * Skins: .cache/skins.json ({ skins: [{ id, name, creator, kind, protected, files }], selected }) and
- * lazer's built-in textures in .cache/lazer-skins/<classic|retro>/ (`fumen-realm skin-resources`).
+ * lazer's built-in textures and hit sounds in .cache/lazer-skins/<skin>/ (`fumen-realm skin-resources`).
  * Files are read straight from osu!lazer's store. Thumbnails are the full images (no resizing).
  */
 import { createReadStream, existsSync, readdirSync, readFileSync, statSync } from "node:fs";
@@ -25,6 +25,7 @@ function sniff(path: string): string {
   if (fd[0] === 0x89 && fd[1] === 0x50) return "image/png";
   if (fd.toString("latin1", 0, 3) === "ID3" || (fd[0] === 0xff && (fd[1] & 0xe0) === 0xe0)) return "audio/mpeg";
   if (fd.toString("latin1", 0, 4) === "OggS") return "audio/ogg";
+  if (fd.toString("latin1", 8, 12) === "WAVE") return "audio/wav";
   return "application/octet-stream";
 }
 
@@ -46,14 +47,14 @@ function fumenFiles(): Plugin {
         if (url === "/__fumen/skins") {
           const p = join(here, ".cache", "skins.json");
           const list = existsSync(p) ? JSON.parse(readFileSync(p, "utf8")) : { skins: [], selected: null };
-          for (const skin of ["classic", "retro"]) {
+          for (const [skin, field] of [["classic", "classic"], ["retro", "retro"], ["triangles", "triangles"], ["argon", "argon"], ["argon-pro", "argonPro"]]) {
             const dir = join(here, ".cache", "lazer-skins", skin);
-            list[skin] = existsSync(dir) ? readdirSync(dir).sort() : [];
+            list[field] = existsSync(dir) ? readdirSync(dir).sort() : [];
           }
           res.setHeader("Content-Type", "application/json");
           return res.end(JSON.stringify(list));
         }
-        const builtin = /^\/__fumen\/skin\/(classic|retro)\/([\w.@%-]+)$/.exec(url);
+        const builtin = /^\/__fumen\/skin\/(classic|retro|triangles|argon|argon-pro)\/([\w.@%-]+)$/.exec(url);
         if (builtin) {
           const name = decodeURIComponent(builtin[2]);
           const p = join(here, ".cache", "lazer-skins", builtin[1], name);

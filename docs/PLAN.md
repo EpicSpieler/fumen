@@ -112,6 +112,9 @@ upgrade risk.
 - [x] Playfield in lazer's skins: every skin of the lazer library (imported with it), lazer's own
       argon / argon pro / triangles / classic / retro and legacy `.osk` skins drawn like lazer's
       mania components (skin.ini [Mania] per key count, @2x, animations, classic fallback), autoplay
+- [x] Hitsounds in the playfield, resolved like lazer (banks, custom indexes, per-note files,
+      storyboard samples; the set's own samples, then the skin's), with their own volume slider;
+      Ogg-in-WAV and ADPCM keysounds decoded too (GSM WAVs stay silent)
 - [x] Pattern report and dan rating, ported from ManiaMapAnalyser (MIT, `src-tauri/src/mma`):
       Interlude-style pattern clusters (core + specific patterns, speed, category, RC / LN / HB / Mix,
       SV), Azusa's dan for 4K rice (with Daniel and Sunny), Sunny on the 4K / 6K / 7K / 10K dan

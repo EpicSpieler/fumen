@@ -197,6 +197,11 @@
 .fs-speed-sub { font-size: var(--fs-12); color: var(--t3); }
 .fs-speed-reset { font: inherit; color: var(--accent-ink); transition: color .12s; }
 .fs-speed-reset:hover { color: var(--t1); }
+.fs-hs { display: inline-flex; align-items: center; gap: 12px; }
+.fs-hs-vol { width: 150px; margin: 0; }
+.fs-hs-val { min-width: 44px; font-size: var(--fs-16); font-weight: 700; }
+.fs-hs-sub { font-size: var(--fs-12); color: var(--t3); }
+.fs-hs-sub:empty { display: none; }
 .fs-skin {
   display: inline-flex;
   align-items: center;

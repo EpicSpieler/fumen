@@ -4,15 +4,18 @@ using System.Reflection.PortableExecutable;
 namespace FumenRealm;
 
 /// lazer's built-in "classic" and "retro" skins aren't in the database: their textures are
-/// embedded in osu.Game.Resources.dll (as `osu.Game.Resources.Skins.Legacy.<file>`). This reads
-/// them straight out of the PE file's metadata, without loading the assembly, so it works with
-/// whatever .NET version the installed lazer targets.
+/// embedded in osu.Game.Resources.dll (as `osu.Game.Resources.Skins.Legacy.<file>`), and so are
+/// the hit sounds of the argon / triangles skins (`osu.Game.Resources.Samples.Gameplay[.Argon|
+/// .ArgonPro].<file>`). This reads them straight out of the PE file's metadata, without loading
+/// the assembly, so it works with whatever .NET version the installed lazer targets.
 internal static class Resources
 {
-    private const string Prefix = "osu.Game.Resources.Skins.";
+    private const string SkinPrefix = "osu.Game.Resources.Skins.";
+    private const string SamplePrefix = "osu.Game.Resources.Samples.Gameplay.";
 
     /// Writes `<outDir>/<skin>/<file>` for every embedded skin resource ("Legacy" → classic,
-    /// "Retro" → retro). Returns the number of files written.
+    /// "Retro" → retro) and every gameplay hit sound (→ triangles, argon, argon-pro). Returns the
+    /// number of files written.
     public static int ExtractSkins(string dllPath, string outDir)
     {
         if (!File.Exists(dllPath))
@@ -30,19 +33,7 @@ internal static class Resources
         {
             var res = md.GetManifestResource(handle);
             if (!res.Implementation.IsNil) continue; // lives in another file
-            var name = md.GetString(res.Name);
-            if (!name.StartsWith(Prefix, StringComparison.Ordinal)) continue;
-
-            var rest = name[Prefix.Length..];
-            var dot = rest.IndexOf('.');
-            if (dot <= 0) continue;
-            var skin = rest[..dot] switch
-            {
-                "Legacy" => "classic",
-                "Retro" => "retro",
-                _ => null,
-            };
-            var file = rest[(dot + 1)..];
+            var (skin, file) = Target(md.GetString(res.Name));
             if (skin == null || file.Length == 0 || file.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0) continue;
 
             // embedded resources: a 4-byte length, then the bytes
@@ -56,5 +47,39 @@ internal static class Resources
             count++;
         }
         return count;
+    }
+
+    /// Where an embedded resource goes: (skin folder, file name), or (null, "") to skip it.
+    private static (string? skin, string file) Target(string name)
+    {
+        if (name.StartsWith(SkinPrefix, StringComparison.Ordinal))
+        {
+            var rest = name[SkinPrefix.Length..];
+            var dot = rest.IndexOf('.');
+            if (dot <= 0) return (null, "");
+            var skin = rest[..dot] switch
+            {
+                "Legacy" => "classic",
+                "Retro" => "retro",
+                _ => null,
+            };
+            return (skin, rest[(dot + 1)..]);
+        }
+        if (name.StartsWith(SamplePrefix, StringComparison.Ordinal))
+        {
+            var rest = name[SamplePrefix.Length..];
+            var skin = "triangles";
+            foreach (var (folder, id) in new[] { ("ArgonPro.", "argon-pro"), ("Argon.", "argon") })
+            {
+                if (!rest.StartsWith(folder, StringComparison.Ordinal)) continue;
+                skin = id;
+                rest = rest[folder.Length..];
+                break;
+            }
+            // hit sounds only (normal-hitnormal.wav …), not the game's other effects
+            var bank = rest.Split('-')[0];
+            return bank is "normal" or "soft" or "drum" ? (skin, rest) : (null, "");
+        }
+        return (null, "");
     }
 }

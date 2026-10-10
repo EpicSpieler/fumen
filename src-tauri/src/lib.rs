@@ -3,6 +3,7 @@ mod chart;
 mod charts;
 mod db;
 mod error;
+mod hitsounds;
 mod lazer;
 mod mma;
 mod library;
@@ -126,6 +127,8 @@ fn library_status(state: State<'_, AppState>) -> Result<LibraryStatus> {
                 || db::get_meta(&conn, "lazer.maniaSettings")?.is_none()
                 // …and before it read lazer's skins
                 || db::get_meta(&conn, "lazer.skins")?.is_none()
+                // …and the sets' sound files (custom hitsounds)
+                || db::get_meta(&conn, "lazer.setSounds")?.is_none()
         }
         _ => false,
     };
@@ -277,6 +280,22 @@ async fn get_dan(app: AppHandle, id: String, rate: f64) -> Result<Option<mma::da
         .map_err(|e| Error::known("internal", e.to_string()))?
 }
 
+/// An osu!mania difficulty's hitsounds, with its set's custom samples and storyboard samples
+/// (see `hitsounds.rs`). Empty for other modes.
+#[tauri::command]
+async fn get_hitsounds(app: AppHandle, id: String) -> Result<hitsounds::Sounds> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let storage = state
+            .storage()
+            .ok_or_else(|| Error::known("lazer-not-found", "osu!lazer's data folder wasn't found. Pick it in Settings."))?;
+        let conn = state.db();
+        hitsounds::for_map(&conn, &storage, &id)
+    })
+    .await
+    .map_err(|e| Error::known("internal", e.to_string()))?
+}
+
 /// lazer's skins (without their files), the selected one and the built-in textures at hand.
 #[tauri::command]
 async fn get_skins(app: AppHandle) -> Result<skins::SkinList> {
@@ -358,6 +377,7 @@ pub fn run() {
             get_library,
             get_chart,
             get_dan,
+            get_hitsounds,
             get_skins,
             get_skin_files,
         ])

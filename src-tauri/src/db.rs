@@ -133,6 +133,10 @@ const MIGRATIONS: &[&str] = &[
     ALTER TABLE chart_stats ADD COLUMN dan_value REAL;
     ALTER TABLE chart_stats ADD COLUMN category TEXT;
     "#,
+    // 6 — a set's sound files and storyboard ([filename, sha256] pairs as JSON), for hitsounds
+    r#"
+    ALTER TABLE sets ADD COLUMN sounds TEXT NOT NULL DEFAULT '[]';
+    "#,
 ];
 
 pub fn open(path: &Path) -> Result<Connection> {

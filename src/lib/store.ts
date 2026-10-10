@@ -39,6 +39,7 @@ export const DEFAULT_PREFS: UiPrefs = {
   repeat: "off",
   scrollSpeed: null,
   playfieldSkin: null,
+  hitsoundVolume: 0.6,
   fullscreenMode: "visual",
   defaultsApplied: false,
 };

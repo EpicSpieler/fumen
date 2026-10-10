@@ -3,9 +3,9 @@
 //! The skins themselves come with the library import (the sidecar exports every skin with its
 //! files). Two more things live outside the database:
 //!   - which skin is selected: `Skin = <id>` in lazer's `game.ini`, read fresh each time;
-//!   - the built-in "classic" and "retro" textures, embedded in the installed lazer's
-//!     `osu.Game.Resources.dll`. The sidecar extracts them into Fumen's cache once per lazer
-//!     version; they're served as `fumen://localhost/skin/<classic|retro>/<file>`.
+//!   - the built-in "classic" and "retro" textures and the argon / triangles hit sounds, embedded
+//!     in the installed lazer's `osu.Game.Resources.dll`. The sidecar extracts them into Fumen's
+//!     cache once per lazer version; they're served as `fumen://localhost/skin/<skin>/<file>`.
 
 use std::path::{Path, PathBuf};
 
@@ -51,7 +51,14 @@ fn parse_selected(ini: &str) -> Option<String> {
     })
 }
 
-// ── Built-in textures ───────────────────────────────────────────────────────
+// ── Built-in textures and sounds ────────────────────────────────────────────
+
+/// Folders of the extraction: classic / retro textures (and classic's sounds), the hit sounds of
+/// lazer's other built-in skins.
+const BUILTIN: [&str; 5] = ["classic", "retro", "triangles", "argon", "argon-pro"];
+
+/// Bumped when the extraction takes more out of the resources (2: hit sounds).
+const EXTRACT_VERSION: u32 = 2;
 
 /// The installed lazer's resources assembly (Velopack install, the default).
 fn resources_dll() -> Option<PathBuf> {
@@ -72,7 +79,7 @@ pub fn refresh_builtin(cache_dir: &Path) -> Result<()> {
     let _busy = BUSY.lock().unwrap_or_else(|e| e.into_inner());
     let Some(dll) = resources_dll() else { return Ok(()) };
     let meta = std::fs::metadata(&dll)?;
-    let stamp = format!("{} {}", meta.len(), crate::paths::modified_ms(&meta));
+    let stamp = format!("v{EXTRACT_VERSION} {} {}", meta.len(), crate::paths::modified_ms(&meta));
     let dir = builtin_dir(cache_dir);
     if std::fs::read_to_string(dir.join("stamp")).ok().as_deref() == Some(stamp.as_str()) {
         return Ok(());
@@ -87,9 +94,9 @@ pub fn refresh_builtin(cache_dir: &Path) -> Result<()> {
     Ok(())
 }
 
-/// A built-in texture's path, or `None` for names that could leave the folder.
+/// A built-in texture's or sound's path, or `None` for names that could leave the folder.
 pub fn builtin_file(cache_dir: &Path, skin: &str, name: &str) -> Option<PathBuf> {
-    if !matches!(skin, "classic" | "retro") {
+    if !BUILTIN.contains(&skin) {
         return None;
     }
     let ok = !name.is_empty()
@@ -127,6 +134,10 @@ pub struct SkinList {
     /// file names of the built-in classic / retro textures (empty without a lazer install)
     classic: Vec<String>,
     retro: Vec<String>,
+    /// file names of the built-in hit sounds of triangles, argon and argon pro
+    triangles: Vec<String>,
+    argon: Vec<String>,
+    argon_pro: Vec<String>,
 }
 
 pub fn list(conn: &Connection, install: Option<&LazerInstall>, cache_dir: &Path) -> Result<SkinList> {
@@ -141,6 +152,9 @@ pub fn list(conn: &Connection, install: Option<&LazerInstall>, cache_dir: &Path)
         selected: install.and_then(selected),
         classic: builtin_names(cache_dir, "classic"),
         retro: builtin_names(cache_dir, "retro"),
+        triangles: builtin_names(cache_dir, "triangles"),
+        argon: builtin_names(cache_dir, "argon"),
+        argon_pro: builtin_names(cache_dir, "argon-pro"),
     })
 }
 
@@ -182,6 +196,7 @@ mod tests {
         assert!(builtin_file(c, "classic", "../x.png").is_none());
         assert!(builtin_file(c, "classic", "a/b.png").is_none());
         assert!(builtin_file(c, "classic", "stamp").is_none());
+        assert!(builtin_file(c, "argon-pro", "soft-hitclap.wav").is_some());
         assert!(builtin_file(c, "other", "a.png").is_none());
     }
 }

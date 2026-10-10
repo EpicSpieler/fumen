@@ -159,6 +159,9 @@ struct LSet {
     protected: bool,
     #[serde(default)]
     maps: Vec<LMap>,
+    /// sound files and the storyboard, as [filename, hash]
+    #[serde(default)]
+    sounds: Vec<(String, String)>,
 }
 
 #[derive(Deserialize)]
@@ -270,8 +273,8 @@ pub fn import(conn: &mut Connection, json: &Path, install: &LazerInstall) -> Res
         let mut ins_set = tx.prepare(
             "INSERT INTO sets (id, source, online_id, status, date_added, date_submitted, date_ranked,
                 protected, title, title_unicode, artist, artist_unicode, creator, creator_id,
-                source_text, tags, bg, audio, preview_time)
-             VALUES (?1, 'lazer', ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
+                source_text, tags, bg, audio, preview_time, sounds)
+             VALUES (?1, 'lazer', ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)",
         )?;
         let mut ins_map = tx.prepare(
             "INSERT INTO maps (id, set_id, online_id, version, ruleset, ruleset_id, status, hash, md5,
@@ -314,6 +317,7 @@ pub fn import(conn: &mut Connection, json: &Path, install: &LazerInstall) -> Res
                 bg,
                 audio,
                 preview,
+                serde_json::to_string(&set.sounds)?,
             ])?;
             counts.sets += 1;
 
@@ -422,6 +426,7 @@ pub fn import(conn: &mut Connection, json: &Path, install: &LazerInstall) -> Res
     db::set_meta(&tx, "lazer.maniaSettings", &serde_json::Value::Object(mania).to_string())?;
 
     db::set_meta(&tx, "lazer.skins", &counts.skins.to_string())?;
+    db::set_meta(&tx, "lazer.setSounds", "1")?;
     db::set_meta(&tx, "lazer.storage", &install.storage)?;
     db::set_meta(&tx, "lazer.realmSize", &install.realm_size.to_string())?;
     db::set_meta(&tx, "lazer.realmModified", &install.realm_modified.to_string())?;
@@ -496,6 +501,21 @@ mod tests {
             let hashes = crate::charts::pending(&conn).unwrap();
             let rows = crate::charts::analyse_batch(Path::new(&storage), &hashes);
             crate::charts::store(&mut conn, &rows).unwrap();
+            // hitsounds come with the sets' sound files: some chart has its own samples
+            let ids: Vec<String> = conn
+                .prepare("SELECT m.id FROM maps m JOIN sets s ON s.id = m.set_id WHERE m.ruleset_id = 3 AND s.sounds LIKE '%.wav%' LIMIT 200")
+                .unwrap()
+                .query_map([], |r| r.get(0))
+                .unwrap()
+                .collect::<rusqlite::Result<_>>()
+                .unwrap();
+            let own = ids
+                .iter()
+                .filter_map(|id| crate::hitsounds::for_map(&conn, Path::new(&storage), id).ok())
+                .filter(|s| s.samples.iter().any(|x| matches!(x, crate::hitsounds::Sample::File(_))))
+                .count();
+            eprintln!("hitsounds: {own} of {} charts with .wav files in their set use them", ids.len());
+            assert!(own > 0);
         }
 
         let t = std::time::Instant::now();
