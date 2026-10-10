@@ -207,6 +207,46 @@ internal static class Exporter
         }
         w.WriteEndArray();
     }
+
+    // ── Skins (for the playfield preview) ───────────────────────────────────
+
+    /// Every skin lazer knows, built-in ones included (those have no files; their type is in
+    /// `instantiationInfo`). Files are written as [filename, hash] pairs.
+    public static int WriteSkins(Realm realm, Utf8JsonWriter w)
+    {
+        var count = 0;
+        w.WriteStartArray("skins");
+        if (realm.Schema.TryFindObjectSchema("Skin", out _))
+        {
+            foreach (var s in realm.DynamicApi.All("Skin"))
+            {
+                if (F.Bool(s, "DeletePending")) continue;
+                w.WriteStartObject();
+                w.WriteString("id", F.Guid(s, "ID"));
+                F.WriteStr(w, "name", F.Str(s, "Name"));
+                F.WriteStr(w, "creator", F.Str(s, "Creator"));
+                F.WriteStr(w, "instantiationInfo", F.Str(s, "InstantiationInfo"));
+                w.WriteBoolean("protected", F.Bool(s, "Protected"));
+                w.WriteStartArray("files");
+                foreach (var usage in F.List(s, "Files"))
+                {
+                    var name = F.Str(usage, "Filename");
+                    var hash = F.Str(F.Link(usage, "File"), "Hash");
+                    if (name == null || hash == null) continue;
+                    w.WriteStartArray();
+                    w.WriteStringValue(NormalisePath(name));
+                    w.WriteStringValue(hash);
+                    w.WriteEndArray();
+                }
+                w.WriteEndArray();
+                w.WriteEndObject();
+                count++;
+            }
+        }
+        w.WriteEndArray();
+        Program.Progress("skins", count, count);
+        return count;
+    }
 }
 
 /// Tolerant field access over dynamic Realm objects.

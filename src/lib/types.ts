@@ -130,6 +130,25 @@ export interface ChartData {
   analysis: ChartAnalysis;
 }
 
+export type SkinKind = "legacy" | "classic" | "retro" | "triangles" | "argon" | "argon-pro";
+
+export interface SkinEntry {
+  id: string;
+  name: string;
+  creator: string;
+  kind: SkinKind;
+  protected: boolean;
+}
+
+export interface SkinList {
+  skins: SkinEntry[];
+  /** lazer's selected skin */
+  selected: string | null;
+  /** file names of lazer's built-in classic / retro textures */
+  classic: string[];
+  retro: string[];
+}
+
 export interface LazerInstall {
   path: string;
   storage: string;
@@ -184,6 +203,8 @@ export interface UiPrefs {
   repeat: RepeatMode;
   /** osu!mania scroll speed for the playfield preview; null = follow lazer's setting */
   scrollSpeed: number | null;
+  /** skin of the playfield (a lazer skin id); null = the one selected in lazer */
+  playfieldSkin: string | null;
   /** fullscreen view used last */
   fullscreenMode: "visual" | "field";
   /** set once the first-run defaults (e.g. mode from play history) were applied */

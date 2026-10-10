@@ -38,6 +38,7 @@ export const DEFAULT_PREFS: UiPrefs = {
   shuffle: true,
   repeat: "off",
   scrollSpeed: null,
+  playfieldSkin: null,
   fullscreenMode: "visual",
   defaultsApplied: false,
 };

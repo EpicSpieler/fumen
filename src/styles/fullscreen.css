@@ -97,13 +97,11 @@
   padding: 0 56px 0 24px;
 }
 .fs-stage { position: relative; display: flex; justify-content: center; min-height: 0; }
+/* the skin draws the stage itself, centred in the whole area */
 .fs-pf {
   display: block;
-  width: var(--pf-w, 360px);
-  max-width: 100%;
+  width: 100%;
   height: 100%;
-  background: rgba(0, 0, 0, .5);
-  box-shadow: 0 0 0 .5px rgba(255, 255, 255, .05);
 }
 .fs-empty {
   position: absolute;
@@ -199,6 +197,25 @@
 .fs-speed-sub { font-size: var(--fs-12); color: var(--t3); }
 .fs-speed-reset { font: inherit; color: var(--accent-ink); transition: color .12s; }
 .fs-speed-reset:hover { color: var(--t1); }
+.fs-skin {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 7px 10px 7px 12px;
+  border-radius: var(--r-md);
+  background: rgba(255, 255, 255, .06);
+  font: inherit;
+  font-size: var(--fs-14);
+  font-weight: 600;
+  color: var(--t1);
+  transition: background .12s;
+}
+.fs-skin:hover { background: rgba(255, 255, 255, .1); }
+.fs-skin-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fs-skin > .ic { flex: none; width: 16px; height: 16px; color: var(--t3); }
+.fs-skin-sub { font-size: var(--fs-12); color: var(--t3); min-width: 0; }
 .fs-rate-ctl { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; }
 .fs .seg-pill { background: rgba(255, 255, 255, .08); }
 

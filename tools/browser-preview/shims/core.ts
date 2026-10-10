@@ -45,6 +45,16 @@ export async function invoke<T>(cmd: string, args: Record<string, unknown> = {})
       if (!res.ok) throw { code: "chart-missing", message: "This chart wasn't exported for the browser preview (see preview_charts)." };
       return (await res.arrayBuffer()) as T;
     }
+    case "get_skins": {
+      const list = (await (await fetch("/__fumen/skins")).json()) as { skins: { files?: unknown }[] };
+      return { ...list, skins: list.skins.map(({ files: _files, ...s }) => s) } as T;
+    }
+    case "get_skin_files": {
+      const list = (await (await fetch("/__fumen/skins")).json()) as { skins: { id: string; files: [string, string][] }[] };
+      const skin = list.skins.find((s) => s.id === args.id);
+      if (!skin) throw { code: "skin-missing", message: "This skin isn't in the preview data." };
+      return skin.files as T;
+    }
     case "scan_library": {
       const stages: [string, number][] = [["copy", 1], ["sets", 4505], ["scores", 1430], ["collections", 5], ["import", 1]];
       for (const [stage, total] of stages) {
