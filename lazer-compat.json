@@ -1,0 +1,11 @@
+{
+  "about": "osu!lazer versions Fumen's import into lazer is tested with. Fumen imports only into these; after a lazer update it waits until `npm run verify-lazer` has tested the new version and it is listed here (and pushed). A version in `blocked` is off even if tested.",
+  "blocked": [],
+  "tested": [
+    {
+      "date": "2026-10-10",
+      "schema": 52,
+      "version": "2026.1005.0-lazer"
+    }
+  ]
+}
