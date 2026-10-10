@@ -2,6 +2,8 @@
 //
 //   fumen-realm export <client.realm> <out.json>   full export, progress lines on stdout
 //   fumen-realm probe  <client.realm>              counts only (diagnostics)
+//   fumen-realm skin-resources <osu.Game.Resources.dll> <out-dir>
+//                                                  lazer's built-in classic/retro skin textures
 //
 // Safety: the live database is never opened. It is copied (sharing read/write with a running
 // lazer) into a temp folder and the copy is opened read-only in dynamic mode, so lazer schema
@@ -9,7 +11,8 @@
 //
 // stdout protocol (one line each, flushed):
 //   progress <stage> <done> <total>
-//   done <sets> <maps> <scores> <collections>
+//   done <sets> <maps> <scores> <collections> <skins>   (export)
+//   done <files>                                     (skin-resources)
 // Errors go to stderr as "error <code> <message>" with a non-zero exit code.
 
 using System.Text.Encodings.Web;
@@ -31,6 +34,7 @@ internal static class Program
             {
                 ["export", var realm, var outPath] => Export(realm, outPath),
                 ["probe", var realm] => Probe(realm),
+                ["skin-resources", var dll, var outDir] => SkinResources(dll, outDir),
                 _ => Usage(),
             };
         }
@@ -48,7 +52,7 @@ internal static class Program
 
     private static int Usage()
     {
-        Console.Error.WriteLine("usage: fumen-realm export <client.realm> <out.json> | probe <client.realm>");
+        Console.Error.WriteLine("usage: fumen-realm export <client.realm> <out.json> | probe <client.realm> | skin-resources <dll> <out-dir>");
         return 2;
     }
 
@@ -80,7 +84,7 @@ internal static class Program
         Progress("copy", 1, 1);
 
         var tmpOut = outPath + ".part";
-        int sets, maps, scores, collections;
+        int sets, maps, scores, collections, skins;
         using (var stream = new FileStream(tmpOut, FileMode.Create, FileAccess.Write, FileShare.None, 1 << 16))
         using (var w = new Utf8JsonWriter(stream, new JsonWriterOptions
         {
@@ -96,12 +100,19 @@ internal static class Program
             scores = Exporter.WriteScores(session.Realm, w);
             collections = Exporter.WriteCollections(session.Realm, w);
             Exporter.WriteRulesetSettings(session.Realm, w);
+            skins = Exporter.WriteSkins(session.Realm, w);
 
             w.WriteEndObject();
         }
 
         File.Move(tmpOut, outPath, overwrite: true);
-        Console.WriteLine($"done {sets} {maps} {scores} {collections}");
+        Console.WriteLine($"done {sets} {maps} {scores} {collections} {skins}");
+        return 0;
+    }
+
+    private static int SkinResources(string dll, string outDir)
+    {
+        Console.WriteLine($"done {Resources.ExtractSkins(dll, outDir)}");
         return 0;
     }
 

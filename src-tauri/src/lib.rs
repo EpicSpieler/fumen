@@ -8,6 +8,7 @@ mod library;
 mod paths;
 mod protocol;
 mod settings;
+mod skins;
 mod stars;
 mod thumbs;
 
@@ -45,6 +46,10 @@ impl AppState {
 
     fn thumbs_dir(&self) -> PathBuf {
         self.cache_dir.join("thumbs")
+    }
+
+    fn cache_dir(&self) -> &std::path::Path {
+        &self.cache_dir
     }
 
     fn settings(&self) -> Settings {
@@ -118,6 +123,8 @@ fn library_status(state: State<'_, AppState>) -> Result<LibraryStatus> {
                 || db::get_meta(&conn, "lazer.storage")?.as_deref() != Some(i.storage.as_str())
                 // imported before Fumen read lazer's mania settings: worth one more import
                 || db::get_meta(&conn, "lazer.maniaSettings")?.is_none()
+                // …and before it read lazer's skins
+                || db::get_meta(&conn, "lazer.skins")?.is_none()
         }
         _ => false,
     };
@@ -175,6 +182,9 @@ fn run_scan(app: &AppHandle, state: &AppState) -> Result<ImportCounts> {
     };
     let _ = std::fs::remove_file(&out);
     state.refresh_storage();
+    if let Err(e) = skins::refresh_builtin(&state.cache_dir) {
+        eprintln!("[skins] built-in textures: {e}");
+    }
     emit("import", 1, 1);
     let _ = app.emit("library-changed", counts);
     start_analysis(app);
@@ -256,6 +266,31 @@ async fn get_chart(app: AppHandle, id: String) -> Result<tauri::ipc::Response> {
     .map_err(|e| Error::known("internal", e.to_string()))?
 }
 
+/// lazer's skins (without their files), the selected one and the built-in textures at hand.
+#[tauri::command]
+async fn get_skins(app: AppHandle) -> Result<skins::SkinList> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        // first run after an update, or lazer was updated: (re-)extract classic / retro
+        if let Err(e) = skins::refresh_builtin(state.cache_dir()) {
+            eprintln!("[skins] built-in textures: {e}");
+        }
+        let install = state.install();
+        let conn = state.db();
+        skins::list(&conn, install.as_ref(), state.cache_dir())
+    })
+    .await
+    .map_err(|e| Error::known("internal", e.to_string()))?
+}
+
+/// One skin's files as raw JSON: `[[filename, sha256], …]`.
+#[tauri::command]
+fn get_skin_files(state: State<'_, AppState>, id: String) -> Result<tauri::ipc::Response> {
+    let files = skins::files(&state.db(), &id)?
+        .ok_or_else(|| Error::known("skin-missing", "This skin isn't in lazer anymore."))?;
+    Ok(tauri::ipc::Response::new(files.into_bytes()))
+}
+
 /// The full library snapshot as raw JSON (see `library.rs`).
 #[tauri::command]
 async fn get_library(app: AppHandle) -> Result<tauri::ipc::Response> {
@@ -311,6 +346,8 @@ pub fn run() {
             scan_library,
             get_library,
             get_chart,
+            get_skins,
+            get_skin_files,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Fumen");

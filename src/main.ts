@@ -16,6 +16,7 @@ import { api, asApiError, isTauri, onAnalysis, thumbUrl } from "./lib/api";
 import { esc, num } from "./lib/format";
 import { current, goSection, initRouterInput, router, sectionRoot, type Route } from "./lib/router";
 import { describeScan, isScanning, runScan } from "./lib/scan";
+import { clearSkins, loadSkinList } from "./lib/skin/skins";
 import { events, loadPrefs, refreshStatus, reloadLibrary, setPrefs, setSnapshot, store } from "./lib/store";
 import type { ScanProgress } from "./lib/types";
 import { mountPlayerBar } from "./player";
@@ -540,6 +541,9 @@ events.on("search", (q) => {
 // ── data ───────────────────────────────────────────────────────────────────
 
 events.on("library", () => {
+  // a new import may have brought new skins; reading the list also extracts lazer's built-in ones
+  clearSkins();
+  void loadSkinList().catch(() => {});
   renderCollections();
   renderProfile();
   // collections that vanished

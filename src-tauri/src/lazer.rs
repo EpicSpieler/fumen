@@ -33,25 +33,27 @@ fn sidecar_path() -> Result<PathBuf> {
     }
 }
 
-/// Runs `fumen-realm export`, forwarding its progress lines.
-pub fn run_export(
-    storage: &Path,
-    out: &Path,
-    mut on_progress: impl FnMut(&str, u64, u64),
-) -> Result<()> {
+/// The sidecar with piped output and (on Windows) no console window.
+fn sidecar_command() -> Result<Command> {
     let mut cmd = Command::new(sidecar_path()?);
-    cmd.arg("export")
-        .arg(storage.join("client.realm"))
-        .arg(out)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+    cmd.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
         cmd.creation_flags(CREATE_NO_WINDOW);
     }
+    Ok(cmd)
+}
+
+/// Runs `fumen-realm export`, forwarding its progress lines.
+pub fn run_export(
+    storage: &Path,
+    out: &Path,
+    mut on_progress: impl FnMut(&str, u64, u64),
+) -> Result<()> {
+    let mut cmd = sidecar_command()?;
+    cmd.arg("export").arg(storage.join("client.realm")).arg(out);
 
     let mut child = cmd.spawn()?;
     let stdout = child.stdout.take().expect("piped stdout");
@@ -77,17 +79,32 @@ pub fn run_export(
     if status.success() {
         return Ok(());
     }
+    Err(sidecar_error(&err_text))
+}
+
+/// Runs `fumen-realm skin-resources`: lazer's built-in skin textures from `dll` into `out`.
+pub fn run_skin_resources(dll: &Path, out: &Path) -> Result<()> {
+    let mut cmd = sidecar_command()?;
+    cmd.arg("skin-resources").arg(dll).arg(out);
+    let output = cmd.output()?;
+    if output.status.success() {
+        return Ok(());
+    }
+    Err(sidecar_error(&String::from_utf8_lossy(&output.stderr)))
+}
+
+fn sidecar_error(err_text: &str) -> Error {
     // stderr: "error <code> <message>"
     let line = err_text.lines().find(|l| l.starts_with("error ")).unwrap_or(err_text.trim());
     let mut parts = line.splitn(3, ' ');
     let _ = parts.next();
     let code = parts.next().unwrap_or("");
     let message = parts.next().unwrap_or(line).to_string();
-    Err(match code {
+    match code {
         "unsupported-format" => Error::known("lazer-format", message),
         "not-found" => Error::known("lazer-not-found", message),
         _ => Error::known("lazer-read-failed", format!("Reading lazer's database failed: {message}")),
-    })
+    }
 }
 
 // ── Export document ─────────────────────────────────────────────────────────
@@ -103,6 +120,21 @@ struct Export {
     collections: Vec<LCollection>,
     #[serde(default)]
     ruleset_settings: Vec<LSetting>,
+    #[serde(default)]
+    skins: Vec<LSkin>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LSkin {
+    id: String,
+    name: Option<String>,
+    creator: Option<String>,
+    instantiation_info: Option<String>,
+    #[serde(default)]
+    protected: bool,
+    #[serde(default)]
+    files: Vec<(String, String)>,
 }
 
 #[derive(Deserialize)]
@@ -206,6 +238,7 @@ pub struct ImportCounts {
     pub maps: usize,
     pub scores: usize,
     pub collections: usize,
+    pub skins: usize,
 }
 
 // ── Import ──────────────────────────────────────────────────────────────────
@@ -229,7 +262,8 @@ pub fn import(conn: &mut Connection, json: &Path, install: &LazerInstall) -> Res
          DELETE FROM lazer_collections;
          DELETE FROM scores;
          DELETE FROM maps;
-         DELETE FROM sets WHERE source = 'lazer';",
+         DELETE FROM sets WHERE source = 'lazer';
+         DELETE FROM skins;",
     )?;
 
     {
@@ -356,6 +390,26 @@ pub fn import(conn: &mut Connection, json: &Path, install: &LazerInstall) -> Res
             }
             counts.collections += 1;
         }
+
+        let mut ins_skin = tx.prepare(
+            "INSERT OR REPLACE INTO skins (id, name, creator, kind, protected, position, files)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        )?;
+        for (pos, s) in export.skins.iter().enumerate() {
+            if s.id.is_empty() {
+                continue;
+            }
+            ins_skin.execute(params![
+                s.id,
+                s.name.as_deref().unwrap_or(""),
+                s.creator.as_deref().unwrap_or(""),
+                crate::skins::kind_of(s.instantiation_info.as_deref()),
+                s.protected,
+                pos as i64,
+                serde_json::to_string(&s.files)?,
+            ])?;
+            counts.skins += 1;
+        }
     }
 
     // osu!mania settings (scroll speed and direction) for the playfield preview
@@ -367,6 +421,7 @@ pub fn import(conn: &mut Connection, json: &Path, install: &LazerInstall) -> Res
         .collect();
     db::set_meta(&tx, "lazer.maniaSettings", &serde_json::Value::Object(mania).to_string())?;
 
+    db::set_meta(&tx, "lazer.skins", &counts.skins.to_string())?;
     db::set_meta(&tx, "lazer.storage", &install.storage)?;
     db::set_meta(&tx, "lazer.realmSize", &install.realm_size.to_string())?;
     db::set_meta(&tx, "lazer.realmModified", &install.realm_modified.to_string())?;

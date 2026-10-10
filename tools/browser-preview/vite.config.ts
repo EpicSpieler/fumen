@@ -6,9 +6,11 @@
  * `FUMEN_TEST_EXPORT=<export.json> FUMEN_SNAPSHOT_OUT=<that path> cargo test -- --ignored`; add
  * FUMEN_TEST_STORAGE=<lazer folder> for the chart analysis). Chart panels need
  * .cache/charts/<map id>.json, written by the `preview_charts` test in src-tauri/src/charts.rs.
+ * Skins: .cache/skins.json ({ skins: [{ id, name, creator, kind, protected, files }], selected }) and
+ * lazer's built-in textures in .cache/lazer-skins/<classic|retro>/ (`fumen-realm skin-resources`).
  * Files are read straight from osu!lazer's store. Thumbnails are the full images (no resizing).
  */
-import { createReadStream, existsSync, readFileSync, statSync } from "node:fs";
+import { createReadStream, existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig, type Plugin } from "vite";
@@ -39,6 +41,27 @@ function fumenFiles(): Plugin {
             return res.end("no snapshot; see tools/browser-preview/vite.config.ts");
           }
           res.setHeader("Content-Type", "application/json");
+          return createReadStream(p).pipe(res);
+        }
+        if (url === "/__fumen/skins") {
+          const p = join(here, ".cache", "skins.json");
+          const list = existsSync(p) ? JSON.parse(readFileSync(p, "utf8")) : { skins: [], selected: null };
+          for (const skin of ["classic", "retro"]) {
+            const dir = join(here, ".cache", "lazer-skins", skin);
+            list[skin] = existsSync(dir) ? readdirSync(dir).sort() : [];
+          }
+          res.setHeader("Content-Type", "application/json");
+          return res.end(JSON.stringify(list));
+        }
+        const builtin = /^\/__fumen\/skin\/(classic|retro)\/([\w.@%-]+)$/.exec(url);
+        if (builtin) {
+          const name = decodeURIComponent(builtin[2]);
+          const p = join(here, ".cache", "lazer-skins", builtin[1], name);
+          if (name.includes("/") || name.includes("\\") || name.startsWith(".") || !existsSync(p)) {
+            res.statusCode = 404;
+            return res.end();
+          }
+          res.setHeader("Content-Type", sniff(p));
           return createReadStream(p).pipe(res);
         }
         const chart = /^\/__fumen\/chart\/([0-9a-f-]{36})$/.exec(url);

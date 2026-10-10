@@ -108,6 +108,9 @@ upgrade risk.
       lazer's rate mods); stats, times, BPM and star rating at the rate
 - [x] osu!mania star rating at any rate (port of lazer's strain calculator, checked against lazer's
       stored values: 99.8 % within 0.005★); HT/DT cached per chart, search `dt>…` / `ht<…`
+- [x] Playfield in lazer's skins: every skin of the lazer library (imported with it), lazer's own
+      argon / argon pro / triangles / classic / retro and legacy `.osk` skins drawn like lazer's
+      mania components (skin.ini [Mania] per key count, @2x, animations, classic fallback), autoplay
 - [ ] Taiko / catch / osu! previews
 - [ ] "tech" detection (irregular snaps, SV) — needs a better definition than a heuristic guess
 

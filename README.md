@@ -37,6 +37,9 @@ to osu!'s files.
   length, BPM and density at that rate. osu!mania star ratings come from Fumen's own port of lazer's
   calculator (matches lazer's own value within 0.005★ on 99.8 % of a 5.7k-chart library)
 - Search by it: `pattern=jumpstream`, `pattern=cj`, `peak>15`, `dt>6`, `ht<3`
+- The playfield in your lazer skins: every skin in your lazer library is imported with it and can be
+  picked in fullscreen (lazer's own skins and `.osk` skins, drawn like lazer draws them), played by
+  lazer's autoplay
 
 ## Development
 
@@ -66,3 +69,8 @@ sidecar/          fumen-realm: reads lazer's client.realm (Realm .NET, dynamic +
 tools/            browser preview, CDP helper
 docs/PLAN.md      roadmap
 ```
+
+## Credits
+
+- [osu!](https://github.com/ppy/osu) (MIT, ppy Pty Ltd): the star rating calculator and the mania
+  skin components Fumen's ports follow

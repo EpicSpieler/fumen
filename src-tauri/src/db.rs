@@ -115,6 +115,18 @@ const MIGRATIONS: &[&str] = &[
     ALTER TABLE chart_stats ADD COLUMN sr_ht REAL;
     ALTER TABLE chart_stats ADD COLUMN sr_dt REAL;
     "#,
+    // 4 — lazer skins (for the playfield preview); files are [filename, sha256] pairs as JSON
+    r#"
+    CREATE TABLE skins (
+        id        TEXT PRIMARY KEY,
+        name      TEXT NOT NULL DEFAULT '',
+        creator   TEXT NOT NULL DEFAULT '',
+        kind      TEXT NOT NULL,
+        protected INTEGER NOT NULL DEFAULT 0,
+        position  INTEGER NOT NULL,
+        files     TEXT NOT NULL DEFAULT '[]'
+    );
+    "#,
 ];
 
 pub fn open(path: &Path) -> Result<Connection> {

@@ -1,10 +1,11 @@
 /* fullscreen.ts — the player in fullscreen, with two views you switch at the top:
  *
  *  - Visualizer: the song's art, big, with frequency bars from the audio itself.
- *  - Playfield: the playing difficulty's osu!mania playfield at full height, scrolling like lazer
- *    does for you (your lazer scroll speed and direction, rate mods included), next to what matters
- *    while you watch it: notes per second right now, the pattern of this second, BPM, notes so
- *    far, and the density graph. The numbers about the whole chart stay in the set page's panel.
+ *  - Playfield: the playing difficulty's osu!mania playfield at full height, in your lazer skin
+ *    (or any other you pick here), scrolling like lazer does for you (your lazer scroll speed and
+ *    direction, rate mods included), played by lazer's autoplay, next to what matters while you
+ *    watch it: notes per second right now, the pattern of this second, BPM, notes so far, and the
+ *    density graph. The numbers about the whole chart stay in the set page's panel.
  *
  * Esc leaves; Space plays/pauses; ←/→ seek 5 s; F3/F4 lower/raise the scroll speed as in lazer.
  * Nothing animates while the song is paused.
@@ -13,12 +14,16 @@ import { thumbUrl } from "../lib/api";
 import { bpmAt, loadChart, lowerBound, PATTERNS, SCROLL_SPEED_MAX, SCROLL_SPEED_MIN, scrollSpeed, scrollTime, scrollUp } from "../lib/charts";
 import { readBars, startAnalyser } from "../lib/eq";
 import { bpm, displayArtist, displayTitle, duration, esc, keysOrMode, num, srChip } from "../lib/format";
+import { currentSkin, loadSkin, loadSkinList } from "../lib/skin/skins";
 import { setPrefs, store } from "../lib/store";
-import type { ChartData } from "../lib/types";
+import type { ChartData, SkinList } from "../lib/types";
 import { dragSlider, player } from "../player";
 import { attachSegIndicator, openMenu, reduceMotion, type MenuEntry } from "../ui/controls";
 import { icon } from "../ui/icons";
-import { AccentColors, columnWidth, drawDensity, fitCanvas, Playfield } from "../ui/playfield";
+import { ArgonRenderer } from "../ui/mania/argon";
+import { createRenderer, ManiaPlayfield } from "../ui/mania/playfield";
+import type { Renderer } from "../ui/mania/stage";
+import { AccentColors, drawDensity, fitCanvas } from "../ui/playfield";
 import { rateClick, rateControlHtml, starsAtRate, syncRateControl } from "../ui/rate";
 
 export type FullscreenMode = "visual" | "field";
@@ -44,7 +49,11 @@ class Fullscreen {
   // playfield
   private mapId = "";
   private data: ChartData | null = null;
-  private field: Playfield | null = null;
+  private field: ManiaPlayfield | null = null;
+  /** lazer's skins (loaded once per import) */
+  private skins: SkinList | null = null;
+  /** bumped on every skin / chart change, so late renderers are dropped */
+  private skinJob = 0;
   private graphDrawn = "";
   /** last text written per live field, so frames only touch the DOM when something changed */
   private live = new Map<Element, string>();
@@ -149,6 +158,11 @@ class Fullscreen {
               <span class="fs-speed-sub num"></span>
             </div>
             <div class="fs-setting">
+              <span class="fs-k">Skin</span>
+              <button class="fs-skin" type="button" aria-label="Skin"><span class="fs-skin-name"></span>${icon("chevron-down")}</button>
+              <span class="fs-skin-sub"></span>
+            </div>
+            <div class="fs-setting">
               <span class="fs-k">Rate</span>
               <div class="fs-rate-ctl">${rateControlHtml()}</div>
             </div>
@@ -251,6 +265,7 @@ class Fullscreen {
     syncRateControl(this.el);
     this.renderDiff();
     this.renderSpeed();
+    this.renderSkin();
     this.live.clear();
     this.kick();
   }
@@ -276,17 +291,81 @@ class Fullscreen {
     this.data = null;
     this.field = null;
     this.showEmpty(null, "Loading the chart…");
+    const job = ++this.skinJob;
     loadChart(map.id)
-      .then((d) => {
-        if (this.mapId !== map.id) return;
+      .then(async (d) => {
+        const renderer = await this.rendererFor(d.keys);
+        if (this.mapId !== map.id || job !== this.skinJob) return;
         this.data = d;
-        this.field = new Playfield(this.el!.querySelector(".fs-pf")!, d);
+        this.field = new ManiaPlayfield(this.el!.querySelector(".fs-pf")!, d, renderer);
         this.showEmpty(null);
         this.graphDrawn = "";
         this.live.clear();
         this.kick();
       })
       .catch(() => this.mapId === map.id && this.showEmpty(null, "Couldn't read this chart."));
+  }
+
+  // ── skins ─────────────────────────────────────────────────────────────
+
+  /** The renderer for the current skin at a key count; argon if the skin can't be read. */
+  private async rendererFor(keys: number): Promise<Renderer> {
+    // cached until the next import
+    this.skins = await loadSkinList().catch(() => this.skins);
+    this.renderSkin();
+    const entry = currentSkin(this.skins);
+    try {
+      const skin = await loadSkin(entry, this.skins ?? { skins: [], selected: null, classic: [], retro: [] });
+      return await createRenderer(skin, keys);
+    } catch (e) {
+      console.warn("[skin]", entry.name, e);
+      return new ArgonRenderer(keys);
+    }
+  }
+
+  private renderSkin(): void {
+    const el = this.el;
+    if (!el) return;
+    const skin = currentSkin(this.skins);
+    const lazer = this.skins?.skins.find((s) => s.id === this.skins?.selected);
+    el.querySelector(".fs-skin-name")!.textContent = skin.name;
+    const sub = el.querySelector(".fs-skin-sub")!;
+    if (!lazer || skin.id === lazer.id) sub.textContent = lazer ? "from lazer" : "";
+    else sub.innerHTML = `<button class="fs-speed-reset fs-skin-reset" type="button">back to lazer's ${esc(lazer.name)}</button>`;
+  }
+
+  private async setSkin(id: string | null): Promise<void> {
+    // picking lazer's own skin means following lazer again
+    setPrefs({ playfieldSkin: id === this.skins?.selected ? null : id });
+    this.renderSkin();
+    const field = this.field;
+    if (!field) return;
+    const job = ++this.skinJob;
+    const renderer = await this.rendererFor(field.data.keys);
+    if (job !== this.skinJob || this.field !== field) return;
+    field.setRenderer(renderer);
+    this.kick();
+  }
+
+  private skinMenu(anchor: HTMLElement): void {
+    const list = this.skins;
+    if (!list?.skins.length) {
+      openMenu(anchor, [{ group: "Skins" }, { label: "Import your lazer library to see its skins", disabled: true }], { minWidth: 300 });
+      return;
+    }
+    const cur = currentSkin(list).id;
+    // like lazer's list: its own skins first, then yours
+    const ordered = [...list.skins.filter((s) => s.protected), ...list.skins.filter((s) => !s.protected)];
+    const entries: MenuEntry[] = [{ group: "osu!lazer skins" }];
+    for (const s of ordered) {
+      entries.push({
+        label: s.name,
+        hint: s.id === list.selected ? "in lazer" : undefined,
+        checked: s.id === cur,
+        action: () => void this.setSkin(s.id),
+      });
+    }
+    openMenu(anchor, entries, { minWidth: 320 });
   }
 
   /** Message in place of the playfield: not mania (with a way to pick a mania difficulty), loading, errors. */
@@ -455,10 +534,7 @@ class Fullscreen {
     const r = player.rate;
     const t = player.audio.currentTime * 1000;
 
-    // the playfield is as wide as lazer's for this many keys at this height (scaled like lazer)
-    const stage = el.querySelector<HTMLElement>(".fs-stage")!;
-    stage.style.setProperty("--pf-w", `${Math.round(columnWidth(stage.clientHeight) * d.keys)}px`);
-    field.draw(t, scrollTime(scrollSpeed().speed) * r, scrollUp());
+    field.draw(t, scrollTime(scrollSpeed().speed) * r, scrollUp(), r);
 
     // live numbers
     const a = d.analysis;
@@ -505,6 +581,9 @@ class Fullscreen {
       if (rateClick(t)) return;
       const speed = t.closest<HTMLElement>("[data-speed]");
       if (speed) return this.changeSpeed(+speed.dataset.speed!);
+      if (t.closest(".fs-skin-reset")) return void this.setSkin(null);
+      const skin = t.closest<HTMLElement>(".fs-skin");
+      if (skin) return this.skinMenu(skin);
       if (t.closest(".fs-speed-reset")) {
         setPrefs({ scrollSpeed: null });
         this.renderSpeed();
