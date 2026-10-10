@@ -1,21 +1,23 @@
-/* library.ts — the library browser: search, filters, sort, cover grid and difficulty table.
+/* library.ts — the library browser: search, filters, sort, cover grid and set list.
  *
  * One component, two uses: the main Library (persistent, keeps scroll position while you visit a
  * set) and collection pages (restricted to the collection's difficulties).
+ *
+ * The list shows one row per beatmap set; clicking a set opens its matching difficulties right
+ * under it, and a difficulty opens the set page on that difficulty.
  */
 import { thumbUrl } from "../lib/api";
 import {
-  bpm, displayArtist, displayTitle, duration, esc, holdRatio, keysOrMode, modeLabel, num, patternWords, rankInfo, srChip,
-  srColor, stars, statusLabel,
+  bpm, date, displayArtist, displayTitle, duration, esc, holdRatio, keysOrMode, modeLabel, num, patternWords, rankInfo,
+  relativeTime, srChip, srColor, stars,
 } from "../lib/format";
 import {
-  DEFAULT_FILTER, filterLibrary, parseQuery, sortMaps, sortSets, type FilterResult, type FilterState, type MapSort,
-  type SetSort,
+  DEFAULT_FILTER, filterLibrary, parseQuery, sortSets, type FilterResult, type FilterState, type SetResult, type SetSort,
 } from "../lib/search";
 import { events, setPrefs, store } from "../lib/store";
-import type { MapRow } from "../lib/types";
+import type { LibraryLayout, MapRow } from "../lib/types";
 import { player } from "../player";
-import { attachSegIndicator, createSelect, openMenu, updateRange, type MenuEntry } from "../ui/controls";
+import { attachSegIndicator, createSelect, openMenu, reduceMotion, updateRange, type MenuEntry } from "../ui/controls";
 import { icon } from "../ui/icons";
 import { VirtualList } from "../ui/virtual";
 import { openSet, setMenu } from "./actions";
@@ -36,27 +38,36 @@ const SET_SORTS: { value: SetSort; label: string }[] = [
 /** Sorts where "descending" is the natural first click. */
 const DESC_FIRST = new Set<string>(["added", "sr", "bpm", "length", "ranked", "played", "od", "hp", "objects", "ln", "nps", "grade", "peak"]);
 
+/** The list's date column follows the sort: when sorting by a date, it shows that date. */
+const DATE_COLUMN: Partial<Record<SetSort, string>> = { added: "Added", played: "Played", ranked: "Ranked" };
+
 interface Column {
-  key: MapSort | null;
+  key: SetSort | "date" | null;
   label: string;
   cls: string;
   tip?: string;
 }
-const COLUMNS: Column[] = [
-  { key: null, label: "", cls: "c-art" },
-  { key: "title", label: "Title", cls: "c-title" },
-  { key: "version", label: "Difficulty", cls: "c-version" },
-  { key: "keys", label: "Mode", cls: "c-mode" },
-  { key: "sr", label: "Stars", cls: "c-sr num" },
-  { key: "bpm", label: "BPM", cls: "c-num" },
-  { key: "length", label: "Length", cls: "c-num" },
-  { key: "od", label: "OD", cls: "c-sm hide-1", tip: "Overall difficulty (timing windows)" },
-  { key: "hp", label: "HP", cls: "c-sm hide-1", tip: "Drain rate" },
-  { key: "objects", label: "Notes", cls: "c-num" },
-  { key: "peak", label: "Peak", cls: "c-sm hide-2", tip: "Densest two seconds, in notes per second" },
-  { key: "ln", label: "Holds", cls: "c-sm hide-2", tip: "Long notes (mania) / sliders and spinners, as share of all objects" },
-  { key: "grade", label: "Best", cls: "c-grade" },
+const LIST_COLUMNS: Column[] = [
+  { key: null, label: "", cls: "l-chev" },
+  { key: null, label: "", cls: "l-art" },
+  { key: "title", label: "Title", cls: "l-title" },
+  { key: "creator", label: "Mapper", cls: "l-creator hide-1" },
+  { key: null, label: "Difficulties", cls: "l-diffs" },
+  { key: "sr", label: "Stars", cls: "l-sr" },
+  { key: "bpm", label: "BPM", cls: "l-num" },
+  { key: "length", label: "Length", cls: "l-num" },
+  { key: "date", label: "Added", cls: "l-date hide-2" },
+  { key: null, label: "Best", cls: "l-best" },
+  { key: null, label: "", cls: "l-open" },
 ];
+
+/** List row heights: set row, difficulty row, and the gap after an open set's last difficulty. */
+const SET_H = 58;
+const MAP_H = 40;
+const GROUP_GAP = 8;
+
+/** A row of the list: a set, or one of its difficulties while the set is open. */
+type Line = { kind: "set"; r: SetResult } | { kind: "map"; set: number; map: number; last: boolean; n: number };
 
 const MODES = [
   { mode: -1, label: "All" },
@@ -93,12 +104,14 @@ export class LibraryView {
   readonly el: HTMLElement;
   private filter: FilterState;
   private result: FilterResult = { sets: [], mapCount: 0 };
-  private rows: number[] = [];
-  private layout = store.prefs.layout;
+  private lines: Line[] = [];
+  /** sets opened in the list (set indices) */
+  private open = new Set<number>();
+  /** the set being opened right now: its difficulty rows animate in */
+  private opening = -1;
+  private layout: LibraryLayout = store.prefs.layout;
   private setSort = store.prefs.sort as SetSort;
   private setDesc = store.prefs.sortDesc;
-  private mapSort: MapSort = "title";
-  private mapDesc = false;
   private cols = 4;
   private cardW = 240;
   private list: VirtualList;
@@ -112,7 +125,7 @@ export class LibraryView {
       keys: o.persistent ? [...store.prefs.keys] : [],
     };
     if (!o.persistent) {
-      this.layout = "table";
+      this.layout = "list";
       this.setSort = "added";
     }
 
@@ -129,7 +142,7 @@ export class LibraryView {
           <button class="icon-btn lib-sort-dir" type="button" aria-label="Sort direction"></button>
           <div class="seg-pill lib-layout" role="tablist" aria-label="Layout">
             <button type="button" data-layout="grid" data-tip="Covers" aria-label="Covers">${icon("grid")}</button>
-            <button type="button" data-layout="table" data-tip="Difficulties" aria-label="Difficulties">${icon("rows")}</button>
+            <button type="button" data-layout="list" data-tip="List" aria-label="List">${icon("rows")}</button>
           </div>
         </div>
       </header>
@@ -144,7 +157,7 @@ export class LibraryView {
         <button class="btn btn-ghost lib-filters-btn" type="button">${icon("sliders")}<span>Filters</span></button>
       </div>
       <div class="lib-active" hidden></div>
-      <div class="lib-table-head" hidden></div>
+      <div class="lib-list-head" hidden></div>
       <div class="lib-body"></div>
       <div class="empty-state lib-empty" hidden></div>`;
     this.el = el;
@@ -158,9 +171,7 @@ export class LibraryView {
     el.querySelector(".lib-sort-host")!.replaceWith(sortSel.el);
     this.syncSortUi = () => {
       sortSel.value = this.setSort;
-      sortSel.el.hidden = this.layout === "table";
       const dirBtn = el.querySelector<HTMLButtonElement>(".lib-sort-dir")!;
-      dirBtn.hidden = this.layout === "table";
       dirBtn.innerHTML = icon(this.setDesc ? "arrow-down" : "arrow-up");
       dirBtn.dataset.tip = this.setDesc ? "Descending" : "Ascending";
     };
@@ -169,7 +180,8 @@ export class LibraryView {
       scroller: el,
       body: this.body,
       count: () => this.rowCount(),
-      rowHeight: () => this.rowHeight(),
+      heightOf: (i) => this.rowHeight(i),
+      keyOf: (i) => this.rowKey(i),
       renderRow: (i, row) => this.renderRow(i, row),
       rowClass: "vrow",
       overscanPx: 700,
@@ -201,8 +213,8 @@ export class LibraryView {
     if (!ix) return;
     const restrict = this.o.restrict?.();
     this.result = filterLibrary(ix, this.filter, restrict);
-    if (this.layout === "grid") sortSets(ix, this.result.sets, this.setSort, this.setDesc);
-    else this.rows = sortMaps(ix, this.result.sets, this.mapSort, this.mapDesc);
+    sortSets(ix, this.result.sets, this.setSort, this.setDesc);
+    this.buildLines();
     if (resetScroll) this.el.scrollTop = 0;
     this.renderHeader();
     this.measure(true);
@@ -221,8 +233,39 @@ export class LibraryView {
 
   /** Set indices in display order: what next/previous in the player walks through. */
   private queueSets(): number[] {
-    const snap = store.snap!;
-    return this.layout === "grid" ? this.result.sets.map((r) => r.set) : this.rows.map((mi) => snap.maps[mi].set);
+    return this.result.sets.map((r) => r.set);
+  }
+
+  /** The list's rows: every set, plus the difficulties of open sets. */
+  private buildLines(): void {
+    const lines: Line[] = [];
+    if (this.layout === "list") {
+      for (const r of this.result.sets) {
+        lines.push({ kind: "set", r });
+        if (!this.open.has(r.set)) continue;
+        r.maps.forEach((mi, k) => lines.push({ kind: "map", set: r.set, map: mi, last: k === r.maps.length - 1, n: k }));
+      }
+    }
+    this.lines = lines;
+  }
+
+  /** Opens or closes a set in the list. */
+  private toggleSet(si: number, row?: HTMLElement | null): void {
+    const opening = !this.open.has(si);
+    if (opening) this.open.add(si);
+    else this.open.delete(si);
+    row?.classList.toggle("open", opening);
+    row?.setAttribute("aria-expanded", String(opening));
+    this.buildLines();
+    this.opening = opening ? si : -1;
+    this.list.relayout();
+    this.opening = -1;
+    if (!opening) return;
+    // keep the opened difficulties in view (the sticky toolbar and list header cover the top)
+    const first = this.lines.findIndex((l) => l.kind === "set" && l.r.set === si);
+    let last = first;
+    while (last + 1 < this.lines.length && this.lines[last + 1].kind === "map") last++;
+    this.list.reveal(first, last, "nearest", { inset: 96, smooth: !reduceMotion() });
   }
 
   // ── layout maths ──────────────────────────────────────────────────────
@@ -244,12 +287,21 @@ export class LibraryView {
   }
 
   private rowCount(): number {
-    return this.layout === "grid" ? Math.ceil(this.result.sets.length / this.cols) : this.rows.length;
+    return this.layout === "grid" ? Math.ceil(this.result.sets.length / this.cols) : this.lines.length;
   }
 
-  private rowHeight(): number {
+  private rowHeight(i: number): number {
     // art (16:9) + 10 gap + title 20 + artist 17 + diffs 18 + row gap 26
-    return this.layout === "grid" ? Math.round((this.cardW * 9) / 16) + 91 : 48;
+    if (this.layout === "grid") return Math.round((this.cardW * 9) / 16) + 91;
+    const line = this.lines[i];
+    return line.kind === "set" ? SET_H : MAP_H + (line.last ? GROUP_GAP : 0);
+  }
+
+  /** Grid rows are keyed by position; list rows by what they show, so opening a set only moves the rows below. */
+  private rowKey(i: number): string {
+    if (this.layout === "grid") return `g${i}`;
+    const line = this.lines[i];
+    return line.kind === "set" ? `s${line.r.set}` : `m${line.map}`;
   }
 
   // ── rendering ─────────────────────────────────────────────────────────
@@ -261,11 +313,26 @@ export class LibraryView {
       row.className = "vrow grid-row";
       row.innerHTML = items.map((r) => this.cardHtml(r.set, r.maps)).join("");
     } else {
-      const mi = this.rows[i];
-      row.className = `vrow trow${i % 2 ? " odd" : ""}`;
-      row.innerHTML = this.rowHtml(mi);
-      row.dataset.map = String(mi);
-      row.dataset.set = String(store.snap!.maps[mi].set);
+      const line = this.lines[i];
+      delete row.dataset.map;
+      if (line.kind === "set") {
+        const open = this.open.has(line.r.set);
+        row.className = `vrow lrow lrow-set${open ? " open" : ""}`;
+        row.dataset.set = String(line.r.set);
+        row.tabIndex = 0;
+        row.setAttribute("role", "button");
+        row.setAttribute("aria-expanded", String(open));
+        row.innerHTML = this.setRowHtml(line.r);
+      } else {
+        row.className = `vrow lrow lrow-map${line.last ? " last" : ""}${line.set === this.opening ? " enter" : ""}`;
+        row.dataset.set = String(line.set);
+        row.dataset.map = String(line.map);
+        row.tabIndex = 0;
+        row.setAttribute("role", "button");
+        row.removeAttribute("aria-expanded");
+        row.style.setProperty("--n", String(Math.min(line.n, 8)));
+        row.innerHTML = this.mapRowHtml(line.map);
+      }
     }
     this.syncPlaying(row);
   }
@@ -297,38 +364,84 @@ export class LibraryView {
       </div>`;
   }
 
-  /** "7K", "4K / 7K", or the ruleset when it isn't mania. */
   private keysBadge(maps: MapRow[]): string {
-    const keys = [...new Set(maps.filter((m) => m.mode === 3).map((m) => Math.round(m.cs)))].sort((a, b) => a - b);
-    const modes = new Set(maps.map((m) => m.mode));
-    let text = "";
-    if (keys.length && modes.size === 1) text = keys.length > 3 ? `${keys[0]}–${keys[keys.length - 1]}K` : keys.map((k) => `${k}K`).join(" / ");
-    else if (modes.size === 1) text = modeLabel(maps[0].mode).replace("osu!", "") || "osu!";
-    else text = `${modes.size} modes`;
-    return `<span class="img-badge card-badge">${esc(text)}</span>`;
+    return `<span class="img-badge card-badge">${esc(keysText(maps))}</span>`;
   }
 
-  private rowHtml(mi: number): string {
+  private setRowHtml(r: SetResult): string {
     const snap = store.snap!;
-    const m = snap.maps[mi];
-    const set = snap.sets[m.set];
+    const set = snap.sets[r.set];
     const unicode = store.prefs.unicode;
-    const bg = m.bg ?? set.bg;
-    const best = m.best ? rankInfo(m.best.rank) : null;
+    const maps = r.maps.map((mi) => snap.maps[mi]);
+    let lo = Infinity;
+    let hi = 0;
+    let bpmLo = Infinity;
+    let bpmHi = 0;
+    let len = 0;
+    let played = 0;
+    let best: MapRow["best"];
+    for (const m of maps) {
+      lo = Math.min(lo, m.sr);
+      hi = Math.max(hi, m.sr);
+      bpmLo = Math.min(bpmLo, m.bpm);
+      bpmHi = Math.max(bpmHi, m.bpm);
+      len = Math.max(len, m.length);
+      played = Math.max(played, m.played ?? 0);
+      if (m.best && (!best || gradeRank(m.best) > gradeRank(best))) best = m.best;
+    }
+    const STRIP_MAX = 14;
+    const strip = maps
+      .slice(0, STRIP_MAX)
+      .map((m) => `<i${m.sr >= 7.7 ? ` class="deep"` : ""} style="--c:${srColor(m.sr)}"></i>`)
+      .join("");
+    const total = set.maps.filter((mi) => this.filter.showHidden || !snap.maps[mi].hidden).length;
+    const count = maps.length < total ? `${maps.length} of ${total}` : `${maps.length} ${maps.length === 1 ? "diff" : "diffs"}`;
+    const bpmText = Math.round(bpmLo) === Math.round(bpmHi) ? bpm(bpmHi) : `${bpm(bpmLo)}–${bpm(bpmHi)}`;
+    const bg = set.bg;
+    const g = best ? rankInfo(best.rank) : null;
     return `
-      <div class="c-art"><div class="t-art${bg ? "" : " img-missing"}">${bg ? `<img src="${thumbUrl(bg, 160)}" alt="" loading="lazy" decoding="async" />` : ""}<button class="t-play" type="button" aria-label="Play">${icon("play", "ic-play")}${icon("pause", "ic-pause")}</button></div></div>
-      <div class="c-title"><div class="t-title">${esc(displayTitle(set, unicode))}</div><div class="t-sub">${esc(displayArtist(set, unicode))}</div></div>
-      <div class="c-version"><div class="t-version">${esc(m.version)}</div><div class="t-sub">${esc(set.creator)} · ${statusLabel(m.status)}${m.patterns ? ` · <span class="t-pat">${esc(patternWords(m.patterns))}</span>` : ""}</div></div>
-      <div class="c-mode">${esc(keysOrMode(m))}</div>
-      <div class="c-sr">${srChip(m.sr)}</div>
-      <div class="c-num num">${bpm(m.bpm)}</div>
-      <div class="c-num num">${duration(m.length)}</div>
-      <div class="c-sm hide-1 num">${fmt1(m.od)}</div>
-      <div class="c-sm hide-1 num">${fmt1(m.hp)}</div>
-      <div class="c-num num">${num(m.objects)}</div>
-      <div class="c-sm hide-2 num">${m.peak !== undefined ? m.peak.toFixed(1) : "–"}</div>
-      <div class="c-sm hide-2 num">${Math.round(holdRatio(m) * 100)}%</div>
-      <div class="c-grade">${best ? `<span class="grade" style="--c:${best.color}">${best.label}</span><span class="t-acc num">${(m.best!.acc * 100).toFixed(2)}%</span>` : `<span class="t-none">–</span>`}</div>`;
+      <div class="l-chev">${icon("chevron-right")}</div>
+      <div class="l-art"><div class="t-art${bg ? "" : " img-missing"}">${bg ? `<img src="${thumbUrl(bg, 160)}" alt="" loading="lazy" decoding="async" />` : ""}<button class="t-play" type="button" aria-label="Play">${icon("play", "ic-play")}${icon("pause", "ic-pause")}</button></div></div>
+      <div class="l-title"><div class="t-title">${esc(displayTitle(set, unicode))}</div><div class="t-sub">${esc(displayArtist(set, unicode))}</div></div>
+      <div class="l-creator hide-1">${esc(set.creator)}</div>
+      <div class="l-diffs"><span class="card-strip">${strip}</span><span class="t-sub num">${count} · ${esc(keysText(maps))}</span></div>
+      <div class="l-sr">${lo < hi ? `<span class="l-lo num">${stars(lo)} –</span>` : ""}${srChip(hi)}</div>
+      <div class="l-num num">${bpmText}</div>
+      <div class="l-num num">${duration(len)}</div>
+      <div class="l-date hide-2">${this.dateText(set.added, set.ranked, played)}</div>
+      <div class="l-best">${g ? `<span class="grade" style="--c:${g.color}">${g.label}</span>` : `<span class="t-none">–</span>`}</div>
+      <div class="l-open"><button class="icon-btn sm" type="button" data-open data-tip="Open set" aria-label="Open set">${icon("arrow-right")}</button></div>`;
+  }
+
+  /** The date column's value for the current sort. */
+  private dateText(added: number | undefined, ranked: number | undefined, played: number): string {
+    switch (this.setSort) {
+      case "played":
+        return played ? relativeTime(played) : `<span class="t-none">never</span>`;
+      case "ranked":
+        return ranked ? date(ranked) : `<span class="t-none">–</span>`;
+      default:
+        return added ? relativeTime(added) : `<span class="t-none">–</span>`;
+    }
+  }
+
+  private mapRowHtml(mi: number): string {
+    const m = store.snap!.maps[mi];
+    const best = m.best ? rankInfo(m.best.rank) : null;
+    const mania = m.mode === 3;
+    return `
+      <div class="lmap">
+        <span class="d-keys">${esc(keysOrMode(m))}</span>
+        <span class="d-sr">${srChip(m.sr)}</span>
+        <span class="d-name"><b>${esc(m.version)}</b>${m.patterns ? `<span class="t-pat">${esc(patternWords(m.patterns))}</span>` : ""}</span>
+        <span class="d-num hide-2"><i>OD</i>${fmt1(m.od)}</span>
+        <span class="d-num hide-1"><i>HP</i>${fmt1(m.hp)}</span>
+        <span class="d-num">${num(m.objects)}<i>${mania ? "notes" : "objects"}</i></span>
+        <span class="d-num hide-1">${m.peak !== undefined ? `${m.peak.toFixed(1)}<i>peak</i>` : `<span class="t-none">–</span>`}</span>
+        <span class="d-num hide-2"><i>${HOLDS[m.mode] ?? "Holds"}</i>${Math.round(holdRatio(m) * 100)}%</span>
+        <span class="d-best">${best ? `<span class="grade" style="--c:${best.color}">${best.label}</span><span class="t-acc num">${(m.best!.acc * 100).toFixed(2)}%</span>` : `<span class="t-none">not played</span>`}</span>
+        <span class="d-go">${icon("arrow-right")}</span>
+      </div>`;
   }
 
   private renderHeader(): void {
@@ -366,14 +479,17 @@ export class LibraryView {
     fb.classList.toggle("active", filterCount > 0);
     fb.querySelector("span")!.textContent = filterCount ? `Filters · ${filterCount}` : "Filters";
 
-    // table header
-    const th = this.el.querySelector<HTMLElement>(".lib-table-head")!;
-    th.hidden = this.layout !== "table";
-    if (this.layout === "table") {
-      th.innerHTML = COLUMNS.map((c) => {
-        if (!c.key) return `<div class="${c.cls}"></div>`;
-        const on = c.key === this.mapSort;
-        return `<button type="button" class="th ${c.cls}${on ? " on" : ""}" data-sort="${c.key}"${c.tip ? ` data-tip="${esc(c.tip)}"` : ""}>${c.label}${on ? icon(this.mapDesc ? "arrow-down" : "arrow-up", "th-dir") : ""}</button>`;
+    // list header: the sortable columns sort the sets, like the sort menu
+    const th = this.el.querySelector<HTMLElement>(".lib-list-head")!;
+    th.hidden = this.layout !== "list";
+    if (this.layout === "list") {
+      const dateSort: SetSort = DATE_COLUMN[this.setSort] ? this.setSort : "added";
+      th.innerHTML = LIST_COLUMNS.map((c) => {
+        if (!c.key) return `<div class="th-blank ${c.cls}">${c.label}</div>`;
+        const key = c.key === "date" ? dateSort : c.key;
+        const label = c.key === "date" ? DATE_COLUMN[dateSort]! : c.label;
+        const on = key === this.setSort;
+        return `<button type="button" class="th ${c.cls}${on ? " on" : ""}" data-sort="${key}"${c.tip ? ` data-tip="${esc(c.tip)}"` : ""}>${label}${on ? icon(this.setDesc ? "arrow-down" : "arrow-up", "th-dir") : ""}</button>`;
       }).join("");
     }
 
@@ -406,7 +522,7 @@ export class LibraryView {
     const playing = player.playing;
     scope.querySelectorAll<HTMLElement>(".playing").forEach((n) => n.classList.remove("playing", "paused"));
     if (!np) return;
-    const sel = this.layout === "grid" ? `.card[data-set="${np.set}"]` : `.trow[data-set="${np.set}"]`;
+    const sel = this.layout === "grid" ? `.card[data-set="${np.set}"]` : `.lrow-set[data-set="${np.set}"]`;
     const nodes = scope instanceof HTMLElement && scope.matches(sel) ? [scope] : [...scope.querySelectorAll<HTMLElement>(sel)];
     nodes.forEach((n) => {
       n.classList.add("playing");
@@ -452,7 +568,7 @@ export class LibraryView {
     el.querySelector(".lib-layout")!.addEventListener("click", (e) => {
       const b = (e.target as Element).closest<HTMLElement>("[data-layout]");
       if (!b || b.dataset.layout === this.layout) return;
-      this.layout = b.dataset.layout as "grid" | "table";
+      this.layout = b.dataset.layout as LibraryLayout;
       if (this.o.persistent) setPrefs({ layout: this.layout });
       this.syncControls();
       this.run(true);
@@ -479,17 +595,16 @@ export class LibraryView {
       }
       const th = t.closest<HTMLElement>(".th[data-sort]");
       if (th) {
-        const key = th.dataset.sort as MapSort;
-        if (key === this.mapSort) this.mapDesc = !this.mapDesc;
-        else {
-          this.mapSort = key;
-          this.mapDesc = DESC_FIRST.has(key);
-        }
+        const key = th.dataset.sort as SetSort;
+        if (key !== this.setSort) return this.setSortKey(key);
+        this.setDesc = !this.setDesc;
+        if (this.o.persistent) setPrefs({ sortDesc: this.setDesc });
+        this.syncControls();
         this.run();
         return;
       }
       const play = t.closest(".card-play, .t-play");
-      const item = t.closest<HTMLElement>(".card, .trow");
+      const item = t.closest<HTMLElement>(".card, .lrow");
       if (!item) return;
       const si = +item.dataset.set!;
       const mi = item.dataset.map !== undefined ? +item.dataset.map : undefined;
@@ -498,14 +613,32 @@ export class LibraryView {
         player.playSet(si, mi, this.queueSets());
         return;
       }
-      openSet(si, this.layout === "table" ? mi : undefined);
+      if (item.classList.contains("lrow-set") && !t.closest("[data-open]")) return this.toggleSet(si, item);
+      openSet(si, mi);
+    });
+
+    // double-click a set row: straight to the set page
+    el.addEventListener("dblclick", (e) => {
+      const t = e.target as Element;
+      const item = t.closest<HTMLElement>(".lrow-set");
+      if (item && !t.closest("button")) openSet(+item.dataset.set!);
+    });
+
+    el.addEventListener("keydown", (e) => {
+      const item = (e.target as Element).closest<HTMLElement>(".lrow");
+      if (!item || e.target !== item || (e.key !== "Enter" && e.key !== " ")) return;
+      e.preventDefault();
+      const si = +item.dataset.set!;
+      if (item.dataset.map !== undefined) openSet(si, +item.dataset.map);
+      else if (e.key === "Enter" && e.shiftKey) openSet(si);
+      else this.toggleSet(si, item);
     });
 
     el.addEventListener("contextmenu", (e) => {
-      const item = (e.target as Element).closest<HTMLElement>(".card, .trow");
+      const item = (e.target as Element).closest<HTMLElement>(".card, .lrow");
       if (!item) return;
       e.preventDefault();
-      const mi = this.layout === "table" ? +item.dataset.map! : undefined;
+      const mi = item.classList.contains("lrow-map") ? +item.dataset.map! : undefined;
       setMenu({ x: e.clientX, y: e.clientY }, +item.dataset.set!, mi, { onSearch: (q) => this.setQuery(q) });
     });
 
@@ -640,4 +773,22 @@ export class LibraryView {
   }
 }
 
+/** What counts as a hold, per ruleset: sliders, drumrolls, long notes. */
+const HOLDS: Record<number, string> = { 0: "Sliders", 1: "Rolls", 3: "LN" };
+
 const fmt1 = (v: number): string => (Math.round(v * 10) / 10).toString();
+
+/** "7K", "4K / 7K", or the ruleset when it isn't mania. */
+function keysText(maps: MapRow[]): string {
+  const keys = [...new Set(maps.filter((m) => m.mode === 3).map((m) => Math.round(m.cs)))].sort((a, b) => a - b);
+  const modes = new Set(maps.map((m) => m.mode));
+  if (keys.length && modes.size === 1) return keys.length > 3 ? `${keys[0]}–${keys[keys.length - 1]}K` : keys.map((k) => `${k}K`).join(" / ");
+  if (modes.size === 1) return modeLabel(maps[0].mode).replace("osu!", "") || "osu!";
+  return `${modes.size} modes`;
+}
+
+/** Orders best scores: grade first (silver ranks with gold), then accuracy. */
+function gradeRank(b: NonNullable<MapRow["best"]>): number {
+  const g = b.rank === 5 ? 4 : b.rank === 7 ? 6 : b.rank;
+  return g * 1000 + b.acc;
+}

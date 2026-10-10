@@ -27,6 +27,7 @@ const ICONS = {
   "chevron-left": `<path ${S} d="m14 7-5 5 5 5"/>`,
   "chevron-right": `<path ${S} d="m10 7 5 5-5 5"/>`,
   "arrow-left": `<path ${S} d="M19 12H5.5M11 6l-6 6 6 6"/>`,
+  "arrow-right": `<path ${S} d="M5 12h13.5M13 6l6 6-6 6"/>`,
   "arrow-up": `<path ${S} d="M12 19V5.5M6.5 11 12 5.5l5.5 5.5"/>`,
   "arrow-down": `<path ${S} d="M12 5v13.5M6.5 13l5.5 5.5 5.5-5.5"/>`,
   sort: `<path ${S} d="M7.5 5v14M4.5 16l3 3 3-3M16.5 19V5M13.5 8l3-3 3 3"/>`,

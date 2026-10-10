@@ -12,6 +12,9 @@ html, body {
   overflow: hidden;
 }
 body {
+  /* clip, not just hide: focusing a row must never scroll the window itself (the collapsed
+     player hangs below the bottom edge) */
+  overflow: clip;
   font-family: var(--font);
   font-size: var(--fs-13);
   line-height: 1.45;
