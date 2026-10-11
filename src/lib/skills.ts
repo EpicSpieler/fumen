@@ -56,6 +56,9 @@ export function accFactor(acc: number): number {
 
 export const rateOf = (p: Play): number => p.rate ?? 1;
 
+/** Played with mods that change what's played beyond the rate (Hold Off, Easy, Autopilot, …). */
+export const changesChart = (p: Play): boolean => !!p.mods?.some((m) => UNRATED.has(m));
+
 /** The chart's star rating at the rate it was played: worked out exactly for rates the library
  * has none for (the backend sends it with the play), else from the library's. */
 export const chartStars = (p: Play, map: MapRow): number => p.sr ?? starsAt(map, rateOf(p));
@@ -63,7 +66,7 @@ export const chartStars = (p: Play, map: MapRow): number => p.sr ?? starsAt(map,
 /** A play's worth in stars at REF_ACC; null when it doesn't count. */
 export function playStars(p: Play, map: MapRow): number | null {
   if (p.failed || p.mode !== 3 || map.mode !== 3 || !map.shares) return null;
-  if (p.mods?.some((m) => UNRATED.has(m))) return null;
+  if (changesChart(p)) return null;
   return chartStars(p, map) * accFactor(p.acc);
 }
 

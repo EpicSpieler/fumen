@@ -1,6 +1,7 @@
 /* Typed wrappers around the Tauri commands, plus fumen:// URLs. */
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import type { Goal } from "./goals";
 import type {
   ApiError,
   ChartData,
@@ -72,6 +73,10 @@ export const api = {
   syncOsuScores: () => invoke<SyncSummary>("sync_osu_scores"),
   /** reads the player's scores on one difficulty (osu!'s id) from osu!; how many were new */
   syncMapScores: (beatmapId: number, modes: number[]) => invoke<number>("sync_map_scores", { beatmapId, modes }),
+  /** the player's goals, oldest first (lib/goals.ts) */
+  getGoals: () => invoke<Goal[]>("get_goals"),
+  putGoal: (goal: Goal) => invoke<void>("put_goal", { goal }),
+  deleteGoal: (id: string) => invoke<void>("delete_goal", { id }),
 };
 
 export function onScanProgress(cb: (p: ScanProgress) => void): Promise<UnlistenFn> {

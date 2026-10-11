@@ -116,6 +116,23 @@ export async function invoke<T>(cmd: string, args: Record<string, unknown> = {})
       emit("history-changed", false);
       return { added: 0, total: 567, at } as T;
     }
+    // goals live in localStorage here
+    case "get_goals":
+      return JSON.parse(localStorage.getItem("fumen-preview-goals") ?? "[]") as T;
+    case "put_goal": {
+      const goal = (args as { goal: { id: string } }).goal;
+      const all = JSON.parse(localStorage.getItem("fumen-preview-goals") ?? "[]") as { id: string }[];
+      const i = all.findIndex((g) => g.id === goal.id);
+      if (i >= 0) all[i] = goal;
+      else all.push(goal);
+      localStorage.setItem("fumen-preview-goals", JSON.stringify(all));
+      return null as T;
+    }
+    case "delete_goal": {
+      const all = JSON.parse(localStorage.getItem("fumen-preview-goals") ?? "[]") as { id: string }[];
+      localStorage.setItem("fumen-preview-goals", JSON.stringify(all.filter((g) => g.id !== (args as { id: string }).id)));
+      return null as T;
+    }
     case "sync_map_scores":
       return 0 as T;
     case "lazer_import_status": {
