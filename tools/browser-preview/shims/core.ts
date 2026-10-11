@@ -127,6 +127,14 @@ export async function invoke<T>(cmd: string, args: Record<string, unknown> = {})
       saveCols([...cols(), { id, name: a.name.trim(), created: Date.now(), maps: [...new Set(a.maps ?? lazer)], missing: 0 }]);
       return id as T;
     }
+    case "create_smart_collection": {
+      const id = Math.random().toString(16).slice(2);
+      saveCols([...cols(), { id, name: String(args.name).trim(), created: Date.now(), maps: [], missing: 0, query: String(args.query) }]);
+      return id as T;
+    }
+    case "set_collection_query":
+      saveCols(cols().map((c) => (c.id === args.id && c.query !== undefined ? { ...c, query: String(args.query) } : c)));
+      return null as T;
     case "rename_collection":
       saveCols(cols().map((c) => (c.id === args.id ? { ...c, name: String(args.name).trim() } : c)));
       return null as T;
@@ -222,7 +230,7 @@ export async function invoke<T>(cmd: string, args: Record<string, unknown> = {})
   }
 }
 
-type PreviewCollection = { id: string; name: string; created: number; maps: string[]; missing: number };
+type PreviewCollection = { id: string; name: string; created: number; maps: string[]; missing: number; query?: string };
 const cols = (): PreviewCollection[] => JSON.parse(localStorage.getItem("fumen-preview-collections") ?? "[]");
 const saveCols = (c: PreviewCollection[]) => localStorage.setItem("fumen-preview-collections", JSON.stringify(c));
 /** a lazer collection's difficulties, by library id, from the snapshot */

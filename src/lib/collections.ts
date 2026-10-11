@@ -1,9 +1,11 @@
 /* collections.ts — Fumen's own collections (lazer's come with the library snapshot and can't be
  * changed here). They hold difficulties; the backend keeps them by MD5 (src-tauri/src/collections.rs)
- * and hands back library ids, which this turns into snapshot indices. */
+ * and hands back library ids, which this turns into snapshot indices. A smart collection holds a
+ * saved search instead (the library's filters) and is whatever in the library matches it now. */
 import { api, asApiError } from "./api";
 import { mapIndexOf } from "./history";
 import { num } from "./format";
+import { DEFAULT_FILTER, filterLibrary, type FilterState, type LibIndex } from "./search";
 import { Emitter, events, store } from "./store";
 import type { FumenCollection } from "./types";
 import { toast } from "../ui/controls";
@@ -20,8 +22,40 @@ export const fumenCollections = (): FumenCollection[] => list;
 export const fumenCollection = (id: string): FumenCollection | undefined => list.find((c) => c.id === id);
 export const isFumenCollection = (id: string): boolean => list.some((c) => c.id === id);
 
+export const isSmart = (c: FumenCollection | undefined): boolean => c?.query !== undefined;
+
+/** A smart collection's filters (anything it doesn't say: the defaults). */
+export function smartFilter(c: FumenCollection): FilterState {
+  let saved: Partial<FilterState> & { srMax?: number | null } = {};
+  try {
+    saved = JSON.parse(c.query ?? "{}");
+  } catch {
+    // an unreadable search matches like an empty one
+  }
+  return { ...DEFAULT_FILTER, ...saved, srMax: saved.srMax ?? Infinity, keys: [...(saved.keys ?? [])], status: [...(saved.status ?? [])] };
+}
+
+/** what a smart collection keeps (Infinity goes into JSON as null, read back as Infinity) */
+export const filterJson = (f: FilterState): string =>
+  JSON.stringify({ text: f.text, mode: f.mode, keys: f.keys, srMin: f.srMin, srMax: f.srMax, status: f.status, played: f.played, showHidden: f.showHidden });
+
+/** smart collections' members, per library index and search */
+const smartCache = new WeakMap<LibIndex, Map<string, Set<number>>>();
+
 /** A collection's difficulties as snapshot indices (the ones in the library). */
 export function collectionMaps(c: FumenCollection): Set<number> {
+  if (isSmart(c)) {
+    const ix = store.index;
+    if (!ix) return new Set();
+    let byQuery = smartCache.get(ix);
+    if (!byQuery) smartCache.set(ix, (byQuery = new Map()));
+    let members = byQuery.get(c.query!);
+    if (!members) {
+      members = new Set(filterLibrary(ix, smartFilter(c)).sets.flatMap((r) => r.maps));
+      byQuery.set(c.query!, members);
+    }
+    return members;
+  }
   const out = new Set<number>();
   for (const id of c.maps) {
     const i = mapIndexOf(id);
@@ -59,6 +93,17 @@ export async function createCollection(name: string, mapIdxs: number[] = []): Pr
   const id = await change("make the collection", () => api.createCollection(name, idsOf(mapIdxs)));
   if (id && mapIdxs.length) toast(`Made "${name}" with ${diffs(mapIdxs.length)}`, { kind: "success" });
   return id;
+}
+
+/** Saves the library's filters as a smart collection; its id. */
+export async function createSmartCollection(name: string, filter: FilterState): Promise<string | null> {
+  return change("save the search", () => api.createSmartCollection(name, filterJson(filter)));
+}
+
+export async function updateSmartCollection(id: string, filter: FilterState): Promise<boolean> {
+  const ok = await change("save the search", () => api.setCollectionQuery(id, filterJson(filter)).then(() => true));
+  if (ok) toast(`Saved "${fumenCollection(id)?.name ?? "the collection"}"`, { kind: "success" });
+  return !!ok;
 }
 
 export async function copyLazerCollection(lazerId: string, name: string): Promise<string | null> {

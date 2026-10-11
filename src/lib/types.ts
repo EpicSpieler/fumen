@@ -94,6 +94,8 @@ export interface FumenCollection {
   created: number;
   maps: string[];
   missing: number;
+  /** a smart collection: its saved search (lib/search FilterState as JSON); `maps` is then empty */
+  query?: string;
 }
 
 export interface Snapshot {

@@ -78,6 +78,9 @@ export const api = {
   getCollections: () => invoke<FumenCollection[]>("get_collections"),
   createCollection: (name: string, maps: string[] = []) => invoke<string>("create_collection", { name, maps }),
   copyLazerCollection: (id: string, name: string) => invoke<string>("copy_lazer_collection", { id, name }),
+  /** a saved search (FilterState as JSON) as a smart collection */
+  createSmartCollection: (name: string, query: string) => invoke<string>("create_smart_collection", { name, query }),
+  setCollectionQuery: (id: string, query: string) => invoke<void>("set_collection_query", { id, query }),
   renameCollection: (id: string, name: string) => invoke<void>("rename_collection", { id, name }),
   deleteCollection: (id: string) => invoke<void>("delete_collection", { id }),
   /** how many weren't in it yet */

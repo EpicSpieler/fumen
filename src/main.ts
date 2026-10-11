@@ -29,7 +29,9 @@ import { readLinks } from "./lib/links";
 import { closeMenus, initControls, toast } from "./ui/controls";
 import { icon, injectIconSprite } from "./ui/icons";
 import { applyAppearance } from "./ui/theme";
-import { collectionEvents, collectionMaps, DRAG_TYPE, fumenCollection, fumenCollections, initCollections, addToCollection } from "./lib/collections";
+import {
+  addToCollection, collectionEvents, collectionMaps, DRAG_TYPE, fumenCollection, fumenCollections, initCollections, isSmart, smartFilter,
+} from "./lib/collections";
 import { initGoals } from "./lib/goals-store";
 import { collectionMenu, newCollection } from "./views/actions";
 import { initHistory, mapIndexOf, syncIfStale } from "./lib/history";
@@ -172,6 +174,7 @@ function ensureLibrary(): LibraryView {
       persistent: true,
       emptyHint: "Import your osu!lazer library from Settings.",
       onQuery: (q) => syncSearchFrom(library, q),
+      onSmartSaved: (id) => goSection({ name: "collection", id }),
     });
     library.el.hidden = true;
     content.appendChild(library.el);
@@ -240,9 +243,11 @@ function fumenCollectionView(id: string): LibraryView {
         const c = fumenCollection(id);
         return c?.missing ? `${num(c.missing)} not in your library` : "";
       },
-      emptyHint: "Drag sets here from the library, or right-click a beatmap › Add to collection.",
+      emptyHint: isSmart(fumenCollection(id))
+        ? "Nothing in your library matches this search right now."
+        : "Drag sets here from the library, or right-click a beatmap › Add to collection.",
       onQuery: (q) => syncSearchFrom(view, q),
-      menu: (at) => collectionMenu(at, id, { deleted: () => goSection({ name: "library" }) }),
+      menu: (at) => collectionMenu(at, id, { deleted: () => goSection({ name: "library" }), editSearch }),
       collection: id,
     });
     v = view;
@@ -251,6 +256,14 @@ function fumenCollectionView(id: string): LibraryView {
     collectionViews.set(id, v);
   }
   return v;
+}
+
+/** A smart collection's search, into the library's filters to change it. */
+function editSearch(id: string): void {
+  const c = fumenCollection(id);
+  if (!c) return;
+  goSection({ name: "library" });
+  ensureLibrary().editSmart(id, c.name, smartFilter(c));
 }
 
 collectionEvents.on("collections", () => {
@@ -336,17 +349,17 @@ function renderCollections(): void {
   const lazer = snap?.collections ?? [];
   const mine = snap ? fumenCollections() : [];
   sideBox.hidden = !snap;
-  const item = (id: string, name: string, maps: number[], fumen: boolean) => {
+  const item = (id: string, name: string, maps: number[], fumen: boolean, smart = false) => {
     // cover: the first difficulty in the collection that has a background
     const mi = maps.find((i) => snap!.maps[i].bg ?? snap!.sets[snap!.maps[i].set].bg);
     const bg = mi !== undefined ? (snap!.maps[mi].bg ?? snap!.sets[snap!.maps[mi].set].bg) : undefined;
-    return `<button class="side-item reveal" type="button" data-id="${esc(id)}"${fumen ? " data-fumen" : ""}>
+    return `<button class="side-item reveal" type="button" data-id="${esc(id)}"${fumen && !smart ? " data-fumen" : ""}${smart ? " data-smart" : ""}>
       <span class="side-cover${bg ? "" : " img-missing"}">${bg ? `<img src="${thumbUrl(bg, 160)}" alt="" loading="lazy" decoding="async" />` : icon("collection")}</span>
-      <span class="side-label">${esc(name)}</span><span class="side-count num">${num(maps.length)}</span>
+      <span class="side-label">${esc(name)}</span>${smart ? icon("sliders", "side-smart") : ""}<span class="side-count num">${num(maps.length)}</span>
     </button>`;
   };
   sideList.innerHTML = [
-    ...mine.map((c) => item(c.id, c.name, [...collectionMaps(c)], true)),
+    ...mine.map((c) => item(c.id, c.name, [...collectionMaps(c)], true, isSmart(c))),
     !mine.length ? `<div class="side-empty">Make one with + or drag a set here.</div>` : "",
     lazer.length ? `<div class="side-sub">In osu!lazer</div>` : "",
     ...lazer.map((c) => item(c.id, c.name, c.maps, false)),
@@ -363,6 +376,7 @@ sideList.addEventListener("contextmenu", (e) => {
   collectionMenu({ x: e.clientX, y: e.clientY }, b.dataset.id!, {
     deleted: () => {},
     copied: (copy) => goSection({ name: "collection", id: copy }),
+    editSearch,
   });
 });
 

@@ -239,6 +239,8 @@ body.win-maximized .win-btn .ic-restore { display: block; }
   font-weight: 600;
   color: var(--t4);
 }
+.side-smart { flex: none; width: 13px; height: 13px; color: var(--t3); }
+.side-item.active .side-smart { color: var(--accent-ink); }
 .side-empty { flex: none; padding: 4px 12px 8px; font-size: var(--fs-11); line-height: 1.45; color: var(--t3); }
 /* where a drag from the library can land */
 body.dragging-maps .side-item[data-fumen], body.dragging-maps .side-box-add { outline: 1px dashed color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: -1px; }
