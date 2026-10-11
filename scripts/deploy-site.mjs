@@ -6,7 +6,8 @@
 //   node scripts/deploy-site.mjs            deploy
 //   node scripts/deploy-site.mjs --secret   type the osu! client secret in on the server (hidden)
 //
-// SSH host: "vps" (~/.ssh/config), or VPS_HOST. sudo on the server asks for its password.
+// SSH host: "vps" (~/.ssh/config), or VPS_HOST. sudo on the server asks for its password, unless
+// VPS_SUDO_PASSWORD is set (for running without a terminal).
 import { execFileSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,7 +16,11 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const host = process.env.VPS_HOST ?? "vps";
 const dir = "fumen-web"; // in the home folder of the SSH user
 const run = (cmd, args) => execFileSync(cmd, args, { cwd: root, stdio: "inherit" });
-const remote = (script, tty = false) => run("ssh", [...(tty ? ["-t"] : []), host, script]);
+const sudoPassword = process.env.VPS_SUDO_PASSWORD;
+// sudo fed from VPS_SUDO_PASSWORD instead of a prompt
+const sudoFromEnv = `SUDO_PW=${JSON.stringify(sudoPassword ?? "")}\nsudo() { printf '%s\\n' "$SUDO_PW" | command sudo -S -p "" "$@"; }\n`;
+const withSudo = (script) => (sudoPassword ? sudoFromEnv + script : script);
+const remote = (script, tty = false) => run("ssh", [...(tty && !sudoPassword ? ["-t"] : []), host, withSudo(script)]);
 
 if (process.argv.includes("--secret")) {
   remote(`bash ~/${dir}/set-secret.sh`, true);
