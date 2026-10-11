@@ -21,6 +21,7 @@ import { player } from "../player";
 import { attachSegIndicator, createSelect, openMenu, reduceMotion, updateRange, type MenuEntry } from "../ui/controls";
 import { icon } from "../ui/icons";
 import { VirtualList } from "../ui/virtual";
+import { DRAG_TYPE } from "../lib/collections";
 import { openSet, setMenu } from "./actions";
 
 const SET_SORTS: { value: SetSort; label: string }[] = [
@@ -90,7 +91,11 @@ const STATUS_FILTERS = [
 ];
 
 export interface LibraryOptions {
-  title: string;
+  title: string | (() => string);
+  /** a "more" button next to the title (collection pages) */
+  menu?: (at: Element) => void;
+  /** Fumen collection pages: rows can be taken out of it */
+  collection?: string;
   /** collection page: only these difficulties */
   restrict?: () => Set<number> | undefined;
   subtitle?: () => string;
@@ -135,7 +140,7 @@ export class LibraryView {
     el.innerHTML = `
       <header class="lib-head">
         <div class="lib-head-text">
-          <h1 class="view-title"></h1>
+          <div class="lib-title-row"><h1 class="view-title"></h1></div>
           <div class="view-sub lib-count num"></div>
         </div>
         <div class="lib-head-tools">
@@ -162,7 +167,17 @@ export class LibraryView {
       <div class="lib-body"></div>
       <div class="empty-state lib-empty" hidden></div>`;
     this.el = el;
-    el.querySelector(".view-title")!.textContent = o.title;
+    this.renderTitle();
+    if (o.menu) {
+      const more = document.createElement("button");
+      more.className = "icon-btn lib-more";
+      more.type = "button";
+      more.dataset.tip = "Collection";
+      more.setAttribute("aria-label", "Collection actions");
+      more.innerHTML = icon("more");
+      more.addEventListener("click", () => o.menu!(more));
+      el.querySelector(".lib-title-row")!.appendChild(more);
+    }
 
     this.body = el.querySelector(".lib-body")!;
 
@@ -321,6 +336,7 @@ export class LibraryView {
         row.className = `vrow lrow lrow-set${open ? " open" : ""}`;
         row.dataset.set = String(line.r.set);
         row.tabIndex = 0;
+        row.draggable = true;
         row.setAttribute("role", "button");
         row.setAttribute("aria-expanded", String(open));
         row.innerHTML = this.setRowHtml(line.r);
@@ -329,6 +345,7 @@ export class LibraryView {
         row.dataset.set = String(line.set);
         row.dataset.map = String(line.map);
         row.tabIndex = 0;
+        row.draggable = true;
         row.setAttribute("role", "button");
         row.removeAttribute("aria-expanded");
         row.style.setProperty("--n", String(Math.min(line.n, 8)));
@@ -353,7 +370,7 @@ export class LibraryView {
       .join("");
     const more = maps.length > STRIP_MAX ? `<span class="card-more">+${maps.length - STRIP_MAX}</span>` : "";
     return `
-      <div class="card" data-set="${si}" data-map="${matched[0]}">
+      <div class="card" data-set="${si}" data-map="${matched[0]}" draggable="true">
         <div class="card-art${set.bg ? "" : " img-missing"}">
           ${art}
           ${this.keysBadge(maps)}
@@ -641,8 +658,21 @@ export class LibraryView {
       if (!item) return;
       e.preventDefault();
       const mi = item.classList.contains("lrow-map") ? +item.dataset.map! : undefined;
-      setMenu({ x: e.clientX, y: e.clientY }, +item.dataset.set!, mi, { onSearch: (q) => this.setQuery(q) });
+      setMenu({ x: e.clientX, y: e.clientY }, +item.dataset.set!, mi, { onSearch: (q) => this.setQuery(q), collection: this.o.collection });
     });
+
+    // dragging a set (its matching difficulties) or a difficulty, onto a collection in the sidebar
+    el.addEventListener("dragstart", (e) => {
+      const item = (e.target as Element).closest<HTMLElement>(".card, .lrow");
+      if (!item || !e.dataTransfer) return;
+      const si = +item.dataset.set!;
+      const maps = item.classList.contains("lrow-map") ? [+item.dataset.map!] : (this.result.sets.find((r) => r.set === si)?.maps ?? []);
+      e.dataTransfer.setData(DRAG_TYPE, JSON.stringify(maps.map((mi) => store.snap!.maps[mi].id)));
+      e.dataTransfer.setData("text/plain", displayTitle(store.snap!.sets[si], store.prefs.unicode));
+      e.dataTransfer.effectAllowed = "copy";
+      document.body.classList.add("dragging-maps");
+    });
+    el.addEventListener("dragend", () => document.body.classList.remove("dragging-maps"));
 
     // fade images in once decoded; mark failures
     this.body.addEventListener("load", (e) => (e.target as HTMLElement).classList?.add("loaded"), true);
@@ -760,6 +790,16 @@ export class LibraryView {
     [lo, hi].forEach(updateRange);
     paint();
     return wrap;
+  }
+
+  private renderTitle(): void {
+    this.el.querySelector(".view-title")!.textContent = typeof this.o.title === "function" ? this.o.title() : this.o.title;
+  }
+
+  /** The collection behind it changed: title and contents again. */
+  refresh(): void {
+    this.renderTitle();
+    this.run();
   }
 
   /** Called when the view becomes visible again. */

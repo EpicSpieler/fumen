@@ -85,6 +85,17 @@ export interface CollectionRow {
   missing: number;
 }
 
+/** One of Fumen's own collections: difficulties by the library's ids (it keeps their MD5s, so
+ * ones not in the library are kept and counted as missing). */
+export interface FumenCollection {
+  id: string;
+  name: string;
+  /** unix ms */
+  created: number;
+  maps: string[];
+  missing: number;
+}
+
 export interface Snapshot {
   source: "lazer";
   scannedAt?: number;

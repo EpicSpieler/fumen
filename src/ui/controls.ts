@@ -6,7 +6,7 @@
  *  - Select:     createSelect() — a trigger button + menu; no native <select> anywhere.
  *  - Slider:     <input type=range> gets --pct for the filled track.
  *  - Segments:   attachSegIndicator() slides a surface under the active option.
- *  - Dialogs:    uiConfirm / toast instead of confirm() / alert().
+ *  - Dialogs:    uiConfirm / uiPrompt / toast instead of confirm() / prompt() / alert().
  */
 import { icon, type IconName } from "./icons";
 
@@ -480,6 +480,68 @@ export function uiConfirm(
 }
 
 let toastHost: HTMLDivElement | null = null;
+/** Asks for a line of text (a name, say); null when cancelled. Empty input can't be confirmed. */
+export function uiPrompt(
+  message: string,
+  opts: { title?: string; value?: string; placeholder?: string; confirmLabel?: string; maxLength?: number } = {},
+): Promise<string | null> {
+  return new Promise((resolve) => {
+    const bd = document.createElement("div");
+    bd.className = "modal-backdrop dialog-backdrop";
+    bd.innerHTML = `
+      <div class="modal-panel dialog" role="dialog" aria-modal="true">
+        <div class="dialog-title"></div>
+        <div class="dialog-msg"></div>
+        <input class="dialog-input" type="text" spellcheck="false" autocomplete="off" />
+        <div class="dialog-actions">
+          <button class="btn btn-ghost" data-act="cancel">Cancel</button>
+          <button class="btn btn-primary" data-act="ok"></button>
+        </div>
+      </div>`;
+    bd.querySelector(".dialog-title")!.textContent = opts.title ?? "";
+    const msg = bd.querySelector<HTMLElement>(".dialog-msg")!;
+    msg.textContent = message;
+    msg.hidden = !message;
+    const input = bd.querySelector<HTMLInputElement>(".dialog-input")!;
+    input.value = opts.value ?? "";
+    input.placeholder = opts.placeholder ?? "";
+    input.maxLength = opts.maxLength ?? 100;
+    input.setAttribute("aria-label", opts.title ?? message);
+    const ok = bd.querySelector<HTMLButtonElement>('[data-act="ok"]')!;
+    ok.textContent = opts.confirmLabel ?? "OK";
+    const sync = () => (ok.disabled = !input.value.trim());
+    sync();
+    input.addEventListener("input", sync);
+    document.body.appendChild(bd);
+    setTimeout(() => {
+      input.focus();
+      input.select();
+    }, 30);
+    const finish = (value: string | null) => {
+      document.removeEventListener("keydown", onKey, true);
+      closeAnimated(bd);
+      resolve(value);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        finish(null);
+      } else if (e.key === "Enter" && !ok.disabled) {
+        e.preventDefault();
+        e.stopPropagation();
+        finish(input.value.trim());
+      }
+    };
+    document.addEventListener("keydown", onKey, true);
+    bd.addEventListener("pointerdown", (e) => {
+      if (e.target === bd) finish(null);
+    });
+    bd.querySelector('[data-act="cancel"]')!.addEventListener("click", () => finish(null));
+    ok.addEventListener("click", () => finish(input.value.trim()));
+  });
+}
+
 export function toast(message: string, opts: { kind?: "info" | "success" | "danger"; timeout?: number } = {}): () => void {
   const kind = opts.kind ?? "info";
   if (!toastHost) {

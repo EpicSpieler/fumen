@@ -29,8 +29,10 @@ import { readLinks } from "./lib/links";
 import { closeMenus, initControls, toast } from "./ui/controls";
 import { icon, injectIconSprite } from "./ui/icons";
 import { applyAppearance } from "./ui/theme";
+import { collectionEvents, collectionMaps, DRAG_TYPE, fumenCollection, fumenCollections, initCollections, addToCollection } from "./lib/collections";
 import { initGoals } from "./lib/goals-store";
-import { initHistory, syncIfStale } from "./lib/history";
+import { collectionMenu, newCollection } from "./views/actions";
+import { initHistory, mapIndexOf, syncIfStale } from "./lib/history";
 import { downloadText, initUpdater, installUpdate, updateEvents, type UpdateState } from "./lib/updater";
 import { HistoryView } from "./views/history";
 import { HomeView } from "./views/home";
@@ -74,9 +76,12 @@ app.innerHTML = `
     </div>
     <div class="side-sep"></div>
     <section class="side-box" data-group="collections" hidden>
-      <button class="side-box-head" type="button" aria-expanded="true">
-        ${icon("collection", "side-box-ic")}<span class="side-box-label">Collections</span>${icon("chevron-down", "side-box-chev")}
-      </button>
+      <div class="side-box-bar">
+        <button class="side-box-head" type="button" aria-expanded="true">
+          ${icon("collection", "side-box-ic")}<span class="side-box-label">Collections</span>${icon("chevron-down", "side-box-chev")}
+        </button>
+        <button class="icon-btn sm side-box-add" type="button" data-tip="New collection" aria-label="New collection">${icon("plus")}</button>
+      </div>
       <div class="side-list"></div>
     </section>
     <div class="side-foot">
@@ -193,6 +198,8 @@ function ensureSkills(): SkillsView {
 }
 
 function collectionView(id: string): LibraryView | null {
+  const mine = fumenCollection(id);
+  if (mine) return fumenCollectionView(id);
   const col = store.snap?.collections.find((c) => c.id === id);
   if (!col) return null;
   let v = collectionViews.get(id);
@@ -209,6 +216,7 @@ function collectionView(id: string): LibraryView | null {
       },
       emptyHint: "Add maps to this collection in osu!lazer.",
       onQuery: (q) => syncSearchFrom(view, q),
+      menu: (at) => collectionMenu(at, id, { copied: (copy) => goSection({ name: "collection", id: copy }) }),
     });
     v = view;
     v.el.hidden = true;
@@ -217,6 +225,47 @@ function collectionView(id: string): LibraryView | null {
   }
   return v;
 }
+
+/** One of Fumen's collections: like lazer's, plus taking maps out, renaming and deleting. */
+function fumenCollectionView(id: string): LibraryView {
+  let v = collectionViews.get(id);
+  if (!v) {
+    const view: LibraryView = new LibraryView({
+      title: () => fumenCollection(id)?.name ?? "Collection",
+      restrict: () => {
+        const c = fumenCollection(id);
+        return c ? collectionMaps(c) : new Set();
+      },
+      subtitle: () => {
+        const c = fumenCollection(id);
+        return c?.missing ? `${num(c.missing)} not in your library` : "";
+      },
+      emptyHint: "Drag sets here from the library, or right-click a beatmap › Add to collection.",
+      onQuery: (q) => syncSearchFrom(view, q),
+      menu: (at) => collectionMenu(at, id, { deleted: () => goSection({ name: "library" }) }),
+      collection: id,
+    });
+    v = view;
+    v.el.hidden = true;
+    content.appendChild(v.el);
+    collectionViews.set(id, v);
+  }
+  return v;
+}
+
+collectionEvents.on("collections", () => {
+  // pages of collections that are gone go; the others show what changed
+  for (const [id, v] of collectionViews) {
+    const lazer = store.snap?.collections.some((c) => c.id === id);
+    if (fumenCollection(id)) v.refresh();
+    else if (!lazer) {
+      if (active === v) goSection({ name: "library" });
+      v.destroy();
+      collectionViews.delete(id);
+    }
+  }
+  renderCollections();
+});
 
 function show(route: Route): void {
   closeMenus(true);
@@ -284,22 +333,71 @@ function syncNav(route: Route): void {
 
 function renderCollections(): void {
   const snap = store.snap;
-  const cols = snap?.collections ?? [];
-  sideBox.hidden = cols.length === 0;
-  sideList.innerHTML = cols
-    .map((c) => {
-      // cover: the first difficulty in the collection that has a background
-      const mi = c.maps.find((i) => snap!.maps[i].bg ?? snap!.sets[snap!.maps[i].set].bg);
-      const bg = mi !== undefined ? (snap!.maps[mi].bg ?? snap!.sets[snap!.maps[mi].set].bg) : undefined;
-      return `<button class="side-item reveal" type="button" data-id="${esc(c.id)}">
-        <span class="side-cover${bg ? "" : " img-missing"}">${bg ? `<img src="${thumbUrl(bg, 160)}" alt="" loading="lazy" decoding="async" />` : icon("collection")}</span>
-        <span class="side-label">${esc(c.name)}</span><span class="side-count num">${num(c.maps.length)}</span>
-      </button>`;
-    })
-    .join("");
+  const lazer = snap?.collections ?? [];
+  const mine = snap ? fumenCollections() : [];
+  sideBox.hidden = !snap;
+  const item = (id: string, name: string, maps: number[], fumen: boolean) => {
+    // cover: the first difficulty in the collection that has a background
+    const mi = maps.find((i) => snap!.maps[i].bg ?? snap!.sets[snap!.maps[i].set].bg);
+    const bg = mi !== undefined ? (snap!.maps[mi].bg ?? snap!.sets[snap!.maps[mi].set].bg) : undefined;
+    return `<button class="side-item reveal" type="button" data-id="${esc(id)}"${fumen ? " data-fumen" : ""}>
+      <span class="side-cover${bg ? "" : " img-missing"}">${bg ? `<img src="${thumbUrl(bg, 160)}" alt="" loading="lazy" decoding="async" />` : icon("collection")}</span>
+      <span class="side-label">${esc(name)}</span><span class="side-count num">${num(maps.length)}</span>
+    </button>`;
+  };
+  sideList.innerHTML = [
+    ...mine.map((c) => item(c.id, c.name, [...collectionMaps(c)], true)),
+    !mine.length ? `<div class="side-empty">Make one with + or drag a set here.</div>` : "",
+    lazer.length ? `<div class="side-sub">In osu!lazer</div>` : "",
+    ...lazer.map((c) => item(c.id, c.name, c.maps, false)),
+  ].join("");
   syncNav(current());
   applySidebar();
 }
+
+$(".side-box-add").addEventListener("click", () => void newCollection().then((id) => id && goSection({ name: "collection", id })));
+sideList.addEventListener("contextmenu", (e) => {
+  const b = (e.target as Element).closest<HTMLElement>(".side-item");
+  if (!b) return;
+  e.preventDefault();
+  collectionMenu({ x: e.clientX, y: e.clientY }, b.dataset.id!, {
+    deleted: () => {},
+    copied: (copy) => goSection({ name: "collection", id: copy }),
+  });
+});
+
+// drops from the library: onto one of Fumen's collections, or the box's + for a new one
+const dragIds = (e: DragEvent): string[] | null => {
+  try {
+    return JSON.parse(e.dataTransfer?.getData(DRAG_TYPE) || "null");
+  } catch {
+    return null;
+  }
+};
+const dropTarget = (e: DragEvent) => (e.target as Element).closest<HTMLElement>(".side-item[data-fumen], .side-box-add");
+sideBox.addEventListener("dragover", (e) => {
+  if (!e.dataTransfer?.types.includes(DRAG_TYPE)) return;
+  const t = dropTarget(e);
+  sideBox.querySelectorAll(".drop-over").forEach((x) => x !== t && x.classList.remove("drop-over"));
+  if (!t) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = "copy";
+  t.classList.add("drop-over");
+});
+sideBox.addEventListener("dragleave", (e) => {
+  const t = dropTarget(e);
+  if (t && !t.contains(e.relatedTarget as Node)) t.classList.remove("drop-over");
+});
+sideBox.addEventListener("drop", (e) => {
+  const t = dropTarget(e);
+  sideBox.querySelectorAll(".drop-over").forEach((x) => x.classList.remove("drop-over"));
+  const ids = dragIds(e);
+  if (!t || !ids?.length) return;
+  e.preventDefault();
+  const idx = ids.map((id) => mapIndexOf(id)).filter((i): i is number => i !== undefined);
+  if (t.classList.contains("side-box-add")) void newCollection(idx);
+  else void addToCollection(t.dataset.id!, idx);
+});
 
 app.querySelector(".nav")!.addEventListener("click", (e) => {
   if ((e.target as Element).closest("[data-act=\"import\"]")) return openImport();
@@ -714,6 +812,7 @@ async function boot(): Promise<void> {
   void syncIfStale();
   initUpdater();
   initGoals();
+  initCollections();
   document.body.classList.add("ready");
 }
 
