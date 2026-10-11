@@ -25,6 +25,7 @@ image = { version = "0.25", default-features = false, features = ["jpeg", "png",
 thiserror = "2"
 ureq = "3"
 getrandom = "0.3"
+tauri-plugin-updater = "2"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Diagnostics_ToolHelp", "Win32_System_Threading"] }

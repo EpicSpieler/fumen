@@ -129,6 +129,7 @@ export default defineConfig({
       { find: "@tauri-apps/api/app", replacement: shim("app.ts") },
       { find: "@tauri-apps/plugin-dialog", replacement: shim("dialog.ts") },
       { find: "@tauri-apps/plugin-opener", replacement: shim("opener.ts") },
+      { find: "@tauri-apps/plugin-updater", replacement: shim("updater.ts") },
     ],
   },
   plugins: [fumenFiles()],
