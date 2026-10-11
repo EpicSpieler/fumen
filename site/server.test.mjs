@@ -1,4 +1,7 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { configFromEnv, createSite } from "./server.mjs";
 
@@ -16,17 +19,25 @@ const osu = createServer(async (req, res) => {
 
 let base = "";
 let site;
+// the updates folder, with a release in it and a file beside it that mustn't come out
+const scratch = mkdtempSync(join(tmpdir(), "fumen-site-"));
+const updates = join(scratch, "updates");
+mkdirSync(updates);
+writeFileSync(join(updates, "latest.json"), JSON.stringify({ version: "0.4.0" }));
+writeFileSync(join(updates, "Fumen_0.4.0_x64-setup.exe"), "MZ installer");
+writeFileSync(join(scratch, "secret.json"), "{}");
 const listen = (server) => new Promise((r) => server.listen(0, "127.0.0.1", () => r(server.address().port)));
 
 beforeAll(async () => {
   const osuPort = await listen(osu);
-  const config = { ...configFromEnv({}), clientId: "71003", clientSecret: "s3cret", tokenUrl: `http://127.0.0.1:${osuPort}/oauth/token` };
+  const config = { ...configFromEnv({}), clientId: "71003", clientSecret: "s3cret", tokenUrl: `http://127.0.0.1:${osuPort}/oauth/token`, updatesDir: updates };
   site = createServer(createSite(config));
   base = `http://127.0.0.1:${await listen(site)}`;
 });
 afterAll(() => {
   site.close();
   osu.close();
+  rmSync(scratch, { recursive: true, force: true });
 });
 
 const post = (path, body) => fetch(base + path, { method: "POST", body: JSON.stringify(body) });
@@ -42,6 +53,27 @@ describe("site", () => {
   it("keeps to its folder", async () => {
     expect((await fetch(base + "/..%2Fserver.mjs")).status).toBe(404);
     expect((await fetch(base + "/%2e%2e/.env.example")).status).toBe(404);
+  });
+
+  it("hands out updates", async () => {
+    const latest = await fetch(base + "/updates/latest.json");
+    expect(latest.status).toBe(200);
+    expect(latest.headers.get("cache-control")).toBe("no-store");
+    expect(await latest.json()).toEqual({ version: "0.4.0" });
+    const exe = await fetch(base + "/updates/Fumen_0.4.0_x64-setup.exe");
+    expect(exe.status).toBe(200);
+    expect(exe.headers.get("content-length")).toBe("12");
+    expect(exe.headers.get("cache-control")).toContain("immutable");
+    expect(await exe.text()).toBe("MZ installer");
+    const head = await fetch(base + "/updates/latest.json", { method: "HEAD" });
+    expect(head.status).toBe(200);
+    expect(await head.text()).toBe("");
+  });
+
+  it("keeps updates to their folder", async () => {
+    for (const path of ["/updates/missing.json", "/updates/..%2Fsecret.json", "/updates/%2e%2e/secret.json", "/updates/", "/updates/.hidden.json", "/updates/notes.txt"]) {
+      expect((await fetch(base + path)).status, path).toBe(404);
+    }
   });
 
   it("sends the browser back to Fumen", async () => {

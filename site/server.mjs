@@ -9,9 +9,14 @@
 //   3. Fumen posts the code to /oauth/token; this trades it for osu!'s tokens with the secret.
 //      /oauth/refresh does the same for refresh tokens.
 //
+// It also hands out Fumen's updates: /updates/latest.json (what Tauri's updater asks for) and the
+// signed installers next to it, from the updates folder that scripts/release.mjs fills. A site
+// deploy never touches that folder.
+//
 // No dependencies (Node 20+): `node --env-file=.env server.mjs`, settings as in .env.example.
+import { createReadStream } from "node:fs";
 import { createServer } from "node:http";
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { extname, join, normalize, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -24,6 +29,9 @@ const TYPES = {
   ".woff2": "font/woff2",
   ".txt": "text/plain; charset=utf-8",
 };
+
+/** what /updates/ hands out: a plain file name, no folders */
+const UPDATE_FILE = /^[A-Za-z0-9][A-Za-z0-9._-]*\.(json|exe|sig|zip)$/;
 
 const PAGE_HEADERS = {
   "Content-Security-Policy": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
@@ -45,6 +53,7 @@ export function configFromEnv(env = process.env) {
     clientSecret: env.OSU_CLIENT_SECRET ?? "",
     tokenUrl: env.OSU_TOKEN_URL ?? "https://osu.ppy.sh/oauth/token",
     publicDir: fileURLToPath(new URL("./public/", import.meta.url)),
+    updatesDir: env.UPDATES_DIR ?? fileURLToPath(new URL("./updates/", import.meta.url)),
   };
 }
 
@@ -131,6 +140,31 @@ export function createSite(config) {
     return true;
   }
 
+  /** A file from the updates folder: latest.json fresh every time, installers (their names carry
+   * the version) cached for good. */
+  async function updateFile(res, name, head) {
+    if (!UPDATE_FILE.test(name)) return false;
+    const file = join(config.updatesDir, name);
+    let info;
+    try {
+      info = await stat(file);
+    } catch {
+      return false;
+    }
+    if (!info.isFile()) return false;
+    const json = name.endsWith(".json");
+    res.writeHead(200, {
+      "Content-Type": json ? "application/json" : "application/octet-stream",
+      "Content-Length": info.size,
+      "Cache-Control": json ? "no-store" : "public, max-age=31536000, immutable",
+      "X-Content-Type-Options": "nosniff",
+      ...(json ? {} : { "Content-Disposition": `attachment; filename="${name}"` }),
+    });
+    if (head) res.end();
+    else createReadStream(file).on("error", () => res.destroy()).pipe(res);
+    return true;
+  }
+
   return async function handle(req, res) {
     const url = new URL(req.url ?? "/", "http://site");
     const { pathname } = url;
@@ -167,6 +201,11 @@ export function createSite(config) {
         }
         if (typeof input.refresh_token !== "string" || !input.refresh_token || input.refresh_token.length > 8192) return json(res, 400, { error: "bad_request", message: "No refresh token." });
         return await osuToken(res, { grant_type: "refresh_token", refresh_token: input.refresh_token });
+      }
+
+      if ((req.method === "GET" || req.method === "HEAD") && pathname.startsWith("/updates/")) {
+        if (await updateFile(res, pathname.slice("/updates/".length), req.method === "HEAD")) return;
+        return send(res, 404, "No such update.", { "Content-Type": TYPES[".txt"] });
       }
 
       if ((req.method === "GET" || req.method === "HEAD") && (await staticFile(res, pathname, req.method === "HEAD"))) return;
