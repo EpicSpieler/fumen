@@ -64,6 +64,11 @@ is closed, only on lazer versions tested with Fumen, and with a backup of lazer'
   time played), a year of activity, recent plays by day, top plays, most played; difficulties you
   played but don't have get an "Add" button. On a set page, each difficulty shows your plays on
   it with an accuracy-over-time line
+- Skills (osu!mania): your skill per pattern (stream, jumpstream, handstream, chordjack, jacks,
+  long notes) per key mode, as a radar against 90 days ago. A play counts as the chart's star
+  rating at the rate played, at 96% accuracy along osu!'s osu!mania pp curve; a pattern's skill is
+  the share-weighted average of your five best charts with it, and every number shows the charts
+  behind it
 
 ## Adding beatmaps
 

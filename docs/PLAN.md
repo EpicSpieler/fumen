@@ -168,7 +168,13 @@ nothing), and Fumen trades the code (later the refresh token) for tokens at the 
       lazer's most frequent player). Sync at start (if older than 10 min), after login, by hand;
       per difficulty on its set page. History view (stats, activity, recent / top / most played);
       the library's best per difficulty includes osu!'s scores
-- [ ] Per-pattern skill radar, "practice next" suggestions, goals
+- [x] Skill radar (osu!mania, per key mode): the analysis' pattern shares go into the library
+      snapshot; a play is worth its chart's star rating at the rate played (Fumen's calculator for
+      rates the library has none for, cached in `rate_stars`) at 96% along osu!mania's pp curve;
+      skill = share-weighted average of the five best charts with ≥ 15% of the pattern (fewer:
+      "a guess"); now vs 90 days ago; the charts behind every number (`src/lib/skills.ts`)
+- [ ] "Practice next" suggestions
+- [ ] Goals
 
 ## Workflow
 
