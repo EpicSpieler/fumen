@@ -98,7 +98,26 @@ export async function invoke<T>(cmd: string, args: Record<string, unknown> = {})
       return undefined as T;
     case "osu_logout":
       localStorage.removeItem("fumen-preview-osu");
+      emit("history-changed", true);
       return undefined as T;
+    case "get_history": {
+      const res = await fetch("/__fumen/history");
+      const history = (await res.json()) as { syncedAt?: number };
+      // a sync in this preview moves the time on
+      const synced = Number(localStorage.getItem("fumen-preview-synced") ?? 0);
+      if (synced) history.syncedAt = synced;
+      return history as T;
+    }
+    case "sync_osu_scores": {
+      if (!localStorage.getItem("fumen-preview-osu")) throw { code: "osu-logged-out", message: "You're not logged in to osu!." };
+      await new Promise((r) => setTimeout(r, 1500));
+      const at = Date.now();
+      localStorage.setItem("fumen-preview-synced", String(at));
+      emit("history-changed", false);
+      return { added: 0, total: 567, at } as T;
+    }
+    case "sync_map_scores":
+      return 0 as T;
     case "lazer_import_status": {
       // localStorage "fumen-preview-lazer": ready (default) | running | untested
       const mode = localStorage.getItem("fumen-preview-lazer") ?? "ready";

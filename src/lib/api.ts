@@ -6,6 +6,7 @@ import type {
   ChartData,
   ChartSounds,
   DanRating,
+  History,
   ImportProgress,
   ImportSummary,
   LazerImportStatus,
@@ -16,6 +17,7 @@ import type {
   Settings,
   SkinList,
   Snapshot,
+  SyncSummary,
 } from "./types";
 
 export const isTauri = "__TAURI_INTERNALS__" in window;
@@ -60,10 +62,25 @@ export const api = {
   /** the account as osu! has it now; null when not logged in (anymore) */
   osuRefreshAccount: () => invoke<OsuAccount | null>("osu_refresh_account"),
   osuLogout: () => invoke<void>("osu_logout"),
+  /** the player's plays, local and from osu! */
+  async getHistory(): Promise<History> {
+    const raw = await invoke<ArrayBuffer | History>("get_history");
+    if (raw instanceof ArrayBuffer) return JSON.parse(new TextDecoder().decode(raw)) as History;
+    return raw;
+  },
+  /** reads the player's scores, stats and play counts from osu! */
+  syncOsuScores: () => invoke<SyncSummary>("sync_osu_scores"),
+  /** reads the player's scores on one difficulty (osu!'s id) from osu!; how many were new */
+  syncMapScores: (beatmapId: number, modes: number[]) => invoke<number>("sync_map_scores", { beatmapId, modes }),
 };
 
 export function onScanProgress(cb: (p: ScanProgress) => void): Promise<UnlistenFn> {
   return listen<ScanProgress>("scan-progress", (e) => cb(e.payload));
+}
+
+/** The plays changed (sync, login, logout); `library`: the library's best scores may have too. */
+export function onHistoryChanged(cb: (library: boolean) => void): Promise<UnlistenFn> {
+  return listen<boolean>("history-changed", (e) => cb(e.payload));
 }
 
 export function onImportProgress(cb: (p: ImportProgress) => void): Promise<UnlistenFn> {
@@ -102,3 +119,6 @@ export const builtinSkinUrl = (skin: BuiltinSkin, name: string): string => `${BA
 export const osuSetUrl = (onlineId: number): string => `https://osu.ppy.sh/beatmapsets/${onlineId}`;
 export const osuMapUrl = (setId: number, mapId: number, mode: number): string =>
   `https://osu.ppy.sh/beatmapsets/${setId}#${["osu", "taiko", "fruits", "mania"][mode] ?? "osu"}/${mapId}`;
+export const osuScoreUrl = (id: number): string => `https://osu.ppy.sh/scores/${id}`;
+/** a set's cover on osu! (list: 150×150, @2x: 300×300) */
+export const osuCoverUrl = (setId: number): string => `https://assets.ppy.sh/beatmaps/${setId}/covers/list@2x.jpg`;

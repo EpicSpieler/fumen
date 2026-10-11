@@ -25,6 +25,7 @@ import { icon } from "../ui/icons";
 import { AccentColors, drawDensity, laneTone } from "../ui/playfield";
 import { rateClick, rateControlHtml, starsAtRate, syncRateControl } from "../ui/rate";
 import { openFullscreen } from "./fullscreen";
+import { MapPlays } from "./plays";
 
 export class ChartPanel {
   readonly el: HTMLElement;
@@ -41,6 +42,7 @@ export class ChartPanel {
   private danJob = 0;
   /** the dan card's last content, kept while the next rate's dan loads */
   private danHtml = "";
+  private plays: MapPlays | null = null;
 
   constructor(
     private setIdx: number,
@@ -103,7 +105,15 @@ export class ChartPanel {
   // ── rendering ─────────────────────────────────────────────────────────
 
   private renderError(message: string): void {
-    this.el.innerHTML = `<div class="chart-error">${icon("alert")}<span>Couldn't read this chart. ${esc(message)}</span></div>`;
+    this.el.innerHTML = `<div class="chart-error">${icon("alert")}<span>Couldn't read this chart. ${esc(message)}</span></div><div class="chart-plays"></div>`;
+    this.mountPlays();
+  }
+
+  /** "Your plays" (it doesn't need the chart). */
+  private mountPlays(): void {
+    this.plays?.destroy();
+    this.plays = new MapPlays(this.mapIdx);
+    this.el.querySelector(".chart-plays")!.appendChild(this.plays.el);
   }
 
   private render(d: ChartData): void {
@@ -126,6 +136,7 @@ export class ChartPanel {
         <div class="graph-axis num"><span>0:00</span><span class="graph-hint">Notes per second${d.kiai.length ? " · kiai shaded" : ""}</span><span class="axis-end">${duration(this.total() / player.rate)}</span></div>
         <div class="chart-stats${mania ? " has-dan" : ""}">${this.statsHtml(d)}</div>
         ${mania ? this.maniaBlocks(d) : `<p class="chart-note">Pattern analysis covers osu!mania for now.</p>`}
+        <div class="chart-plays"></div>
         <div class="chart-actions">
           ${mania ? `<button class="btn btn-primary btn-sm chart-field" type="button">${icon("fullscreen")}<span>Open playfield</span></button>` : ""}
           <button class="btn btn-sm chart-play" type="button">${icon("play", "ic-play")}${icon("pause", "ic-pause")}<span>Play from here</span></button>
@@ -133,6 +144,7 @@ export class ChartPanel {
         </div>
       </div>`;
 
+    this.mountPlays();
     this.graph = this.el.querySelector(".graph-canvas");
     attachSegIndicator(this.el.querySelector(".rate-presets")!);
     this.renderRate();
@@ -383,6 +395,7 @@ export class ChartPanel {
 
   destroy(): void {
     this.dead = true;
+    this.plays?.destroy();
     cancelAnimationFrame(this.raf);
     this.resize?.disconnect();
     this.offs.forEach((f) => f());

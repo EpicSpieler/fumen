@@ -11,6 +11,7 @@ import "./styles/player.css";
 import "./styles/settings.css";
 import "./styles/welcome.css";
 import "./styles/import.css";
+import "./styles/history.css";
 
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { api, asApiError, isTauri, onAnalysis, thumbUrl } from "./lib/api";
@@ -27,6 +28,8 @@ import { readLinks } from "./lib/links";
 import { closeMenus, initControls, toast } from "./ui/controls";
 import { icon, injectIconSprite } from "./ui/icons";
 import { applyAppearance } from "./ui/theme";
+import { initHistory, syncIfStale } from "./lib/history";
+import { HistoryView } from "./views/history";
 import { HomeView } from "./views/home";
 import { LibraryView } from "./views/library";
 import { SetView } from "./views/set";
@@ -61,6 +64,7 @@ app.innerHTML = `
     <div class="nav">
       <button class="nav-item reveal" type="button" data-nav="home">${icon("home")}<span class="nav-label">Home</span></button>
       <button class="nav-item reveal" type="button" data-nav="library">${icon("library")}<span class="nav-label">Library</span></button>
+      <button class="nav-item reveal" type="button" data-nav="history">${icon("clock")}<span class="nav-label">History</span></button>
       <button class="nav-item reveal" type="button" data-act="import">${icon("download")}<span class="nav-label">Add beatmaps</span></button>
     </div>
     <div class="side-sep"></div>
@@ -104,6 +108,7 @@ const refreshBtn = $<HTMLButtonElement>(".side-refresh");
 
 let home: HomeView | null = null;
 let library: LibraryView | null = null;
+let history: HistoryView | null = null;
 const collectionViews = new Map<string, LibraryView>();
 let active: View | null = null;
 
@@ -130,6 +135,15 @@ function ensureLibrary(): LibraryView {
     content.appendChild(library.el);
   }
   return library;
+}
+
+function ensureHistory(): HistoryView {
+  if (!history) {
+    history = new HistoryView();
+    history.el.hidden = true;
+    content.appendChild(history.el);
+  }
+  return history;
 }
 
 function collectionView(id: string): LibraryView | null {
@@ -161,7 +175,7 @@ function collectionView(id: string): LibraryView | null {
 function show(route: Route): void {
   closeMenus(true);
   // persistent views just hide; ephemeral ones are destroyed
-  const persistent = new Set<View>([...(home ? [home] : []), ...(library ? [library] : []), ...collectionViews.values()]);
+  const persistent = new Set<View>([...(home ? [home] : []), ...(library ? [library] : []), ...(history ? [history] : []), ...collectionViews.values()]);
   if (active && !persistent.has(active)) active.destroy();
   for (const v of persistent) v.el.hidden = true;
 
@@ -176,6 +190,9 @@ function show(route: Route): void {
       break;
     case "library":
       view = ensureLibrary();
+      break;
+    case "history":
+      view = ensureHistory();
       break;
     case "collection":
       view = collectionView(route.id) ?? ensureLibrary();
@@ -240,7 +257,7 @@ app.querySelector(".nav")!.addEventListener("click", (e) => {
   const b = (e.target as Element).closest<HTMLElement>("[data-nav]");
   if (!b) return;
   if (!store.snap) return goSection({ name: "welcome" });
-  goSection({ name: b.dataset.nav as "home" | "library" });
+  goSection({ name: b.dataset.nav as "home" | "library" | "history" });
 });
 $(".profile-settings").addEventListener("click", () => goSection({ name: "settings" }));
 sideList.addEventListener("click", (e) => {
@@ -643,6 +660,9 @@ async function boot(): Promise<void> {
       applyFirstRunDefaults();
     });
   }
+  // the plays: kept current, and read from osu! when the last sync is old
+  initHistory();
+  void syncIfStale();
   document.body.classList.add("ready");
 }
 

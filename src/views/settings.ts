@@ -3,6 +3,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import { open } from "@tauri-apps/plugin-dialog";
 import { api, asApiError } from "../lib/api";
 import { esc, MODE_LABEL, num, relativeTime } from "../lib/format";
+import { syncHistory } from "../lib/history";
 import { describeScan, isScanning, runScan } from "../lib/scan";
 import { DEFAULT_ACCENT, events, refreshStatus, setPrefs, store } from "../lib/store";
 import type { OsuAccount } from "../lib/types";
@@ -18,12 +19,18 @@ let shown: SettingsView | null = null;
 
 const MODE_INDEX = { osu: 0, taiko: 1, fruits: 2, mania: 3 } as const;
 
-async function login(): Promise<void> {
+/** Logs in through the browser (from here or elsewhere); the scores from osu! follow. */
+export async function loginWithOsu(): Promise<void> {
+  if (waiting) return;
   waiting = true;
   shown?.renderAccount();
   try {
     account = await api.osuLogin();
+    accountKnown = true;
     toast(`Logged in as ${account.username}`, { kind: "success" });
+    void syncHistory().then((res) => {
+      if (!res.ok) toast(`Couldn't read your scores from osu!: ${res.error.message}`, { kind: "danger", timeout: 6000 });
+    });
   } catch (e) {
     const err = asApiError(e);
     if (err.code !== "login-cancelled") toast(err.message, { kind: "danger", timeout: 6000 });
@@ -192,7 +199,7 @@ export class SettingsView {
       row.innerHTML = `
         <div class="setting-text">
           <div class="setting-title">osu! account</div>
-          <div class="setting-desc">Log in to bring your osu! profile into Fumen, and later your scores from osu!. You log in on osu!'s own page; Fumen never sees your password.</div>
+          <div class="setting-desc">Log in to bring your osu! profile and scores into Fumen: pp, top plays and the plays from your other computers, in History. You log in on osu!'s own page; Fumen never sees your password.</div>
         </div>
         <button class="btn btn-primary btn-sm s-login" type="button"${accountKnown ? "" : " disabled"}>Log in with osu!</button>`;
     }
@@ -251,7 +258,7 @@ export class SettingsView {
       applyAppearance();
       return;
     }
-    if (t.closest(".s-login")) return login();
+    if (t.closest(".s-login")) return loginWithOsu();
     if (t.closest(".s-login-cancel")) return api.osuLoginCancel();
     if (t.closest(".s-logout")) {
       await api.osuLogout().catch((err) => toast(asApiError(err).message, { kind: "danger" }));

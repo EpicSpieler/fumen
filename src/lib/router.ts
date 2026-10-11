@@ -4,6 +4,7 @@ import { Emitter } from "./store";
 export type Route =
   | { name: "home" }
   | { name: "library" }
+  | { name: "history" }
   | { name: "set"; id: string; map?: string }
   | { name: "collection"; id: string }
   | { name: "settings" }
