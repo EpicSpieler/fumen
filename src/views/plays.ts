@@ -8,6 +8,7 @@ import { historyEvents, historyNow, loadHistory, modsText, playScoreTip, playsOf
 import { store } from "../lib/store";
 import type { Play } from "../lib/types";
 import { icon } from "../ui/icons";
+import { openGoalDialog } from "./goal-dialog";
 
 /** plays listed before "Show all" */
 const FEW = 5;
@@ -36,6 +37,7 @@ export class MapPlays {
         this.all = !this.all;
         return this.render();
       }
+      if (t.closest(".plays-goal")) return openGoalDialog({ kind: "chart", mapIdx: this.mapIdx });
       const link = t.closest<HTMLElement>(".mplay-web");
       if (link) void openUrl(osuScoreUrl(+link.dataset.id!));
     });
@@ -44,7 +46,7 @@ export class MapPlays {
   private render(): void {
     const map = store.snap?.maps[this.mapIdx];
     if (!map) return;
-    const head = `<div class="label-caps">Your plays</div>`;
+    const head = `<div class="label-caps">Your plays</div><button class="btn btn-ghost btn-sm plays-goal" type="button" data-tip="Set an accuracy to reach on this difficulty">${icon("flag")}<span>Set a goal</span></button>`;
     if (!historyNow()) {
       this.el.innerHTML = `<div class="plays-head">${head}</div><div class="skeleton" style="height:40px"></div>`;
       return;

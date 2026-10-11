@@ -99,6 +99,50 @@
 .skill-chart-acc { text-align: right; color: var(--t2); }
 .skill-chart-worth { text-align: right; color: var(--t1); }
 
+/* ---------- Goals ---------- */
+.goals { margin-top: 32px; }
+.goals-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.goal { display: flex; flex-direction: column; gap: 10px; padding: 12px 12px 14px 16px; outline-offset: -2px; transition: background .12s var(--ease-std); }
+.goal.is-link { cursor: pointer; }
+.goal.is-link:hover { background: color-mix(in srgb, var(--surface-1) 100%, var(--tint-hover)); }
+.goal-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.goal-ic { flex: none; width: 15px; height: 15px; color: var(--accent-ink); }
+.goal-title { flex: 1; min-width: 0; font-size: var(--fs-13); font-weight: 600; color: var(--t1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.goal-more { flex: none; margin: -4px -2px -4px 0; }
+.goal-bar { height: 6px; border-radius: 3px; background: var(--fill-mod); overflow: hidden; }
+.goal-bar > span { display: block; height: 100%; border-radius: inherit; background: var(--accent); transform: scaleX(var(--p, 0)); transform-origin: left; transition: transform .4s var(--ease-out); }
+.goal-line { display: flex; justify-content: space-between; gap: 12px; font-size: var(--fs-11); color: var(--t3); }
+.goal-to { color: var(--t2); font-weight: 600; text-align: right; }
+.goals-reached-toggle { margin: 10px 0 0 -4px; }
+.goals-reached { display: flex; flex-direction: column; margin-top: 4px; }
+.goal-done { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto auto 28px; align-items: center; column-gap: 12px; min-height: 38px; padding: 0 4px 0 8px; border-radius: var(--r-md); font-size: var(--fs-12); }
+.goal-done:hover { background: var(--tint-hover); }
+.goal-done-ic { width: 15px; height: 15px; color: var(--success); }
+.goal-done-title { color: var(--t1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.goal-done-to { color: var(--t2); }
+.goal-done-when { color: var(--t3); white-space: nowrap; }
+
+.radar .goal-mark { fill: var(--surface-1); stroke: var(--t1); stroke-width: 1.4; }
+.radar-legend > .lg-goal::before { width: 7px; height: 7px; border: 1.4px solid var(--t1); border-top-width: 1.4px; transform: rotate(45deg); }
+
+.skill-goal { align-self: flex-start; margin: 4px 0 0 4px; }
+
+/* ---------- New goal ---------- */
+.goal-dialog { width: 440px; }
+.goal-kinds { margin: 10px 0 14px; }
+.goal-kinds > button { padding: 0 12px; }
+.goal-fields { display: flex; flex-direction: column; gap: 10px; }
+.goal-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-height: 34px; }
+.goal-chart { flex: 1; min-width: 0; }
+.goal-chart .t-title { font-size: var(--fs-13); font-weight: 600; color: var(--t1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.goal-chart .t-sub { font-size: var(--fs-11); color: var(--t3); }
+.goal-target { display: flex; align-items: center; gap: 8px; }
+.goal-target-label { font-size: var(--fs-12); color: var(--t3); min-width: 48px; }
+.goal-target input { width: 110px; height: 34px; text-align: right; font-variant-numeric: tabular-nums; }
+.goal-unit { font-size: var(--fs-13); color: var(--t2); }
+.goal-now { display: flex; flex-direction: column; gap: 4px; min-height: 34px; margin-top: 12px; font-size: var(--fs-12); color: var(--t3); }
+.goal-error { color: var(--danger); }
+
 /* ---------- Practice next ---------- */
 .practice { margin-top: 32px; }
 .practice-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
