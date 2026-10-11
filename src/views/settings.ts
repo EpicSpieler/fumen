@@ -4,6 +4,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { api, asApiError } from "../lib/api";
 import { esc, MODE_LABEL, num, relativeTime } from "../lib/format";
 import { syncHistory } from "../lib/history";
+import { checkForUpdate, downloadText, installUpdate, updateEvents, updateState } from "../lib/updater";
 import { describeScan, isScanning, runScan } from "../lib/scan";
 import { DEFAULT_ACCENT, events, refreshStatus, setPrefs, store } from "../lib/store";
 import type { OsuAccount } from "../lib/types";
@@ -52,6 +53,7 @@ export class SettingsView {
     this.offs.push(
       events.on("status", () => this.renderLibrary()),
       events.on("scan", () => this.renderLibrary()),
+      updateEvents.on("change", () => this.renderUpdate()),
     );
     this.el.addEventListener("click", (e) => void this.onClick(e));
     shown = this;
@@ -146,11 +148,44 @@ export class SettingsView {
               <div class="setting-desc">Fumen reads osu!lazer's database from a private copy. Beatmaps you add go into lazer through lazer's own import, only while lazer is closed and only on lazer versions tested with Fumen.</div>
             </div>
           </div>
+          <div class="setting-row" data-row="update"></div>
         </section>
       </div>`;
     this.el.querySelectorAll<HTMLElement>(".seg-pill").forEach((s) => attachSegIndicator(s));
     this.renderLibrary();
     this.renderAccount();
+    this.renderUpdate();
+  }
+
+  private renderUpdate(): void {
+    const row = this.el.querySelector<HTMLElement>('[data-row="update"]');
+    if (!row) return;
+    const s = updateState();
+    let desc = "Fumen looks for updates when it starts and every few hours. Installing one restarts it.";
+    let control = `<button class="btn s-update-check" type="button">Check for updates</button>`;
+    if (s.phase === "checking") control = `<button class="btn" type="button" disabled>Checking…</button>`;
+    else if (s.phase === "current") desc = `You have the latest version (checked ${relativeTime(s.at)}).`;
+    else if (s.phase === "available") {
+      desc = `Fumen ${esc(s.version)} is out. Installing it restarts Fumen.`;
+      control = `<button class="btn btn-primary s-update-install" type="button">${icon("download")}<span>Update to ${esc(s.version)}</span></button>`;
+    } else if (s.phase === "downloading") {
+      desc = `Downloading Fumen ${esc(s.version)}…`;
+      control = `<button class="btn" type="button" disabled>${downloadText(s)}</button>`;
+    } else if (s.phase === "installing") {
+      desc = `Installing Fumen ${esc(s.version)}. Fumen closes for a moment and opens again.`;
+      control = `<button class="btn" type="button" disabled>Installing…</button>`;
+    } else if (s.phase === "error") {
+      desc = esc(s.message);
+      control = s.version
+        ? `<button class="btn btn-primary s-update-install" type="button">${icon("download")}<span>Try again</span></button>`
+        : `<button class="btn s-update-check" type="button">Try again</button>`;
+    }
+    row.innerHTML = `
+      <div class="setting-text">
+        <div class="setting-title">Updates</div>
+        <div class="setting-desc${s.phase === "error" ? " is-error" : ""}">${desc}</div>
+      </div>
+      ${control}`;
   }
 
   private async loadAccount(): Promise<void> {
@@ -258,6 +293,8 @@ export class SettingsView {
       applyAppearance();
       return;
     }
+    if (t.closest(".s-update-check")) return checkForUpdate(true);
+    if (t.closest(".s-update-install")) return installUpdate();
     if (t.closest(".s-login")) return loginWithOsu();
     if (t.closest(".s-login-cancel")) return api.osuLoginCancel();
     if (t.closest(".s-logout")) {
