@@ -204,6 +204,23 @@ const MIGRATIONS: &[&str] = &[
         data    TEXT NOT NULL
     );
     "#,
+    // 11 — Fumen's own collections (src/collections.rs): difficulties by MD5, like lazer's and
+    //      stable's; `query` is for saved searches later
+    r#"
+    CREATE TABLE collections (
+        id       TEXT PRIMARY KEY,
+        name     TEXT NOT NULL,
+        created  INTEGER NOT NULL,
+        position INTEGER NOT NULL,
+        query    TEXT
+    );
+    CREATE TABLE collection_items (
+        collection_id TEXT NOT NULL REFERENCES collections(id) ON DELETE CASCADE,
+        md5           TEXT NOT NULL,
+        added         INTEGER NOT NULL,
+        PRIMARY KEY (collection_id, md5)
+    );
+    "#,
 ];
 
 pub fn open(path: &Path) -> Result<Connection> {

@@ -1,6 +1,7 @@
 mod analysis;
 mod chart;
 mod charts;
+mod collections;
 mod db;
 mod downloads;
 mod error;
@@ -422,6 +423,42 @@ async fn get_history(app: AppHandle) -> Result<tauri::ipc::Response> {
 }
 
 #[tauri::command]
+fn get_collections(state: State<AppState>) -> Result<Vec<collections::Collection>> {
+    collections::list(&state.db())
+}
+
+#[tauri::command]
+fn create_collection(state: State<AppState>, name: String, maps: Vec<String>) -> Result<String> {
+    collections::create(&mut state.db(), &name, &maps)
+}
+
+/// A Fumen copy of one of lazer's collections (Fumen's can be changed).
+#[tauri::command]
+fn copy_lazer_collection(state: State<AppState>, id: String, name: String) -> Result<String> {
+    collections::copy_lazer(&mut state.db(), &id, &name)
+}
+
+#[tauri::command]
+fn rename_collection(state: State<AppState>, id: String, name: String) -> Result<()> {
+    collections::rename(&state.db(), &id, &name)
+}
+
+#[tauri::command]
+fn delete_collection(state: State<AppState>, id: String) -> Result<()> {
+    collections::delete(&state.db(), &id)
+}
+
+#[tauri::command]
+fn add_to_collection(state: State<AppState>, id: String, maps: Vec<String>) -> Result<usize> {
+    collections::add(&mut state.db(), &id, &maps)
+}
+
+#[tauri::command]
+fn remove_from_collection(state: State<AppState>, id: String, maps: Vec<String>) -> Result<usize> {
+    collections::remove(&mut state.db(), &id, &maps)
+}
+
+#[tauri::command]
 fn get_goals(state: State<AppState>) -> Result<Vec<serde_json::Value>> {
     goals::list(&state.db())
 }
@@ -775,6 +812,13 @@ pub fn run() {
             osu_account,
             osu_login,
             osu_login_cancel,
+            get_collections,
+            create_collection,
+            copy_lazer_collection,
+            rename_collection,
+            delete_collection,
+            add_to_collection,
+            remove_from_collection,
             get_goals,
             put_goal,
             delete_goal,
