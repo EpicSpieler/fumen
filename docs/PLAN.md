@@ -159,7 +159,7 @@ nothing), and Fumen trades the code (later the refresh token) for tokens at the 
 - [x] osu! API v2 login: Fumen's OAuth app (client 71003), the secret only on fumen.dertesti.dev
       (`site/`); login in Settings with profile, rank and pp; tokens renewed through the site
 - [x] fumen.dertesti.dev: "upcoming project" placeholder, systemd service on the VPS, deploy script
-- [ ] The site live (domain on Cloudflare, tunnel route, secret set)
+- [x] The site live (domain on Cloudflare, tunnel route, secret set); login checked end to end
 - [ ] Scores and play history (lazer's local scores + the API's)
 - [ ] Per-pattern skill radar, "practice next" suggestions, goals
 
