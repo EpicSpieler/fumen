@@ -30,6 +30,7 @@ import { closeMenus, initControls, toast } from "./ui/controls";
 import { icon, injectIconSprite } from "./ui/icons";
 import { applyAppearance } from "./ui/theme";
 import { initHistory, syncIfStale } from "./lib/history";
+import { downloadText, initUpdater, installUpdate, updateEvents, type UpdateState } from "./lib/updater";
 import { HistoryView } from "./views/history";
 import { HomeView } from "./views/home";
 import { SkillsView } from "./views/skills";
@@ -78,6 +79,11 @@ app.innerHTML = `
       <div class="side-list"></div>
     </section>
     <div class="side-foot">
+      <button class="side-update" type="button" hidden>
+        <span class="side-update-bar"></span>
+        ${icon("download", "side-update-ic")}
+        <span class="side-update-text"><span class="side-update-title"></span><span class="side-update-sub"></span></span>
+      </button>
       <div class="side-sep"></div>
       <div class="profile">
         <div class="avatar"><span class="avatar-initial"></span><img alt="" hidden /></div>
@@ -102,6 +108,32 @@ app.innerHTML = `
   </div>`;
 
 const $ = <T extends Element>(sel: string) => app.querySelector<T>(sel)!;
+
+// ── Update button (sidebar) ──────────────────────────────────────────────
+const sideUpdate = $<HTMLButtonElement>(".side-update");
+function renderSideUpdate(s: UpdateState): void {
+  const show = s.phase === "available" || s.phase === "downloading" || s.phase === "installing" || (s.phase === "error" && !!s.version);
+  sideUpdate.hidden = !show;
+  if (!show) return;
+  const version = "version" in s ? s.version : "";
+  const [title, sub] =
+    s.phase === "downloading"
+      ? [`Downloading ${version}`, downloadText(s)]
+      : s.phase === "installing"
+        ? [`Installing ${version}`, "Fumen restarts"]
+        : s.phase === "error"
+          ? [`Update to ${version}`, "Didn't work, try again"]
+          : [`Update to ${version}`, "Restarts Fumen"];
+  sideUpdate.querySelector(".side-update-title")!.textContent = title;
+  sideUpdate.querySelector(".side-update-sub")!.textContent = sub;
+  sideUpdate.disabled = s.phase === "downloading" || s.phase === "installing";
+  sideUpdate.classList.toggle("is-error", s.phase === "error");
+  sideUpdate.dataset.tip = s.phase === "error" ? s.message : `${title} · ${sub}`;
+  const p = s.phase === "downloading" && s.total ? s.done / s.total : s.phase === "installing" ? 1 : 0;
+  sideUpdate.style.setProperty("--p", String(p));
+}
+updateEvents.on("change", renderSideUpdate);
+sideUpdate.addEventListener("click", () => void installUpdate());
 const content = $<HTMLElement>(".content");
 const sideList = $<HTMLElement>(".side-list");
 const sideBox = $<HTMLElement>(".side-box");
@@ -679,6 +711,7 @@ async function boot(): Promise<void> {
   // the plays: kept current, and read from osu! when the last sync is old
   initHistory();
   void syncIfStale();
+  initUpdater();
   document.body.classList.add("ready");
 }
 
