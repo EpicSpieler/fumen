@@ -58,7 +58,12 @@ is closed, only on lazer versions tested with Fumen, and with a backup of lazer'
   are skipped; failed ones can be retried in one click
 - Star ratings for new osu!mania difficulties come from Fumen's calculator until lazer computes its
   own on its next start
-- Log in with osu! (Settings): your profile, rank and pp; the groundwork for scores from osu!
+- Log in with osu! (Settings): your profile, rank and pp
+- History: your plays from osu!lazer's local scores and, logged in, from osu! (other computers,
+  stable, pp, top plays, play counts): osu!'s numbers per ruleset (pp, rank over 90 days, accuracy,
+  time played), a year of activity, recent plays by day, top plays, most played; difficulties you
+  played but don't have get an "Add" button. On a set page, each difficulty shows your plays on
+  it with an accuracy-over-time line
 
 ## Adding beatmaps
 
