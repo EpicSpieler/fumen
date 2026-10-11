@@ -178,7 +178,9 @@ nothing), and Fumen trades the code (later the refresh token) for tokens at the 
       library's ratings hold to ~0.02★) that gets them there; heavy shares first, then closeness,
       new charts and 1× before replays and rates; one difficulty per set, each chart once; with
       the skill a 96% pass would give
-- [ ] Goals
+- [x] Goals: skill (pattern + key mode), chart (accuracy at a rate or faster, fair passes), osu!
+      pp/rank per ruleset; stored as JSON in `goals` (migration 10, `src/goals.rs`), measured in
+      `src/lib/goals.ts`, reached ones marked with the time and a toast (`lib/goals-store.ts`)
 
 ## Workflow
 

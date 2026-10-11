@@ -71,6 +71,9 @@ is closed, only on lazer versions tested with Fumen, and with a backup of lazer'
   behind it. "Practice next" picks charts from your library for your weakest patterns, a little
   above your skill, at 1× or at the Half Time / Double Time speed that gets them there, and shows
   what a 96% pass on each would do to the skill
+- Goals: a pattern skill to reach (shown on the radar), an accuracy on a chart at a rate, or your
+  osu! pp or rank. Each shows how far along it is, and Fumen ticks it off (with a note) once your
+  plays or the next sync get there
 
 ## Adding beatmaps
 
