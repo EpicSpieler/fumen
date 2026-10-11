@@ -73,6 +73,9 @@ export interface MapRow {
   danValue?: number;
   /** pattern category from the pattern report ("Jumpstream", "Chordjacks Tech", "… SV") */
   category?: string;
+  /** osu!mania: each pattern's share of the chart in percent, in lib/skills' PATTERNS order
+   * (stream, jumpstream, handstream, chordjack, jacks, ln) */
+  shares?: number[];
 }
 
 export interface CollectionRow {
@@ -320,6 +323,9 @@ export interface Play {
   top?: number;
   /** osu!'s score id */
   id?: number;
+  /** osu!mania at a rate the library has no star rating for: the star rating at it (Fumen's
+   * calculator) */
+  sr?: number;
 }
 
 /** A difficulty that isn't in the library, as osu! described it. */

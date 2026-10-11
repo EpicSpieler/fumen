@@ -5,6 +5,7 @@ export type Route =
   | { name: "home" }
   | { name: "library" }
   | { name: "history" }
+  | { name: "skills" }
   | { name: "set"; id: string; map?: string }
   | { name: "collection"; id: string }
   | { name: "settings" }
