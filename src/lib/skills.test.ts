@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { accFactor, bestPerChart, keyModes, playStars, skills, starsAt } from "./skills";
+import {
+  accFactor, aimFor, bestPerChart, keyModes, MORE_SUGGESTIONS, playStars, practice, rateFor, skills, starsAt, suggest, type Skill,
+} from "./skills";
 import type { MapRow, Play } from "./types";
 
 const map = (id: string, sr: number, shares: number[] | undefined, extra: Partial<MapRow> = {}): MapRow => ({
@@ -123,5 +125,111 @@ describe("skills", () => {
     expect(playStars(play("js5", 0.96, { mods: ["DT"], rate: 1.5 }), maps[0])).toBeCloseTo(7);
     // a rate the library has no rating for: the one that came with the play
     expect(playStars(play("js5", 0.96, { mods: ["HT"], rate: 0.5, sr: 2.4 }), maps[0])).toBeCloseTo(2.4);
+  });
+});
+
+describe("practice", () => {
+  /** a chart with this much jacks, in its own set */
+  const jack = (id: string, sr: number, share: number, extra: Partial<MapRow> = {}) => map(id, sr, [0, 0, 0, 0, share, 0], extra);
+  const aim = { from: 4, lo: 4.08, ideal: 4.24, hi: 4.48 };
+  const sk = (pattern: Skill["pattern"], value: number | null): Skill => ({ pattern, value, charts: value === null ? 0 : 5, top: [] });
+
+  it("aims a little above the skill, or under the weakest one for a new pattern", () => {
+    const all = [sk("stream", 5), sk("jumpstream", 4), sk("handstream", null)];
+    const a = aimFor(all[0], all)!;
+    expect(a.from).toBe(5);
+    expect(a.lo).toBeCloseTo(5.1);
+    expect(a.ideal).toBeCloseTo(5.3);
+    expect(a.hi).toBeCloseTo(5.6);
+    const first = aimFor(all[2], all)!;
+    expect(first.from).toBeNull();
+    expect(first.ideal).toBeCloseTo(4 * 0.92 * 1.06);
+    expect(aimFor(sk("ln", null), [sk("ln", null)])).toBeNull();
+  });
+
+  it("plays at 1× when that fits, else at the rate nearest the sweet spot", () => {
+    expect(rateFor(jack("a", 4.2, 40), aim)).toEqual({ rate: 1, stars: 4.2 });
+    // 5★: 3.75★ at 0.75×, 4.25★ at 0.85×, 4.5★ at 0.9× (out)
+    const slow = rateFor(jack("b", 5, 40), aim)!;
+    expect(slow.rate).toBe(0.85);
+    expect(slow.stars).toBeCloseTo(4.25);
+    // 3.5★: 4.2★ at 1.25×
+    expect(rateFor(jack("c", 3.5, 40), aim)!.rate).toBe(1.25);
+    // out of reach between 0.75× and 1.5×, or without Fumen's HT/DT ratings
+    expect(rateFor(jack("d", 8, 40), aim)).toBeNull();
+    expect(rateFor(jack("e", 2, 40), aim)).toBeNull();
+    expect(rateFor(jack("f", 5, 40, { srHt: undefined, srDt: undefined }), aim)).toBeNull();
+  });
+
+  const pool = [
+    jack("light", 4.2, 20, { set: 1 }),
+    jack("heavy", 4.2, 60, { set: 2 }),
+    jack("heavy-hd", 4.3, 55, { set: 2 }),
+    jack("slow", 5, 60, { set: 3 }),
+    jack("far", 9, 80, { set: 4 }),
+    jack("thin", 4.2, 10, { set: 5 }),
+    jack("seven", 4.2, 60, { set: 6, cs: 7 }),
+    jack("hidden", 4.2, 60, { set: 7, hidden: true }),
+  ];
+  const ids = new Map(pool.map((m, i) => [m.id, i]));
+  const index = (id: string | undefined) => (id === undefined ? undefined : ids.get(id));
+  const picks = (charts: ReturnType<typeof bestPerChart>, played?: Set<number>) =>
+    suggest(4, aim, charts, pool, 4, { played }).map((p) => p.map.id);
+
+  it("suggests charts heavy on the pattern near the sweet spot, one per set", () => {
+    // heavy beats its set's other difficulty, a rate costs a little, a thin share a lot
+    expect(picks([])).toEqual(["heavy", "slow", "light"]);
+    const [first] = suggest(4, aim, [], pool, 4);
+    expect(first).toMatchObject({ rate: 1, stars: 4.2, share: 60 });
+    expect(suggest(4, aim, [], pool, 4, { exclude: new Set([ids.get("heavy")!, ids.get("heavy-hd")!]) }).map((p) => p.map.id)).toEqual(["slow", "light"]);
+  });
+
+  it("puts charts you've played after new ones and leaves out what you've passed at the aim", () => {
+    const tried = bestPerChart([play("heavy", 0.9)], index, pool, 4);
+    expect(tried[0].stars).toBeLessThan(aim.lo);
+    // set 2 now leads with its untouched difficulty
+    expect(picks(tried)).toEqual(["heavy-hd", "slow", "light"]);
+    const twins = [jack("x", 4.2, 50, { set: 1 }), jack("y", 4.2, 50, { set: 2 })];
+    expect(suggest(4, aim, [], twins, 4, { played: new Set([0]) }).map((p) => p.map.id)).toEqual(["y", "x"]);
+    const passed = bestPerChart([play("heavy", 0.99), play("heavy-hd", 0.99)], index, pool, 4);
+    expect(picks(passed)).toEqual(["slow", "light"]);
+  });
+
+  it("says what a pass at 96% would make of the skill", () => {
+    const five = [4, 4, 4, 4, 4].map((sr, i) => jack(`done${i}`, sr, 40, { set: 10 + i }));
+    const all = [...pool, ...five];
+    const idx = new Map(all.map((m, i) => [m.id, i]));
+    const charts = bestPerChart(five.map((m) => play(m.id, 0.96)), (id) => idx.get(id!), all, 4);
+    expect(skills(charts)[4].value).toBeCloseTo(4);
+    const [heavy] = suggest(4, aim, charts, all, 4);
+    // 4.2★ at 60% in for one 4★ at 40%
+    expect(heavy.after).toBeCloseTo((4.2 * 60 + 4 * 160) / 220);
+  });
+
+  it("goes weakest first and suggests a chart once", () => {
+    //                            stream jump hand chordjack jacks ln
+    const both = map("both", 3.2, [0, 0, 0, 40, 40, 0], { set: 1 });
+    const maps = [
+      both,
+      map("cj", 4.2, [0, 0, 0, 50, 0, 0], { set: 2 }),
+      map("js", 4.7, [0, 60, 0, 0, 0, 0], { set: 3 }),
+      map("st", 5.3, [60, 0, 0, 0, 0, 0], { set: 4 }),
+      map("ln", 6.4, [0, 0, 0, 0, 0, 60], { set: 5 }),
+      map("hs", 9, [0, 0, 60, 0, 0, 0], { set: 6 }),
+    ];
+    const now = [sk("stream", 5), sk("jumpstream", 4.5), sk("handstream", null), sk("chordjack", 4), sk("jacks", 3), sk("ln", 6)];
+    // "both" reaches chordjack's aim too (4.22★ at 1.4×), but jacks comes first
+    expect(rateFor(both, aimFor(now[3], now)!)).not.toBeNull();
+    const plan = practice(now, [], maps, 4);
+    // handstream has no chart yet, but the only one in the library is out of reach: it goes last
+    expect(plan.map((p) => p.skill.pattern)).toEqual(["jacks", "chordjack", "jumpstream", "stream", "ln", "handstream"]);
+    expect(plan[5].picks).toEqual([]);
+    // and without any handstream in the library there's nothing to say about it
+    expect(practice(now, [], maps.slice(0, 5), 4).map((p) => p.skill.pattern)).not.toContain("handstream");
+    expect(plan[0].picks.map((p) => p.map.id)).toEqual(["both"]);
+    expect(plan[1].picks.map((p) => p.map.id)).toEqual(["cj"]);
+    // what isn't on screen is still free for the next pattern
+    expect(practice(now, [], maps, 4, { shown: () => 0 })[1].picks.map((p) => p.map.id)).toEqual(["cj", "both"]);
+    expect(plan[0].picks.length).toBeLessThanOrEqual(MORE_SUGGESTIONS);
   });
 });

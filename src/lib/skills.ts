@@ -6,6 +6,9 @@
  * charts with that pattern (it's at least 15% of the chart), weighted by how much of each chart
  * it is. Only passes on osu!mania charts in your library count, in one key mode at a time, and
  * not with mods that change what you play (Hold Off, Invert, Easy, Difficulty Adjust, …).
+ *
+ * Practice suggestions aim a little above a pattern's skill: charts in the library with plenty of
+ * the pattern whose star rating lands there, at 1× or at a rate that gets them there.
  */
 import type { MapRow, Play } from "./types";
 
@@ -36,16 +39,12 @@ const UNRATED = new Set(["HO", "IN", "NR", "EZ", "DS", "CO", "AT", "CN", "RX", "
 /** A chart's star rating at a rate: lazer's at 1×, Fumen's at 0.75× and 1.5×, straight lines
  * between (and beyond, along the nearest segment). Plays at other rates come with their own. */
 export function starsAt(map: Pick<MapRow, "sr" | "srHt" | "srDt">, rate: number): number {
-  if (Math.abs(rate - 1) < 1e-6) return map.sr;
-  const pts: [number, number][] = [[1, map.sr]];
-  if (map.srHt !== undefined) pts.unshift([0.75, map.srHt]);
-  if (map.srDt !== undefined) pts.push([1.5, map.srDt]);
-  if (pts.length === 1) return map.sr * rate;
+  const { sr, srHt: ht, srDt: dt } = map;
+  if (Math.abs(rate - 1) < 1e-6) return sr;
   // the segment the rate falls in, or the nearest one at either end
-  let i = 0;
-  while (i < pts.length - 2 && rate > pts[i + 1][0]) i++;
-  const [[x0, y0], [x1, y1]] = [pts[i], pts[i + 1]];
-  return Math.max(0, y0 + ((rate - x0) / (x1 - x0)) * (y1 - y0));
+  if (ht !== undefined && (rate < 1 || dt === undefined)) return Math.max(0, sr + ((rate - 1) / 0.25) * (sr - ht));
+  if (dt !== undefined) return Math.max(0, sr + ((rate - 1) / 0.5) * (dt - sr));
+  return sr * rate;
 }
 
 /** How much an accuracy is worth against REF_ACC, as a star-rating factor (osu!mania's pp curve:
@@ -111,18 +110,23 @@ export function bestPerChart(
   return [...best.values()].sort((a, b) => b.stars - a.stars);
 }
 
+type Rated = { map: MapRow; stars: number };
+
+/** Charts (best first) with pattern k. */
+const withPattern = <T extends Rated>(charts: T[], k: number): T[] => charts.filter((c) => (c.map.shares?.[k] ?? 0) >= MIN_SHARE);
+
+/** The average of the TOP charts, weighted by each one's share of pattern k; null without any. */
+function weighted(top: Rated[], k: number): number | null {
+  const weight = top.reduce((s, c) => s + c.map.shares![k], 0);
+  return weight > 0 ? top.reduce((s, c) => s + c.stars * c.map.shares![k], 0) / weight : null;
+}
+
 /** The skill per pattern from each chart's best play (see `bestPerChart`). */
 export function skills(charts: Counted[]): Skill[] {
   return PATTERNS.map((pattern, k) => {
-    const with_ = charts.filter((c) => (c.map.shares?.[k] ?? 0) >= MIN_SHARE);
+    const with_ = withPattern(charts, k);
     const top = with_.slice(0, TOP).map((c) => ({ ...c, share: c.map.shares![k] }));
-    const weight = top.reduce((s, c) => s + c.share, 0);
-    return {
-      pattern,
-      value: weight > 0 ? top.reduce((s, c) => s + c.stars * c.share, 0) / weight : null,
-      charts: with_.length,
-      top,
-    };
+    return { pattern, value: weighted(top, k), charts: with_.length, top };
   });
 }
 
@@ -136,4 +140,170 @@ export function keyModes(plays: Play[], mapIndex: (id: string | undefined) => nu
     n.set(k, (n.get(k) ?? 0) + 1);
   }
   return [...n.entries()].map(([keys, plays]) => ({ keys, plays })).sort((a, b) => b.plays - a.plays || a.keys - b.keys);
+}
+
+/* ---------- Practice next ---------- */
+
+/** Rates a suggestion may use. The library rates charts at 0.75×, 1× and 1.5×, and the lines
+ * between those hold to about 0.02★; further out they drift by tenths, so it stops there. */
+const PRACTICE_RATES = Array.from({ length: 16 }, (_, i) => (75 + i * 5) / 100);
+/** where practice aims, as factors of the skill: hard enough to move it, close enough to pass */
+const AIM = { lo: 1.02, ideal: 1.06, hi: 1.12 } as const;
+/** a pattern without charts starts this far under the weakest skill there is */
+const FIRST_AIM = 0.92;
+/** suggestions shown per pattern, and at most after "Show more" */
+export const SUGGESTIONS = 5;
+export const MORE_SUGGESTIONS = 12;
+
+export interface Aim {
+  /** the skill now; null for a pattern without charts */
+  from: number | null;
+  /** star ratings (at REF_ACC) practice aims for: the band and its sweet spot */
+  lo: number;
+  ideal: number;
+  hi: number;
+}
+
+export interface Suggestion {
+  map: MapRow;
+  mapIdx: number;
+  /** the rate to play it at */
+  rate: number;
+  /** the star rating at that rate */
+  stars: number;
+  /** the pattern's share of the chart, % */
+  share: number;
+  /** the player's best counting play on it, if any (below the aim, or it wouldn't be here) */
+  best?: Counted;
+  /** the pattern's skill after a REF_ACC pass at that rate */
+  after: number;
+}
+
+export interface Practice {
+  skill: Skill;
+  aim: Aim;
+  /** best first, up to MORE_SUGGESTIONS */
+  picks: Suggestion[];
+}
+
+/** Where practice for a pattern aims: a little above its skill, or for a pattern without charts
+ * a little under the weakest skill there is. Null when there's no skill at all. */
+export function aimFor(skill: Skill, all: Skill[]): Aim | null {
+  let base = skill.value;
+  if (base === null) {
+    const known = all.map((s) => s.value).filter((v): v is number => v !== null);
+    if (!known.length) return null;
+    base = Math.min(...known) * FIRST_AIM;
+  }
+  return { from: skill.value, lo: base * AIM.lo, ideal: base * AIM.ideal, hi: base * AIM.hi };
+}
+
+/** The rate that puts a chart nearest the aim's sweet spot, with its star rating there: 1× whenever
+ * that's within the aim. Null when no rate gets it in. */
+export function rateFor(map: MapRow, aim: Aim): { rate: number; stars: number } | null {
+  if (map.sr >= aim.lo && map.sr <= aim.hi) return { rate: 1, stars: map.sr };
+  // without Fumen's own HT/DT ratings there's only lazer's 1× to go by
+  if (map.srHt === undefined || map.srDt === undefined) return null;
+  // between 0.75× and 1.5× the rating runs along straight lines, so it stays within its three points
+  if (Math.max(map.srHt, map.sr, map.srDt) < aim.lo || Math.min(map.srHt, map.sr, map.srDt) > aim.hi) return null;
+  let pick: { rate: number; stars: number } | null = null;
+  for (const rate of PRACTICE_RATES) {
+    const stars = starsAt(map, rate);
+    if (stars < aim.lo || stars > aim.hi) continue;
+    if (!pick || Math.abs(stars - aim.ideal) < Math.abs(pick.stars - aim.ideal)) pick = { rate, stars };
+  }
+  return pick;
+}
+
+/** The charts practice draws on, per library and key mode: analysed osu!mania charts that lazer
+ * shows. Snapshots are replaced, never changed, so this holds as long as the snapshot does. */
+const pools = new WeakMap<MapRow[], Map<number, number[]>>();
+function poolOf(maps: MapRow[], keys: number): number[] {
+  let byKeys = pools.get(maps);
+  if (!byKeys) pools.set(maps, (byKeys = new Map()));
+  let pool = byKeys.get(keys);
+  if (!pool) {
+    pool = [];
+    for (let i = 0; i < maps.length; i++) {
+      const m = maps[i];
+      if (m.mode === 3 && m.shares && !m.hidden && keysOf(m) === keys) pool.push(i);
+    }
+    byKeys.set(keys, pool);
+  }
+  return pool;
+}
+
+/** Pattern k's skill once a chart with it is passed at REF_ACC at the given stars, from the
+ * charts with the pattern (best first) and the chart's best so far. */
+function skillWith(withK: Counted[], k: number, map: MapRow, stars: number, had: Counted | undefined): number {
+  const list: Rated[] = [];
+  for (const c of withK) {
+    if (list.length === TOP) break;
+    if (c !== had) list.push(c);
+  }
+  list.push({ map, stars: Math.max(stars, had?.stars ?? 0) });
+  list.sort((a, b) => b.stars - a.stars);
+  return weighted(list.slice(0, TOP), k)!;
+}
+
+/** Charts to practice pattern k on, best first: in the key mode, with at least MIN_SHARE of it, at
+ * a rate that puts them in the aim and not passed at that level yet. Charts heavy on the pattern
+ * lead, then those near the sweet spot; untouched charts and 1× go before replays and rates.
+ * One difficulty per set. */
+export function suggest(
+  k: number,
+  aim: Aim,
+  charts: Counted[],
+  maps: MapRow[],
+  keys: number,
+  opts: { played?: Set<number>; exclude?: Set<number>; limit?: number } = {},
+): Suggestion[] {
+  const bestOf = new Map(charts.map((c) => [c.mapIdx, c]));
+  const perSet = new Map<number, { pick: Omit<Suggestion, "after">; score: number }>();
+  for (const mapIdx of poolOf(maps, keys)) {
+    const map = maps[mapIdx];
+    const share = map.shares![k];
+    if (share < MIN_SHARE || opts.exclude?.has(mapIdx)) continue;
+    const best = bestOf.get(mapIdx);
+    if (best && best.stars >= aim.lo) continue;
+    const at = rateFor(map, aim);
+    if (!at) continue;
+    const score =
+      share / 100 +
+      0.5 * (1 - Math.abs(at.stars - aim.ideal) / (aim.hi - aim.lo)) -
+      (at.rate === 1 ? 0 : 0.1 + Math.abs(at.rate - 1) / 2) -
+      (best ? 0.15 : opts.played?.has(mapIdx) ? 0.05 : 0);
+    const had = perSet.get(map.set);
+    if (!had || score > had.score) perSet.set(map.set, { pick: { map, mapIdx, ...at, share, best }, score });
+  }
+  const withK = withPattern(charts, k);
+  return [...perSet.values()]
+    .sort((a, b) => b.score - a.score)
+    .slice(0, opts.limit ?? SUGGESTIONS)
+    .map(({ pick }) => ({ ...pick, after: skillWith(withK, k, pick.map, pick.stars, pick.best) }));
+}
+
+/** Practice for every pattern the library has charts for, weakest first (patterns without a chart
+ * of yours before all), those with nothing in reach last. A chart is suggested once: to the first
+ * pattern that shows it, where `shown` says how many of a pattern's picks are on screen. */
+export function practice(
+  now: Skill[],
+  charts: Counted[],
+  maps: MapRow[],
+  keys: number,
+  opts: { played?: Set<number>; shown?: (p: SkillPattern) => number } = {},
+): Practice[] {
+  const pool = poolOf(maps, keys);
+  const order = now.map((skill, k) => ({ skill, k })).filter(({ k }) => pool.some((i) => maps[i].shares![k] >= MIN_SHARE));
+  order.sort((a, b) => (a.skill.value ?? -1) - (b.skill.value ?? -1));
+  const exclude = new Set<number>();
+  const out: Practice[] = [];
+  for (const { skill, k } of order) {
+    const aim = aimFor(skill, now);
+    if (!aim) continue;
+    const picks = suggest(k, aim, charts, maps, keys, { played: opts.played, exclude, limit: MORE_SUGGESTIONS });
+    picks.slice(0, opts.shown?.(skill.pattern) ?? SUGGESTIONS).forEach((p) => exclude.add(p.mapIdx));
+    out.push({ skill, aim, picks });
+  }
+  return out.sort((a, b) => Number(!a.picks.length) - Number(!b.picks.length));
 }
