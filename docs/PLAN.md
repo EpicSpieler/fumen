@@ -173,7 +173,11 @@ nothing), and Fumen trades the code (later the refresh token) for tokens at the 
       rates the library has none for, cached in `rate_stars`) at 96% along osu!mania's pp curve;
       skill = share-weighted average of the five best charts with ≥ 15% of the pattern (fewer:
       "a guess"); now vs 90 days ago; the charts behind every number (`src/lib/skills.ts`)
-- [ ] "Practice next" suggestions
+- [x] "Practice next": per pattern, weakest first, charts in the library with ≥ 15% of it whose
+      star rating lands 2–12% above the skill, at 1× or at the rate (0.75×–1.5×, where the
+      library's ratings hold to ~0.02★) that gets them there; heavy shares first, then closeness,
+      new charts and 1× before replays and rates; one difficulty per set, each chart once; with
+      the skill a 96% pass would give
 - [ ] Goals
 
 ## Workflow
