@@ -23,6 +23,7 @@ export interface SetRow {
   maps: number[];
 }
 
+/** The player's best on a difficulty (passes, local and from osu!) and how often they played it. */
 export interface BestScore {
   /** lazer ScoreRank: -1 F, 0 D, 1 C, 2 B, 3 A, 4 S, 5 SH, 6 X, 7 XH */
   rank: number;
@@ -286,6 +287,91 @@ export interface OsuAccount {
   rank: number | null;
   countryRank: number | null;
   pp: number | null;
+}
+
+/** One play: lazer's local score, osu!'s, or both (src-tauri/src/osu_scores.rs). */
+export interface Play {
+  /** the library difficulty */
+  map?: string;
+  /** not in the library: index into History.beatmaps */
+  beatmap?: number;
+  /** osu!'s difficulty id, when osu! knows the play */
+  beatmapId?: number;
+  /** 0 osu, 1 taiko, 2 catch, 3 mania, -1 custom */
+  mode: number;
+  ruleset?: string;
+  /** unix ms */
+  date: number;
+  /** lazer ScoreRank */
+  rank: number;
+  acc: number;
+  score: number;
+  pp?: number;
+  combo: number;
+  mods?: string[];
+  /** playback rate from the mods, when not 1× */
+  rate?: number;
+  /** judgement counts above zero: perfect, great, good, ok, meh, miss, large_tick_hit, … */
+  hits?: Record<string, number>;
+  failed?: boolean;
+  /** "lazer": only on this computer · "osu": only on osu! · "both" */
+  source: "lazer" | "osu" | "both";
+  /** position in osu!'s top plays for its ruleset */
+  top?: number;
+  /** osu!'s score id */
+  id?: number;
+}
+
+/** A difficulty that isn't in the library, as osu! described it. */
+export interface OnlineMap {
+  id: number;
+  setId?: number;
+  mode: number;
+  version: string;
+  sr: number;
+  /** ms */
+  length: number;
+  title: string;
+  titleUnicode?: string;
+  artist: string;
+  artistUnicode?: string;
+  creator: string;
+}
+
+/** osu!'s numbers for one ruleset. */
+export interface OsuModeStats {
+  pp: number | null;
+  rank: number | null;
+  countryRank: number | null;
+  /** 0–1 */
+  accuracy: number | null;
+  playCount: number | null;
+  /** seconds */
+  playTime: number | null;
+  maxCombo: number | null;
+  grades: { ss: number; ssh: number; s: number; sh: number; a: number } | null;
+  /** global rank over the last 90 days, oldest first (0: unranked that day) */
+  rankHistory: number[] | null;
+}
+
+export interface History {
+  /** whose plays these are */
+  player?: { id?: number; name?: string };
+  /** last sync with osu! (unix ms) */
+  syncedAt?: number;
+  /** newest first */
+  plays: Play[];
+  /** osu!'s most played difficulties (its top 100) */
+  mostPlayed: { map?: string; beatmap?: number; beatmapId: number; count: number }[];
+  /** by ruleset name: "osu", "taiko", "fruits", "mania" */
+  stats: Partial<Record<"osu" | "taiko" | "fruits" | "mania", OsuModeStats>>;
+  beatmaps: OnlineMap[];
+}
+
+export interface SyncSummary {
+  added: number;
+  total: number;
+  at: number;
 }
 
 /** Whether sets can go into osu!lazer right now (see src-tauri/src/lazer_import.rs). */

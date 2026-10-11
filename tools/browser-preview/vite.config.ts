@@ -8,6 +8,8 @@
  * .cache/charts/<map id>.json, written by the `preview_charts` test in src-tauri/src/charts.rs.
  * Skins: .cache/skins.json ({ skins: [{ id, name, creator, kind, protected, files }], selected }) and
  * lazer's built-in textures and hit sounds in .cache/lazer-skins/<skin>/ (`fumen-realm skin-resources`).
+ * Plays: .cache/history.json (the `real_library` test in src-tauri/src/osu_scores.rs with
+ * FUMEN_HISTORY_OUT); without it the preview has none.
  * Files are read straight from osu!lazer's store. Thumbnails are the full images (no resizing).
  */
 import { createReadStream, existsSync, readdirSync, readFileSync, statSync } from "node:fs";
@@ -42,6 +44,12 @@ function fumenFiles(): Plugin {
             return res.end("no snapshot; see tools/browser-preview/vite.config.ts");
           }
           res.setHeader("Content-Type", "application/json");
+          return createReadStream(p).pipe(res);
+        }
+        if (url === "/__fumen/history") {
+          const p = join(here, ".cache", "history.json");
+          res.setHeader("Content-Type", "application/json");
+          if (!existsSync(p)) return res.end(JSON.stringify({ plays: [], mostPlayed: [], stats: {}, beatmaps: [] }));
           return createReadStream(p).pipe(res);
         }
         if (url === "/__fumen/skins") {
