@@ -42,6 +42,7 @@ fumen/
 ├─ sidecar/FumenRealm/  .NET 8 + Realm 20.1 — exports lazer's client.realm to JSON
 ├─ sidecar/FumenImport/ .NET — runs lazer's BeatmapImporter on lazer's own runtime
 ├─ lazer-compat.json    lazer versions the import is tested with
+├─ site/                fumen.dertesti.dev — homepage + the osu! login's server half (Node, no deps)
 └─ docs/
 ```
 
@@ -59,6 +60,13 @@ copied and nothing is pinned to a version. Guards: lazer closed (process check),
 `lazer-compat.json` (built-in copy + the one on GitHub), database schema exactly lazer's (lazer's
 `RealmAccess` would migrate an older file without a backup and replace a newer one), backup of
 `client.realm`. `npm run verify-lazer` tests a new lazer version end to end and lists it.
+
+**osu! login.** osu!'s OAuth needs the client secret to issue tokens and has no flow for apps that
+can't keep one, so the secret lives only on the site (`.env` on the VPS). Fumen listens on
+127.0.0.1, opens osu!'s login with the site's `/oauth/callback` as the way back and
+`<port>-<nonce>` as the state; the site forwards the browser to Fumen with the code (storing
+nothing), and Fumen trades the code (later the refresh token) for tokens at the site's
+`/oauth/token` / `/oauth/refresh`.
 
 **Files.** lazer stores files content-addressed (`files/a/ab/<sha256>`). The realm gives
 `Filename → Hash` per set, so backgrounds and audio are resolved to paths and served through
@@ -148,7 +156,10 @@ copied and nothing is pinned to a version. Guards: lazer closed (process check),
       fresh-library import twice, import into a copy of the real library: +1 set, all else identical,
       every file's hash checked)
 - [x] 1× star rating from Fumen's calculator for difficulties lazer hasn't rated yet
-- [ ] osu! API v2 login (Fumen's own OAuth app; client ID/secret injected at build time, never in git)
+- [x] osu! API v2 login: Fumen's OAuth app (client 71003), the secret only on fumen.dertesti.dev
+      (`site/`); login in Settings with profile, rank and pp; tokens renewed through the site
+- [x] fumen.dertesti.dev: "upcoming project" placeholder, systemd service on the VPS, deploy script
+- [ ] The site live (domain on Cloudflare, tunnel route, secret set)
 - [ ] Scores and play history (lazer's local scores + the API's)
 - [ ] Per-pattern skill radar, "practice next" suggestions, goals
 
@@ -158,6 +169,7 @@ copied and nothing is pinned to a version. Guards: lazer closed (process check),
 - CI (GitHub Actions): frontend (typecheck, UI tests, build) and backend (windows-latest: helpers
   build, `cargo clippy`, Rust tests), each only when its side changes.
 - After a lazer update: `npm run verify-lazer -- --push` with lazer closed.
+- Site changes: `node scripts/deploy-site.mjs` (the VPS's `.env` holds the osu! secret, never git).
 - Releases later via `tauri-action` with the updater.
 
 ## Risks

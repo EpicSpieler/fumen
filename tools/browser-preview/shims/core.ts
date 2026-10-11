@@ -13,6 +13,7 @@ function settings(): Record<string, unknown> {
 
 const install = { path: "C:\\Users\\you\\AppData\\Roaming\\osu", storage: "C:\\Users\\you\\AppData\\Roaming\\osu", realmSize: 31457280, realmModified: Date.now() - 86_400_000 };
 let scanned = localStorage.getItem("fumen-preview-scanned") !== "0";
+let previewLoginCancelled = false;
 
 export async function invoke<T>(cmd: string, args: Record<string, unknown> = {}): Promise<T> {
   switch (cmd) {
@@ -81,6 +82,23 @@ export async function invoke<T>(cmd: string, args: Record<string, unknown> = {})
       localStorage.setItem("fumen-preview-scanned", "1");
       return { sets: 4505, maps: 21756, scores: 1430, collections: 5 } as T;
     }
+    case "osu_account":
+    case "osu_refresh_account":
+      return JSON.parse(localStorage.getItem("fumen-preview-osu") ?? "null") as T;
+    case "osu_login": {
+      previewLoginCancelled = false;
+      for (let i = 0; i < 25 && !previewLoginCancelled; i++) await new Promise((r) => setTimeout(r, 100));
+      if (previewLoginCancelled) throw { code: "login-cancelled", message: "The login was cancelled." };
+      const account = { id: 2, username: "Preview Player", avatar: null, country: "DE", mode: "mania", rank: 12345, countryRank: 678, pp: 7890.4 };
+      localStorage.setItem("fumen-preview-osu", JSON.stringify(account));
+      return account as T;
+    }
+    case "osu_login_cancel":
+      previewLoginCancelled = true;
+      return undefined as T;
+    case "osu_logout":
+      localStorage.removeItem("fumen-preview-osu");
+      return undefined as T;
     case "lazer_import_status": {
       // localStorage "fumen-preview-lazer": ready (default) | running | untested
       const mode = localStorage.getItem("fumen-preview-lazer") ?? "ready";

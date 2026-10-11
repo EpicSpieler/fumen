@@ -58,6 +58,7 @@ is closed, only on lazer versions tested with Fumen, and with a backup of lazer'
   are skipped; failed ones can be retried in one click
 - Star ratings for new osu!mania difficulties come from Fumen's calculator until lazer computes its
   own on its next start
+- Log in with osu! (Settings): your profile, rank and pp; the groundwork for scores from osu!
 
 ## Adding beatmaps
 
@@ -76,6 +77,20 @@ Testing a new lazer version (lazer closed): `npm run verify-lazer -- --push`. It
 guard, imports a test set into a fresh library and into a copy of yours (exactly one set more,
 nothing else changed, every file intact), and on success lists the version and pushes the file.
 
+## osu! login and the site
+
+osu!'s login hands out tokens only for an app's client secret, and a desktop app can't keep one.
+So the secret lives on Fumen's site (`site/`, served at https://fumen.dertesti.dev, which is also
+Fumen's homepage) and nowhere else, not in the app and not in this repository. Fumen opens osu!'s
+login page in the browser; osu! sends the browser to the site, the site hands the code on to Fumen
+(listening on 127.0.0.1), and Fumen trades it for tokens at the site. The tokens stay in Fumen's
+data folder (`osu-account.json`).
+
+The site is one dependency-free Node file (`site/server.mjs`, Node 20+) running as the systemd
+service `fumen-web` on the VPS, reached through the Cloudflare tunnel. `node scripts/deploy-site.mjs`
+deploys it; `node scripts/deploy-site.mjs --secret` types the osu! client secret into the server's
+`.env` (hidden).
+
 ## Development
 
 Requirements: Node 22+, Rust (stable), .NET 8 SDK, Windows (WebView2).
@@ -90,6 +105,7 @@ Other scripts:
 | Script | What it does |
 |---|---|
 | `npm run sidecar` | rebuild the .NET helpers: `fumen-realm` (lazer database reader) and `fumen-import` (lazer importer) |
+| `node scripts/deploy-site.mjs` | deploy the site to the VPS (`--secret`: set the osu! client secret there) |
 | `npm run verify-lazer` | test the import with the installed lazer and list its version (`--check`: only test, `--push`: commit and push) |
 | `npm run typecheck` | TypeScript checks |
 | `npm test` | UI and Rust unit tests |
@@ -104,6 +120,7 @@ src-tauri/        Rust backend: SQLite cache, import, .osu parser + chart analys
 sidecar/          fumen-realm: reads lazer's client.realm (Realm .NET, dynamic + read-only)
                   fumen-import: imports sets with lazer's own code
 lazer-compat.json lazer versions the import is tested with
+site/             fumen.dertesti.dev: the homepage and the osu! login's server half
 tools/            browser preview, CDP helper
 docs/PLAN.md      roadmap
 ```

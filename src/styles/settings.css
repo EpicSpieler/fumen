@@ -48,3 +48,21 @@
 }
 .swatch:hover { transform: scale(1.12); }
 .swatch.active { box-shadow: 0 0 0 2px var(--bg-base), 0 0 0 4px var(--c); }
+
+/* osu! account */
+.account { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.account-avatar {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--fill-mod);
+  font-size: var(--fs-14);
+  font-weight: 700;
+  color: var(--t2);
+}
+.account-avatar img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }

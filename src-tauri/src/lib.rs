@@ -8,6 +8,7 @@ mod hitsounds;
 mod lazer;
 mod lazer_import;
 mod mma;
+mod osu_auth;
 mod library;
 mod paths;
 mod protocol;
@@ -44,6 +45,9 @@ pub struct AppState {
     analysing: AtomicBool,
     /// another analysis pass was requested while one was running
     analyse_again: AtomicBool,
+    /// an osu! login is waiting for the browser, and whether to stop waiting
+    logging_in: AtomicBool,
+    login_cancel: AtomicBool,
 }
 
 impl AppState {
@@ -318,6 +322,74 @@ async fn get_hitsounds(app: AppHandle, id: String) -> Result<hitsounds::Sounds> 
     .map_err(|e| Error::known("internal", e.to_string()))?
 }
 
+// ── osu! account ────────────────────────────────────────────────────────────
+
+/// The logged-in osu! account as last seen, without asking osu!.
+#[tauri::command]
+fn osu_account(state: State<'_, AppState>) -> Option<osu_auth::Account> {
+    osu_auth::account(&state.data_dir)
+}
+
+/// Logs in through the browser (see `osu_auth.rs`); resolves once the browser is back.
+#[tauri::command]
+async fn osu_login(app: AppHandle) -> Result<osu_auth::Account> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri_plugin_opener::OpenerExt;
+        let state = app.state::<AppState>();
+        if state.logging_in.swap(true, Ordering::SeqCst) {
+            return Err(Error::known("busy", "A login is already waiting for your browser."));
+        }
+        state.login_cancel.store(false, Ordering::SeqCst);
+        let result = osu_auth::login(&state.data_dir, &osu_auth::Endpoints::default(), &state.login_cancel, |url| {
+            app.opener()
+                .open_url(url, None::<&str>)
+                .map_err(|e| Error::known("open-failed", format!("The browser didn't open: {e}")))
+        });
+        state.logging_in.store(false, Ordering::SeqCst);
+        result
+    })
+    .await
+    .map_err(|e| Error::known("internal", e.to_string()))?
+}
+
+/// Stops waiting for the browser.
+#[tauri::command]
+fn osu_login_cancel(state: State<'_, AppState>) {
+    state.login_cancel.store(true, Ordering::SeqCst);
+}
+
+/// The account as osu! has it now; None when not logged in (anymore). Offline, it's the one
+/// last seen.
+#[tauri::command]
+async fn osu_refresh_account(app: AppHandle) -> Result<Option<osu_auth::Account>> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let dir = app.state::<AppState>().data_dir.clone();
+        if osu_auth::account(&dir).is_none() {
+            return Ok(None);
+        }
+        match osu_auth::refresh_account(&dir, &osu_auth::Endpoints::default()) {
+            Ok(account) => Ok(Some(account)),
+            Err(e) if e.code() == "osu-logged-out" => Ok(None),
+            Err(e) => {
+                eprintln!("[osu] account update: {e}");
+                Ok(osu_auth::account(&dir))
+            }
+        }
+    })
+    .await
+    .map_err(|e| Error::known("internal", e.to_string()))?
+}
+
+#[tauri::command]
+async fn osu_logout(app: AppHandle) -> Result<()> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let dir = app.state::<AppState>().data_dir.clone();
+        osu_auth::logout(&dir, &osu_auth::Endpoints::default())
+    })
+    .await
+    .map_err(|e| Error::known("internal", e.to_string()))?
+}
+
 // ── Import into lazer ───────────────────────────────────────────────────────
 
 /// Whether beatmap sets can be imported into lazer right now, and why not.
@@ -575,6 +647,8 @@ pub fn run() {
                 scanning: AtomicBool::new(false),
                 analysing: AtomicBool::new(false),
                 analyse_again: AtomicBool::new(false),
+                logging_in: AtomicBool::new(false),
+                login_cancel: AtomicBool::new(false),
             };
             state.refresh_storage();
             app.manage(state);
@@ -596,6 +670,11 @@ pub fn run() {
             get_skin_files,
             lazer_import_status,
             import_beatmaps,
+            osu_account,
+            osu_login,
+            osu_login_cancel,
+            osu_refresh_account,
+            osu_logout,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Fumen");
