@@ -153,7 +153,10 @@ nothing), and Fumen trades the code (later the refresh token) for tokens at the 
       not in the library kept and counted), resolved to library ids for the UI; make / rename /
       delete, add and take out from row menus, drag & drop from the library onto the sidebar (or its
       + for a new one); lazer's collections read-only below them, copyable into Fumen
-- [ ] Smart collections (saved searches and filters)
+- [x] Smart collections: the library's filters (text query, ruleset, keys, stars, status, played,
+      hidden) saved as JSON in `collections.query`; members computed in the UI with the library
+      search (cached per snapshot), so they follow every import; can't take maps by hand; Edit
+      search loads them into the library with Save search / Done
 - [ ] Export: into lazer (lazer closed, tested versions, backup first) and to `collection.db`
 - [ ] stable as a source (`osu!.db` + Songs)
 

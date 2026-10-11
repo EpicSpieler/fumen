@@ -18,6 +18,9 @@ is closed, only on lazer versions tested with Fumen, and with a backup of lazer'
   right-click › Add to collection; rename, delete, take maps out. lazer's collections show below
   and can be copied into Fumen to change them. They hold difficulties by their MD5, like lazer's
   and stable's, so nothing is lost on a rescan and they can go into either game later
+- Smart collections: any search or filter in the library can be saved as one (Save as smart
+  collection); it fills itself with whatever matches, after every import too. Edit search puts it
+  back in the library to change and save
 - Cover grid and a list of beatmap sets that open to show their difficulties, both virtualised
   (stays smooth at 20k+ difficulties)
 - osu!-style search: `keys=7 sr>4.5 status=ranked creator=… length<2:30 grade>=A played=no`
