@@ -14,6 +14,10 @@ is closed, only on lazer versions tested with Fumen, and with a backup of lazer'
 ## Features
 
 - Imports the osu!lazer library: sets, difficulties, local scores and collections
+- Your own collections: make them with + in the sidebar, drag sets or difficulties onto them, or
+  right-click › Add to collection; rename, delete, take maps out. lazer's collections show below
+  and can be copied into Fumen to change them. They hold difficulties by their MD5, like lazer's
+  and stable's, so nothing is lost on a rescan and they can go into either game later
 - Cover grid and a list of beatmap sets that open to show their difficulties, both virtualised
   (stays smooth at 20k+ difficulties)
 - osu!-style search: `keys=7 sr>4.5 status=ranked creator=… length<2:30 grade>=A played=no`
