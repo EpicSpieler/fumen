@@ -255,13 +255,29 @@ fn agent() -> ureq::Agent {
         .into()
 }
 
+/// A request that didn't get through, in words: a name that can't be looked up is usually the
+/// network's DNS (or no internet), not the server.
+fn unreachable(code: &'static str, who: &str, url: &str, e: &ureq::Error) -> Error {
+    let text = e.to_string();
+    let host = url.split("://").nth(1).unwrap_or(url).split('/').next().unwrap_or(url);
+    let lookup = text.contains("11001") || text.contains("No such host") || text.contains("failed to lookup") || text.contains("Name or service not known");
+    Error::known(
+        code,
+        if lookup {
+            format!("Your network couldn't find {host}. Check the internet connection, or try again in a few minutes.")
+        } else {
+            format!("{who} didn't answer ({text}).")
+        },
+    )
+}
+
 /// The site's /oauth/token or /oauth/refresh.
 fn token_request(ep: &Endpoints, kind: &str, body: &serde_json::Value) -> Result<Tokens> {
     let mut res = agent()
         .post(&format!("{}/oauth/{kind}", ep.site))
         .header("Content-Type", "application/json")
         .send(body.to_string())
-        .map_err(|e| Error::known("login-failed", format!("Fumen's login server didn't answer ({e}).")))?;
+        .map_err(|e| unreachable("login-failed", "Fumen's login server", &ep.site, &e))?;
     let status = res.status().as_u16();
     let data: serde_json::Value = res.body_mut().read_to_string().ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default();
     let text = |k: &str| data.get(k).and_then(|v| v.as_str()).map(str::to_string);
@@ -303,7 +319,7 @@ fn fetch_account(ep: &Endpoints, access: &str) -> Result<Account> {
         .header("Authorization", &format!("Bearer {access}"))
         .header("Accept", "application/json")
         .call()
-        .map_err(|e| Error::known("osu-unreachable", format!("osu! didn't answer ({e}).")))?;
+        .map_err(|e| unreachable("osu-unreachable", "osu!", &ep.osu, &e))?;
     match res.status().as_u16() {
         200 => {}
         401 => return Err(Error::known("osu-logged-out", "Your osu! login has run out. Log in again.")),
@@ -571,6 +587,13 @@ mod tests {
             c.store(true, Ordering::SeqCst);
         });
         assert_eq!(login(&dir, &ep, &cancel, |_| Ok(())).unwrap_err().code(), "login-cancelled");
+    }
+
+    #[test]
+    fn unknown_host_in_words() {
+        let ep = Endpoints { site: "https://no-such-host.invalid".into(), osu: "https://no-such-host.invalid".into() };
+        let e = token_request(&ep, "token", &serde_json::json!({ "code": "x" })).unwrap_err();
+        assert_eq!(e.to_string(), "Your network couldn't find no-such-host.invalid. Check the internet connection, or try again in a few minutes.");
     }
 
     #[test]
