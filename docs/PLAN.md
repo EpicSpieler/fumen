@@ -36,6 +36,7 @@ fumen/
 │  ├─ src/db.rs, library.rs   SQLite cache (rusqlite) and the library snapshot
 │  ├─ src/lazer.rs      lazer import (via fumen-realm)
 │  ├─ src/lazer_import.rs, downloads.rs   sets into lazer (via fumen-import), mirror downloads
+│  ├─ src/osu_auth.rs, osu_scores.rs   osu! login (through site/), osu!'s scores merged with lazer's
 │  ├─ src/chart.rs, charts.rs, analysis.rs, stars.rs, mma/   .osu parser and chart analysis
 │  ├─ src/protocol.rs   fumen:// scheme: serves osu! files by hash, with Range support
 │  └─ binaries/         built helpers (fumen-realm sidecar, fumen-import)
@@ -160,7 +161,13 @@ nothing), and Fumen trades the code (later the refresh token) for tokens at the 
       (`site/`); login in Settings with profile, rank and pp; tokens renewed through the site
 - [x] fumen.dertesti.dev: "upcoming project" placeholder, systemd service on the VPS, deploy script
 - [x] The site live (domain on Cloudflare, tunnel route, secret set); login checked end to end
-- [ ] Scores and play history (lazer's local scores + the API's)
+- [x] Scores and play history: osu!'s top plays (200 per ruleset), recent plays (24 h, fails too),
+      per-ruleset stats and most played into their own tables (`osu_scores.rs`, a library rescan
+      never touches them); merged with lazer's local scores (same online id; stable scores by
+      difficulty, time and accuracy); only the player's own scores (the logged-in account, else
+      lazer's most frequent player). Sync at start (if older than 10 min), after login, by hand;
+      per difficulty on its set page. History view (stats, activity, recent / top / most played);
+      the library's best per difficulty includes osu!'s scores
 - [ ] Per-pattern skill radar, "practice next" suggestions, goals
 
 ## Workflow
