@@ -11,6 +11,7 @@ import type {
   LazerImportStatus,
   LazerInstall,
   LibraryStatus,
+  OsuAccount,
   ScanProgress,
   Settings,
   SkinList,
@@ -51,6 +52,14 @@ export const api = {
   lazerImportStatus: () => invoke<LazerImportStatus>("lazer_import_status"),
   /** downloads the sets behind osu! links and imports them into lazer (progress: onImportProgress) */
   importBeatmaps: (links: string[]) => invoke<ImportSummary>("import_beatmaps", { links }),
+  /** the osu! account as last seen (no network) */
+  osuAccount: () => invoke<OsuAccount | null>("osu_account"),
+  /** logs in through the browser; resolves once it's back */
+  osuLogin: () => invoke<OsuAccount>("osu_login"),
+  osuLoginCancel: () => invoke<void>("osu_login_cancel"),
+  /** the account as osu! has it now; null when not logged in (anymore) */
+  osuRefreshAccount: () => invoke<OsuAccount | null>("osu_refresh_account"),
+  osuLogout: () => invoke<void>("osu_logout"),
 };
 
 export function onScanProgress(cb: (p: ScanProgress) => void): Promise<UnlistenFn> {

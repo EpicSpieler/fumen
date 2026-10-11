@@ -275,6 +275,19 @@ export interface UiPrefs {
   defaultsApplied: boolean;
 }
 
+/** The osu! account Fumen is logged in to (src-tauri/src/osu_auth.rs). */
+export interface OsuAccount {
+  id: number;
+  username: string;
+  avatar: string | null;
+  country: string | null;
+  /** main ruleset on osu!: rank and pp are in it */
+  mode: "osu" | "taiko" | "fruits" | "mania" | null;
+  rank: number | null;
+  countryRank: number | null;
+  pp: number | null;
+}
+
 /** Whether sets can go into osu!lazer right now (see src-tauri/src/lazer_import.rs). */
 export interface LazerImportStatus {
   ready: boolean;

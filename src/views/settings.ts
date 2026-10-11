@@ -1,13 +1,37 @@
-/* settings.ts — library source, appearance, about. Adjacent rows merge into one group. */
+/* settings.ts — osu! account, library source, appearance, about. Adjacent rows merge into one group. */
 import { getVersion } from "@tauri-apps/api/app";
 import { open } from "@tauri-apps/plugin-dialog";
-import { api } from "../lib/api";
-import { esc, num, relativeTime } from "../lib/format";
+import { api, asApiError } from "../lib/api";
+import { esc, MODE_LABEL, num, relativeTime } from "../lib/format";
 import { describeScan, isScanning, runScan } from "../lib/scan";
 import { DEFAULT_ACCENT, events, refreshStatus, setPrefs, store } from "../lib/store";
+import type { OsuAccount } from "../lib/types";
 import { attachSegIndicator, toast } from "../ui/controls";
 import { icon } from "../ui/icons";
 import { ACCENT_PRESETS, applyAppearance } from "../ui/theme";
+
+// the osu! login outlives the view: it waits for the browser while you look elsewhere
+let account: OsuAccount | null = null;
+let accountKnown = false;
+let waiting = false;
+let shown: SettingsView | null = null;
+
+const MODE_INDEX = { osu: 0, taiko: 1, fruits: 2, mania: 3 } as const;
+
+async function login(): Promise<void> {
+  waiting = true;
+  shown?.renderAccount();
+  try {
+    account = await api.osuLogin();
+    toast(`Logged in as ${account.username}`, { kind: "success" });
+  } catch (e) {
+    const err = asApiError(e);
+    if (err.code !== "login-cancelled") toast(err.message, { kind: "danger", timeout: 6000 });
+  } finally {
+    waiting = false;
+    shown?.renderAccount();
+  }
+}
 
 export class SettingsView {
   readonly el: HTMLElement;
@@ -23,6 +47,8 @@ export class SettingsView {
       events.on("scan", () => this.renderLibrary()),
     );
     this.el.addEventListener("click", (e) => void this.onClick(e));
+    shown = this;
+    void this.loadAccount();
     this.el.addEventListener("change", (e) => this.onChange(e));
     getVersion()
       .then((v) => {
@@ -38,6 +64,11 @@ export class SettingsView {
     this.el.innerHTML = `
       <div class="settings">
         <header class="view-head"><div><h1 class="view-title">Settings</h1></div></header>
+
+        <section class="settings-section">
+          <div class="label-caps settings-label">osu!</div>
+          <div class="setting-row" data-row="account"></div>
+        </section>
 
         <section class="settings-section">
           <div class="label-caps settings-label">Library</div>
@@ -105,13 +136,66 @@ export class SettingsView {
           <div class="setting-row">
             <div class="setting-text">
               <div class="setting-title about-version">Fumen ${esc(this.version)}</div>
-              <div class="setting-desc">Fumen reads osu!lazer's database from a private copy. It never writes to osu!'s files.</div>
+              <div class="setting-desc">Fumen reads osu!lazer's database from a private copy. Beatmaps you add go into lazer through lazer's own import, only while lazer is closed and only on lazer versions tested with Fumen.</div>
             </div>
           </div>
         </section>
       </div>`;
     this.el.querySelectorAll<HTMLElement>(".seg-pill").forEach((s) => attachSegIndicator(s));
     this.renderLibrary();
+    this.renderAccount();
+  }
+
+  private async loadAccount(): Promise<void> {
+    try {
+      // what's stored first, then osu!'s current numbers
+      account = await api.osuAccount();
+      accountKnown = true;
+      this.renderAccount();
+      if (account && !waiting) account = await api.osuRefreshAccount();
+    } catch (e) {
+      console.warn("[osu] account", asApiError(e).message);
+      accountKnown = true;
+    }
+    this.renderAccount();
+  }
+
+  renderAccount(): void {
+    const row = this.el.querySelector<HTMLElement>('[data-row="account"]');
+    if (!row) return;
+    const a = account;
+    if (waiting) {
+      row.innerHTML = `
+        <div class="setting-text">
+          <div class="setting-title">osu! account</div>
+          <div class="setting-desc">Finish logging in on the page that opened in your browser. Fumen picks it up from there.</div>
+        </div>
+        <button class="btn btn-ghost btn-sm s-login-cancel" type="button">Cancel</button>`;
+    } else if (a) {
+      const words = [
+        a.rank ? `#${num(a.rank)}` : "No rank",
+        a.countryRank && a.country ? `#${num(a.countryRank)} ${a.country}` : "",
+        a.pp ? `${num(Math.round(a.pp))}pp` : "",
+        a.mode ? MODE_LABEL[MODE_INDEX[a.mode]] : "",
+      ].filter(Boolean);
+      row.innerHTML = `
+        <div class="account">
+          <span class="account-avatar">${esc(a.username.slice(0, 1).toUpperCase())}${a.avatar ? `<img src="${esc(a.avatar)}" alt="" />` : ""}</span>
+          <div class="setting-text">
+            <div class="setting-title">${esc(a.username)}</div>
+            <div class="setting-desc meta-line num">${words.map((w) => `<span>${esc(w)}</span>`).join("")}</div>
+          </div>
+        </div>
+        <button class="btn btn-ghost btn-sm s-logout" type="button">Log out</button>`;
+      row.querySelector("img")?.addEventListener("error", (e) => (e.target as HTMLElement).remove());
+    } else {
+      row.innerHTML = `
+        <div class="setting-text">
+          <div class="setting-title">osu! account</div>
+          <div class="setting-desc">Log in to bring your osu! profile into Fumen, and later your scores from osu!. You log in on osu!'s own page; Fumen never sees your password.</div>
+        </div>
+        <button class="btn btn-primary btn-sm s-login" type="button"${accountKnown ? "" : " disabled"}>Log in with osu!</button>`;
+    }
   }
 
   private renderLibrary(): void {
@@ -167,6 +251,14 @@ export class SettingsView {
       applyAppearance();
       return;
     }
+    if (t.closest(".s-login")) return login();
+    if (t.closest(".s-login-cancel")) return api.osuLoginCancel();
+    if (t.closest(".s-logout")) {
+      await api.osuLogout().catch((err) => toast(asApiError(err).message, { kind: "danger" }));
+      account = null;
+      this.renderAccount();
+      return;
+    }
     if (t.closest(".s-rescan")) {
       const res = await runScan();
       if (res.ok) toast("Library imported", { kind: "success" });
@@ -202,6 +294,7 @@ export class SettingsView {
   }
 
   destroy(): void {
+    if (shown === this) shown = null;
     this.offs.forEach((f) => f());
     this.el.remove();
   }
