@@ -7,6 +7,7 @@ import type {
   ChartData,
   ChartSounds,
   DanRating,
+  FumenCollection,
   History,
   ImportProgress,
   ImportSummary,
@@ -73,6 +74,16 @@ export const api = {
   syncOsuScores: () => invoke<SyncSummary>("sync_osu_scores"),
   /** reads the player's scores on one difficulty (osu!'s id) from osu!; how many were new */
   syncMapScores: (beatmapId: number, modes: number[]) => invoke<number>("sync_map_scores", { beatmapId, modes }),
+  /** Fumen's own collections (lib/collections.ts); maps are library difficulty ids */
+  getCollections: () => invoke<FumenCollection[]>("get_collections"),
+  createCollection: (name: string, maps: string[] = []) => invoke<string>("create_collection", { name, maps }),
+  copyLazerCollection: (id: string, name: string) => invoke<string>("copy_lazer_collection", { id, name }),
+  renameCollection: (id: string, name: string) => invoke<void>("rename_collection", { id, name }),
+  deleteCollection: (id: string) => invoke<void>("delete_collection", { id }),
+  /** how many weren't in it yet */
+  addToCollection: (id: string, maps: string[]) => invoke<number>("add_to_collection", { id, maps }),
+  /** how many were in it */
+  removeFromCollection: (id: string, maps: string[]) => invoke<number>("remove_from_collection", { id, maps }),
   /** the player's goals, oldest first (lib/goals.ts) */
   getGoals: () => invoke<Goal[]>("get_goals"),
   putGoal: (goal: Goal) => invoke<void>("put_goal", { goal }),

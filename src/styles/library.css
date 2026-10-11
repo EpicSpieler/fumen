@@ -352,3 +352,8 @@
 .empty-title { font-size: var(--fs-15); font-weight: 600; color: var(--t1); }
 .empty-sub { margin: 4px 0 16px; color: var(--t3); }
 .sr-chip.deep, .card-strip > i.deep { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .28); }
+
+/* collection pages: the title with its menu */
+.lib-title-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.lib-title-row .view-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lib-more { flex: none; }
