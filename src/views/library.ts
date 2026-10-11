@@ -18,10 +18,10 @@ import {
 import { events, setPrefs, store } from "../lib/store";
 import type { LibraryLayout, MapRow } from "../lib/types";
 import { player } from "../player";
-import { attachSegIndicator, createSelect, openMenu, reduceMotion, updateRange, type MenuEntry } from "../ui/controls";
+import { attachSegIndicator, createSelect, openMenu, reduceMotion, uiPrompt, updateRange, type MenuEntry } from "../ui/controls";
 import { icon } from "../ui/icons";
 import { VirtualList } from "../ui/virtual";
-import { DRAG_TYPE } from "../lib/collections";
+import { createSmartCollection, DRAG_TYPE, updateSmartCollection } from "../lib/collections";
 import { openSet, setMenu } from "./actions";
 
 const SET_SORTS: { value: SetSort; label: string }[] = [
@@ -104,6 +104,8 @@ export interface LibraryOptions {
   emptyHint?: string;
   /** the view changed its query itself (reset, "more by this mapper") */
   onQuery?: (q: string) => void;
+  /** searches can be saved as smart collections (the main library); then where to go with a new one */
+  onSmartSaved?: (id: string) => void;
 }
 
 export class LibraryView {
@@ -123,6 +125,8 @@ export class LibraryView {
   private list: VirtualList;
   private body: HTMLElement;
   private offs: (() => void)[] = [];
+  /** the smart collection whose search is being changed here */
+  private editing: { id: string; name: string } | null = null;
 
   constructor(private o: LibraryOptions) {
     this.filter = {
@@ -488,11 +492,18 @@ export class LibraryView {
     if (this.filter.showHidden) words.push("Including hidden");
     const q = parseQuery(this.filter.text);
     if (q.conds.length) words.push(`Query: ${q.conds.length} filter${q.conds.length > 1 ? "s" : ""}`);
+    // the main library can keep a search as a smart collection, ruleset and keys included
+    const savable = !!this.o.onSmartSaved;
+    const searching = savable && (words.length > 0 || !!this.filter.text.trim() || this.filter.mode !== -1 || this.filter.keys.length > 0);
+    if (savable && q.terms.length) words.unshift(`"${q.terms.join(" ")}"`);
     const active = this.el.querySelector<HTMLElement>(".lib-active")!;
-    active.hidden = !words.length;
-    active.innerHTML = words.length
-      ? `<span class="lib-active-words">${words.map((w) => `<span>${esc(w)}</span>`).join("")}</span><button class="btn btn-ghost btn-sm lib-reset" type="button">Reset filters</button>`
-      : "";
+    active.hidden = !words.length && !searching && !this.editing;
+    const save = this.editing
+      ? `<span class="lib-editing">Editing <b>${esc(this.editing.name)}</b></span><button class="btn btn-sm btn-primary lib-smart-update" type="button">Save search</button><button class="btn btn-ghost btn-sm lib-smart-stop" type="button">Done</button>`
+      : searching
+        ? `<button class="btn btn-ghost btn-sm lib-smart-save" type="button">${icon("collection")}<span>Save as smart collection</span></button>`
+        : "";
+    active.innerHTML = `<span class="lib-active-words">${words.map((w) => `<span>${esc(w)}</span>`).join("")}</span>${save}${words.length ? `<button class="btn btn-ghost btn-sm lib-reset" type="button">Reset filters</button>` : ""}`;
     const filterCount = (this.filter.status.length ? 1 : 0) + (this.filter.srMin > 0 || this.filter.srMax < Infinity ? 1 : 0) + (this.filter.played !== "any" ? 1 : 0) + (this.filter.showHidden ? 1 : 0);
     const fb = this.el.querySelector<HTMLElement>(".lib-filters-btn")!;
     fb.classList.toggle("active", filterCount > 0);
@@ -604,6 +615,13 @@ export class LibraryView {
 
     el.addEventListener("click", (e) => {
       const t = e.target as Element;
+      if (t.closest(".lib-smart-save")) return void this.saveSmart();
+      if (t.closest(".lib-smart-update") && this.editing) {
+        const id = this.editing.id;
+        void updateSmartCollection(id, this.filter).then((ok) => ok && this.stopEditing());
+        return;
+      }
+      if (t.closest(".lib-smart-stop")) return this.stopEditing();
       if (t.closest(".lib-reset")) {
         const hadText = !!this.filter.text;
         this.filter = { ...DEFAULT_FILTER, mode: this.filter.mode, keys: this.filter.keys };
@@ -800,6 +818,36 @@ export class LibraryView {
   refresh(): void {
     this.renderTitle();
     this.run();
+  }
+
+  /** Saves what's filtered now as a smart collection, named by its search. */
+  private async saveSmart(): Promise<void> {
+    const q = parseQuery(this.filter.text);
+    const guess = [this.filter.mode === 3 && this.filter.keys.length ? this.filter.keys.map((k) => `${k}K`).join(" ") : "", this.filter.text.trim()].filter(Boolean).join(" ");
+    const name = await uiPrompt("It fills itself with whatever in your library matches these filters, now and after every import.", {
+      title: "Save as smart collection",
+      value: guess || (q.conds.length ? "Smart collection" : ""),
+      placeholder: "Name",
+      confirmLabel: "Save",
+    });
+    if (!name) return;
+    const id = await createSmartCollection(name, this.filter);
+    if (id) this.o.onSmartSaved?.(id);
+  }
+
+  /** Puts a smart collection's search in the filters, to change it and save it back. */
+  editSmart(id: string, name: string, filter: FilterState): void {
+    const hadText = this.filter.text;
+    this.editing = { id, name };
+    this.filter = { ...filter, keys: [...filter.keys], status: [...filter.status] };
+    this.syncControls();
+    this.run(true);
+    if (hadText !== filter.text) this.o.onQuery?.(filter.text);
+  }
+
+  private stopEditing(): void {
+    this.editing = null;
+    this.renderHeader();
   }
 
   /** Called when the view becomes visible again. */

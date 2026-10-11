@@ -3,7 +3,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { osuMapUrl, osuSetUrl } from "../lib/api";
 import {
   addToCollection, collectionMaps, copyLazerCollection, createCollection, deleteCollection, fumenCollection, fumenCollections,
-  removeFromCollection, renameCollection,
+  isSmart, removeFromCollection, renameCollection,
 } from "../lib/collections";
 import { num } from "../lib/format";
 import { go } from "../lib/router";
@@ -47,7 +47,7 @@ export function setMenu(
   // a set: all its difficulties
   const picked = mapIdx !== undefined ? [mapIdx] : [...set.maps];
   entries.push("sep", { label: "Add to collection…", icon: "collection", action: () => collectionPicker(at, picked) });
-  if (opts.collection && fumenCollection(opts.collection)) {
+  if (opts.collection && fumenCollection(opts.collection) && !isSmart(fumenCollection(opts.collection))) {
     const id = opts.collection;
     entries.push({ label: map ? "Remove from collection" : "Remove set from collection", icon: "x", action: () => void removeFromCollection(id, picked) });
   }
@@ -75,7 +75,7 @@ export function setMenu(
 /** Which collection to put difficulties in: Fumen's, each marked when they're all in it already,
  * or a new one. */
 export function collectionPicker(at: Element | { x: number; y: number }, mapIdxs: number[]): void {
-  const cols = fumenCollections();
+  const cols = fumenCollections().filter((c) => !isSmart(c));
   const entries: MenuEntry[] = [];
   if (cols.length) entries.push({ group: "Add to" });
   for (const c of cols) {
@@ -106,10 +106,15 @@ export async function newCollection(mapIdxs: number[] = []): Promise<string | nu
 
 /** The menu of a collection (sidebar, collection page): Fumen's can be renamed and deleted; one of
  * lazer's can be copied into Fumen to change it. */
-export function collectionMenu(at: Element | { x: number; y: number }, id: string, after?: { deleted?: () => void; copied?: (id: string) => void }): void {
+export function collectionMenu(
+  at: Element | { x: number; y: number },
+  id: string,
+  after?: { deleted?: () => void; copied?: (id: string) => void; editSearch?: (id: string) => void },
+): void {
   const mine = fumenCollection(id);
   if (mine) {
     openMenu(at, [
+      ...(isSmart(mine) && after?.editSearch ? [{ label: "Edit search", icon: "sliders" as const, hint: "in the library", action: () => after.editSearch!(id) }] : []),
       {
         label: "Rename…",
         icon: "tag",

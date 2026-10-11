@@ -353,6 +353,11 @@
 .empty-sub { margin: 4px 0 16px; color: var(--t3); }
 .sr-chip.deep, .card-strip > i.deep { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .28); }
 
+/* saving a search as a smart collection, or changing one */
+.lib-smart-save, .lib-smart-update, .lib-smart-stop { flex: none; }
+.lib-editing { flex: none; font-size: var(--fs-12); color: var(--t2); }
+.lib-editing b { color: var(--accent-ink); font-weight: 600; }
+
 /* collection pages: the title with its menu */
 .lib-title-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .lib-title-row .view-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
