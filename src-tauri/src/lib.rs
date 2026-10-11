@@ -9,12 +9,15 @@ mod lazer;
 mod lazer_import;
 mod mma;
 mod osu_auth;
+mod osu_scores;
 mod library;
 mod paths;
 mod protocol;
 mod settings;
 mod skins;
 mod stars;
+#[cfg(test)]
+mod test_http;
 mod thumbs;
 
 use std::path::PathBuf;
@@ -48,6 +51,10 @@ pub struct AppState {
     /// an osu! login is waiting for the browser, and whether to stop waiting
     logging_in: AtomicBool,
     login_cancel: AtomicBool,
+    /// a sync with osu! is running
+    syncing: AtomicBool,
+    /// when each difficulty's scores were last asked of osu! (osu!'s difficulty id)
+    map_synced: Mutex<std::collections::HashMap<i64, std::time::Instant>>,
 }
 
 impl AppState {
@@ -346,7 +353,11 @@ async fn osu_login(app: AppHandle) -> Result<osu_auth::Account> {
                 .map_err(|e| Error::known("open-failed", format!("The browser didn't open: {e}")))
         });
         state.logging_in.store(false, Ordering::SeqCst);
-        result
+        let account = result?;
+        // whose plays are "yours" from now on (another account's osu! data goes)
+        osu_scores::set_user(&state.db(), account.id as i64)?;
+        let _ = app.emit("history-changed", true);
+        Ok(account)
     })
     .await
     .map_err(|e| Error::known("internal", e.to_string()))?
@@ -383,8 +394,79 @@ async fn osu_refresh_account(app: AppHandle) -> Result<Option<osu_auth::Account>
 #[tauri::command]
 async fn osu_logout(app: AppHandle) -> Result<()> {
     tauri::async_runtime::spawn_blocking(move || {
-        let dir = app.state::<AppState>().data_dir.clone();
-        osu_auth::logout(&dir, &osu_auth::Endpoints::default())
+        let state = app.state::<AppState>();
+        osu_auth::logout(&state.data_dir, &osu_auth::Endpoints::default())?;
+        osu_scores::clear(&state.db())?;
+        let _ = app.emit("history-changed", true);
+        Ok(())
+    })
+    .await
+    .map_err(|e| Error::known("internal", e.to_string()))?
+}
+
+// ── Plays ───────────────────────────────────────────────────────────────────
+
+/// The player's plays, local and from osu!, as raw JSON (see `osu_scores.rs`).
+#[tauri::command]
+async fn get_history(app: AppHandle) -> Result<tauri::ipc::Response> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let account = osu_auth::account(&state.data_dir);
+        let conn = state.db();
+        osu_scores::history_json(&conn, account.as_ref()).map(tauri::ipc::Response::new)
+    })
+    .await
+    .map_err(|e| Error::known("internal", e.to_string()))?
+}
+
+/// Reads the player's scores, stats and play counts from osu!. Emits "history-changed" (its
+/// payload, here and elsewhere: whether the library's best scores may have changed).
+#[tauri::command]
+async fn sync_osu_scores(app: AppHandle) -> Result<osu_scores::SyncSummary> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        if state.syncing.swap(true, Ordering::SeqCst) {
+            return Err(Error::known("busy", "Fumen is already reading your scores from osu!."));
+        }
+        let result = (|| {
+            let account = osu_auth::account(&state.data_dir).ok_or_else(|| Error::known("osu-logged-out", "You're not logged in to osu!."))?;
+            let ep = osu_auth::Endpoints::default();
+            let fetched = osu_auth::with_token(&state.data_dir, &ep, |token| osu_scores::fetch(&ep, token, &account))?;
+            osu_scores::store(&mut state.db(), &fetched)
+        })();
+        state.syncing.store(false, Ordering::SeqCst);
+        if let Ok(summary) = &result {
+            let _ = app.emit("history-changed", summary.added > 0);
+        }
+        result
+    })
+    .await
+    .map_err(|e| Error::known("internal", e.to_string()))?
+}
+
+/// Reads the player's scores on one difficulty (osu!'s id) from osu!, in these rulesets: plays
+/// from other computers or stable that the syncs' top and recent plays don't reach. Asks osu! at
+/// most every 10 minutes per difficulty; nothing when logged out. How many scores were new.
+#[tauri::command]
+async fn sync_map_scores(app: AppHandle, beatmap_id: i64, modes: Vec<i64>) -> Result<usize> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let Some(account) = osu_auth::account(&state.data_dir) else { return Ok(0) };
+        {
+            let mut seen = state.map_synced.lock().unwrap_or_else(|e| e.into_inner());
+            let now = std::time::Instant::now();
+            if seen.get(&beatmap_id).is_some_and(|at| now.duration_since(*at) < std::time::Duration::from_secs(600)) {
+                return Ok(0);
+            }
+            seen.insert(beatmap_id, now);
+        }
+        let ep = osu_auth::Endpoints::default();
+        let scores = osu_auth::with_token(&state.data_dir, &ep, |token| osu_scores::fetch_map(&ep, token, account.id, beatmap_id, &modes))?;
+        let added = osu_scores::store_map(&mut state.db(), account.id as i64, &scores)?;
+        if added > 0 {
+            let _ = app.emit("history-changed", true);
+        }
+        Ok(added)
     })
     .await
     .map_err(|e| Error::known("internal", e.to_string()))?
@@ -649,6 +731,8 @@ pub fn run() {
                 analyse_again: AtomicBool::new(false),
                 logging_in: AtomicBool::new(false),
                 login_cancel: AtomicBool::new(false),
+                syncing: AtomicBool::new(false),
+                map_synced: Mutex::new(std::collections::HashMap::new()),
             };
             state.refresh_storage();
             app.manage(state);
@@ -675,6 +759,9 @@ pub fn run() {
             osu_login_cancel,
             osu_refresh_account,
             osu_logout,
+            get_history,
+            sync_osu_scores,
+            sync_map_scores,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Fumen");

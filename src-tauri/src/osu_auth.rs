@@ -26,6 +26,8 @@ const FILE: &str = "osu-account.json";
 const LOGIN_TIMEOUT: Duration = Duration::from_secs(300);
 /// tokens are renewed when they have less left than this
 const RENEW_BEFORE_MS: i64 = 5 * 60 * 1000;
+/// the API's score format with solo score ids (the ids lazer keeps as a score's online id)
+const API_VERSION: &str = "20240529";
 
 /// Where the login and osu! live (tests point these at local servers).
 #[derive(Debug, Clone)]
@@ -313,20 +315,29 @@ struct Me {
     statistics: Option<MeStats>,
 }
 
-fn fetch_account(ep: &Endpoints, access: &str) -> Result<Account> {
+/// GET on osu!'s API v2 (`path` after /api/v2/), as JSON.
+pub fn api_get(ep: &Endpoints, access: &str, path: &str) -> Result<serde_json::Value> {
     let mut res = agent()
-        .get(&format!("{}/api/v2/me", ep.osu))
+        .get(&format!("{}/api/v2/{path}", ep.osu))
         .header("Authorization", &format!("Bearer {access}"))
         .header("Accept", "application/json")
+        .header("x-api-version", API_VERSION)
         .call()
         .map_err(|e| unreachable("osu-unreachable", "osu!", &ep.osu, &e))?;
     match res.status().as_u16() {
         200 => {}
         401 => return Err(Error::known("osu-logged-out", "Your osu! login has run out. Log in again.")),
+        404 => return Err(Error::known("osu-not-found", "osu! doesn't have this.")),
+        429 => return Err(Error::known("osu-busy", "osu! asked Fumen to slow down. Try again in a minute.")),
         s => return Err(Error::known("osu-unreachable", format!("osu! said {s}."))),
     }
     let text = res.body_mut().read_to_string().map_err(|e| Error::known("osu-unreachable", format!("osu! didn't answer fully ({e}).")))?;
-    let me: Me = serde_json::from_str(&text).map_err(|e| Error::known("osu-unreachable", format!("osu!'s answer wasn't readable ({e}).")))?;
+    serde_json::from_str(&text).map_err(|e| Error::known("osu-unreachable", format!("osu!'s answer wasn't readable ({e}).")))
+}
+
+fn fetch_account(ep: &Endpoints, access: &str) -> Result<Account> {
+    let me: Me = serde_json::from_value(api_get(ep, access, "me")?)
+        .map_err(|e| Error::known("osu-unreachable", format!("osu!'s answer wasn't readable ({e}).")))?;
     let stats = me.statistics;
     Ok(Account {
         id: me.id,
@@ -362,16 +373,19 @@ pub fn access_token(data_dir: &Path, ep: &Endpoints) -> Result<String> {
     }
 }
 
+/// Runs `f` with a usable access token. A login osu! turns down on the way is forgotten.
+pub fn with_token<T>(data_dir: &Path, ep: &Endpoints, f: impl FnOnce(&str) -> Result<T>) -> Result<T> {
+    let token = access_token(data_dir, ep)?;
+    f(&token).inspect_err(|e| {
+        if e.code() == "osu-logged-out" {
+            let _ = std::fs::remove_file(data_dir.join(FILE));
+        }
+    })
+}
+
 /// The account as osu! has it now (rank, pp, …), saved for next time.
 pub fn refresh_account(data_dir: &Path, ep: &Endpoints) -> Result<Account> {
-    let token = access_token(data_dir, ep)?;
-    let account = match fetch_account(ep, &token) {
-        Err(e) if e.code() == "osu-logged-out" => {
-            let _ = std::fs::remove_file(data_dir.join(FILE));
-            return Err(e);
-        }
-        r => r?,
-    };
+    let account = with_token(data_dir, ep, |token| fetch_account(ep, token))?;
     if let Some(mut stored) = read(data_dir) {
         stored.account = account.clone();
         write(data_dir, &stored)?;
@@ -397,53 +411,8 @@ pub fn logout(data_dir: &Path, ep: &Endpoints) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_http::mock;
     use std::sync::{Arc, Mutex};
-
-    type Route = dyn Fn(&str, &str, &str, &str) -> (u16, String) + Send + Sync;
-
-    /// A small HTTP server answering `route(method, path, authorization, body)`; its base URL.
-    fn mock(route: Box<Route>) -> String {
-        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
-        let base = format!("http://{}", listener.local_addr().unwrap());
-        std::thread::spawn(move || {
-            for mut s in listener.incoming().flatten() {
-                let mut buf = Vec::new();
-                let mut chunk = [0u8; 4096];
-                let (head, body) = loop {
-                    let n = s.read(&mut chunk).unwrap_or(0);
-                    buf.extend_from_slice(&chunk[..n]);
-                    let Some(p) = buf.windows(4).position(|w| w == b"\r\n\r\n") else {
-                        if n == 0 {
-                            break (String::new(), String::new());
-                        }
-                        continue;
-                    };
-                    let head = String::from_utf8_lossy(&buf[..p]).to_string();
-                    let len = head
-                        .lines()
-                        .find_map(|l| l.to_ascii_lowercase().strip_prefix("content-length:").map(|v| v.trim().parse::<usize>().unwrap_or(0)))
-                        .unwrap_or(0);
-                    while buf.len() < p + 4 + len {
-                        let n = s.read(&mut chunk).unwrap_or(0);
-                        if n == 0 {
-                            break;
-                        }
-                        buf.extend_from_slice(&chunk[..n]);
-                    }
-                    break (head, String::from_utf8_lossy(&buf[p + 4..]).to_string());
-                };
-                let mut first = head.lines().next().unwrap_or("").split(' ');
-                let (method, path) = (first.next().unwrap_or(""), first.next().unwrap_or(""));
-                let auth = head
-                    .lines()
-                    .find_map(|l| l.split_once(':').filter(|(k, _)| k.eq_ignore_ascii_case("authorization")).map(|(_, v)| v.trim()))
-                    .unwrap_or("");
-                let (status, out) = route(method, path, auth, &body);
-                let _ = write!(s, "HTTP/1.1 {status} X\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{out}", out.len());
-            }
-        });
-        base
-    }
 
     fn servers() -> (Endpoints, Arc<Mutex<Vec<String>>>) {
         let calls = Arc::new(Mutex::new(Vec::new()));
