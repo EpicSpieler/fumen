@@ -68,7 +68,9 @@ is closed, only on lazer versions tested with Fumen, and with a backup of lazer'
   long notes) per key mode, as a radar against 90 days ago. A play counts as the chart's star
   rating at the rate played, at 96% accuracy along osu!'s osu!mania pp curve; a pattern's skill is
   the share-weighted average of your five best charts with it, and every number shows the charts
-  behind it
+  behind it. "Practice next" picks charts from your library for your weakest patterns, a little
+  above your skill, at 1× or at the Half Time / Double Time speed that gets them there, and shows
+  what a 96% pass on each would do to the skill
 
 ## Adding beatmaps
 
