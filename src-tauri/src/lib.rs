@@ -412,8 +412,9 @@ async fn get_history(app: AppHandle) -> Result<tauri::ipc::Response> {
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
         let account = osu_auth::account(&state.data_dir);
+        let storage = state.storage();
         let conn = state.db();
-        osu_scores::history_json(&conn, account.as_ref()).map(tauri::ipc::Response::new)
+        osu_scores::history_json(&conn, account.as_ref(), storage.as_deref()).map(tauri::ipc::Response::new)
     })
     .await
     .map_err(|e| Error::known("internal", e.to_string()))?

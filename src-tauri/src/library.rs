@@ -148,6 +148,10 @@ struct MapOut {
     /// pattern category ("Jumpstream", "Chordjacks Tech", "… SV")
     #[serde(skip_serializing_if = "Option::is_none")]
     category: Option<String>,
+    /// osu!mania: each pattern's share of the chart in percent (stream, jumpstream, handstream,
+    /// chordjack, jacks, ln), from the chart analysis
+    #[serde(skip_serializing_if = "Option::is_none")]
+    shares: Option<[u8; 6]>,
 }
 
 #[derive(Serialize)]
@@ -228,7 +232,7 @@ pub fn snapshot_json(conn: &Connection) -> Result<Vec<u8>> {
                     CASE WHEN m.sr IS NULL OR m.sr < 0 THEN c.sr ELSE m.sr END AS sr, m.bpm,
                     m.length, m.objects, m.end_objects, m.hp, m.cs, m.od, m.ar, m.md5, m.bg, m.audio,
                     m.preview_time, m.last_played, m.hidden, c.nps_peak, c.tags, c.sr_ht, c.sr_dt,
-                    c.dan, c.dan_value, c.category
+                    c.dan, c.dan_value, c.category, c.patterns
              FROM maps m LEFT JOIN chart_stats c ON c.hash = m.hash AND c.version = ?1
              ORDER BY m.set_id, m.ruleset_id, sr",
         )?;
@@ -275,6 +279,7 @@ pub fn snapshot_json(conn: &Connection) -> Result<Vec<u8>> {
                 dan: r.get(26)?,
                 dan_value: r.get::<_, Option<f64>>(27)?.map(|v| (v * 100.0).round() / 100.0),
                 category: r.get(28)?,
+                shares: if mode == 3 { r.get::<_, Option<String>>(29)?.as_deref().and_then(analysis::shares_percent) } else { None },
             };
             let mi = maps.len() as u32;
             if let Some(h) = md5 {

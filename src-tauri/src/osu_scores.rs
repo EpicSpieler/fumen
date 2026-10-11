@@ -7,6 +7,7 @@
 //! keeps without one: same difficulty, ruleset, time and accuracy).
 
 use std::collections::HashMap;
+use std::path::Path;
 
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::Serialize;
@@ -561,9 +562,19 @@ pub struct Play {
     /// osu!'s score id
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<i64>,
+    /// osu!mania at a rate the library snapshot doesn't carry a star rating for: the one at it
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sr: Option<f64>,
     /// the difficulty's md5 (the library snapshot's best scores go by it)
     #[serde(skip)]
     md5: Option<String>,
+}
+
+/// A rate (× 100) whose osu!mania star rating the library snapshot doesn't carry (it has 1×,
+/// 0.75× and 1.5×).
+fn off_grid(rate: Option<f64>) -> Option<u32> {
+    let key = (rate? * 100.0).round();
+    (key > 0.0 && ![75.0, 100.0, 150.0].contains(&key)).then_some(key as u32)
 }
 
 /// A difficulty that isn't in the library, as osu! described it.
@@ -630,16 +641,21 @@ struct History {
 struct Library {
     by_md5: HashMap<String, String>,
     by_online: HashMap<i64, (String, Option<String>)>,
+    /// osu!mania difficulties' chart files (difficulty id → file hash)
+    mania: HashMap<String, String>,
 }
 
 impl Library {
     fn read(conn: &Connection) -> Result<Library> {
-        let mut lib = Library { by_md5: HashMap::new(), by_online: HashMap::new() };
-        let mut st = conn.prepare("SELECT id, md5, online_id FROM maps ORDER BY set_id, id")?;
+        let mut lib = Library { by_md5: HashMap::new(), by_online: HashMap::new(), mania: HashMap::new() };
+        let mut st = conn.prepare("SELECT id, md5, online_id, hash, ruleset_id FROM maps ORDER BY set_id, id")?;
         let mut rows = st.query([])?;
         while let Some(r) = rows.next()? {
             let id: String = r.get(0)?;
             let md5: Option<String> = r.get(1)?;
+            if let (Some(hash), Some(3)) = (r.get::<_, Option<String>>(3)?, r.get::<_, Option<i64>>(4)?) {
+                lib.mania.insert(id.clone(), hash);
+            }
             if let Some(online) = r.get::<_, Option<i64>>(2)?.filter(|v| *v > 0) {
                 lib.by_online.entry(online).or_insert_with(|| (id.clone(), md5.clone()));
             }
@@ -762,6 +778,7 @@ fn merge(conn: &Connection) -> Result<Merged> {
             source: "lazer",
             top: None,
             id: None,
+            sr: None,
             md5,
         });
     }
@@ -824,12 +841,57 @@ fn merge(conn: &Connection) -> Result<Merged> {
                 source: "osu",
                 top,
                 id: Some(id),
+                sr: None,
                 md5,
             });
         }
     }
     plays.sort_by(|a, b| b.date.cmp(&a.date));
+
+    // star ratings at the rates played, as far as they're worked out
+    let mut st = conn.prepare("SELECT hash, rate, sr FROM rate_stars WHERE version = ?1")?;
+    let rated: HashMap<(String, u32), f64> = st
+        .query_map([crate::analysis::VERSION], |r| Ok(((r.get::<_, String>(0)?, r.get::<_, u32>(1)?), r.get::<_, f64>(2)?)))?
+        .collect::<rusqlite::Result<_>>()?;
+    for p in &mut plays {
+        if let Some(key) = rate_key(&lib, p) {
+            p.sr = rated.get(&key).copied();
+        }
+    }
     Ok(Merged { player, plays, lib, online })
+}
+
+/// (chart file, rate × 100) of an osu!mania play at a rate the snapshot has no star rating for.
+fn rate_key(lib: &Library, p: &Play) -> Option<(String, u32)> {
+    if p.mode != 3 {
+        return None;
+    }
+    let rate = off_grid(p.rate)?;
+    Some((lib.mania.get(p.map.as_ref()?)?.clone(), rate))
+}
+
+/// Works out the star ratings at played rates that aren't known yet (Fumen's calculator, from
+/// lazer's chart files) and keeps them.
+fn rate_missing(conn: &Connection, storage: &Path, lib: &Library, plays: &mut [Play]) -> Result<()> {
+    let mut done: HashMap<(String, u32), Option<f64>> = HashMap::new();
+    let mut charts: HashMap<String, Option<crate::chart::Chart>> = HashMap::new();
+    let mut put = conn.prepare("INSERT OR REPLACE INTO rate_stars (hash, rate, version, sr) VALUES (?1, ?2, ?3, ?4)")?;
+    for p in plays.iter_mut().filter(|p| p.sr.is_none()) {
+        let Some(key) = rate_key(lib, p) else { continue };
+        if !done.contains_key(&key) {
+            let chart = charts.entry(key.0.clone()).or_insert_with(|| crate::charts::load(storage, &key.0).ok());
+            let sr = chart
+                .as_ref()
+                .map(|c| crate::stars::round2(crate::stars::mania(c, key.1 as f64 / 100.0)) as f64)
+                .filter(|sr| *sr > 0.0);
+            if let Some(sr) = sr {
+                put.execute(params![key.0, key.1, crate::analysis::VERSION, sr])?;
+            }
+            done.insert(key.clone(), sr);
+        }
+        p.sr = done[&key];
+    }
+    Ok(())
 }
 
 /// A difficulty's best pass (by score) and how often it was played (fails too).
@@ -863,9 +925,13 @@ pub fn best_per_map(conn: &Connection) -> Result<HashMap<String, MapBest>> {
     Ok(best)
 }
 
-/// Everything the history view shows, as JSON.
-pub fn history_json(conn: &Connection, account: Option<&Account>) -> Result<Vec<u8>> {
-    let Merged { player, plays, lib, mut online } = merge(conn)?;
+/// Everything the history view shows, as JSON. With lazer's storage, star ratings at played
+/// osu!mania rates that aren't known yet are worked out first.
+pub fn history_json(conn: &Connection, account: Option<&Account>, storage: Option<&Path>) -> Result<Vec<u8>> {
+    let Merged { player, mut plays, lib, mut online } = merge(conn)?;
+    if let Some(storage) = storage {
+        rate_missing(conn, storage, &lib, &mut plays)?;
+    }
     let mut most_played = Vec::new();
     if matches!(player, Player::Id(_)) {
         let mut st = conn.prepare("SELECT beatmap_id, count FROM osu_playcounts ORDER BY position")?;
@@ -1071,7 +1137,7 @@ mod tests {
         assert_eq!(best["new-md5"].plays, 1);
         assert_eq!((best["xyz"].plays, best["xyz"].acc, best["xyz"].last), (2, 0.99, Some(1_800_000_100_000)));
 
-        let h: Value = serde_json::from_slice(&history_json(&conn, None).unwrap()).unwrap();
+        let h: Value = serde_json::from_slice(&history_json(&conn, None, None).unwrap()).unwrap();
         assert_eq!(h["player"], serde_json::json!({ "id": 2, "name": "Me" }));
         assert_eq!(h["stats"]["mania"]["pp"], 1234.5);
         assert_eq!(h["beatmaps"].as_array().unwrap().len(), 2, "{}", h["beatmaps"]);
@@ -1110,6 +1176,46 @@ mod tests {
     }
 
     #[test]
+    fn stars_at_played_rates() {
+        let (dir, conn) = temp_db("rates");
+        // a small 4K chart in a lazer-style file store
+        let mut osu = String::from("osu file format v14\n[General]\nMode: 3\n[Difficulty]\nCircleSize:4\nOverallDifficulty:8\n[TimingPoints]\n0,300,4,1,0,100,1,0\n[HitObjects]\n");
+        for i in 0..400 {
+            osu.push_str(&format!("{},192,{},1,0,0:0:0:0:\n", 64 + 128 * (i % 4), 1000 + i * 90));
+        }
+        let hash = "ab".repeat(32);
+        let storage = dir.join("storage");
+        let file = crate::paths::lazer_file(&storage, &hash).unwrap();
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::fs::write(&file, &osu).unwrap();
+        conn.execute("UPDATE maps SET hash = ?1 WHERE id = 'm1'", [&hash]).unwrap();
+        conn.execute_batch(
+            "UPDATE scores SET mods = '[{\"acronym\":\"HT\",\"settings\":{\"speed_change\":0.9}}]' WHERE id = 'l1';
+             UPDATE scores SET mods = '[{\"acronym\":\"DT\"}]' WHERE id = 'l2';",
+        )
+        .unwrap();
+        let want = crate::stars::round2(crate::stars::mania(&crate::chart::parse(&osu), 0.9)) as f64;
+        assert!(want > 0.0);
+        assert_eq!(off_grid(Some(0.9)), Some(90));
+        assert_eq!(off_grid(Some(1.5)), None);
+        assert_eq!(off_grid(None), None);
+
+        // not worked out yet: nothing
+        let sr = |plays: &[Play], rate: f64| plays.iter().find(|p| p.rate == Some(rate)).unwrap().sr;
+        assert_eq!(sr(&merge(&conn).unwrap().plays, 0.9), None);
+        // worked out for the history, and kept: 0.9× gets one, DT (1.5×, in the snapshot) doesn't
+        let h: Value = serde_json::from_slice(&history_json(&conn, None, Some(&storage)).unwrap()).unwrap();
+        let played = |rate: f64| h["plays"].as_array().unwrap().iter().find(|p| p["rate"] == rate).unwrap().clone();
+        assert_eq!(played(0.9)["sr"], want);
+        assert!(played(1.5).get("sr").is_none());
+        let plays = merge(&conn).unwrap().plays;
+        assert_eq!(sr(&plays, 0.9), Some(want));
+        assert_eq!(sr(&plays, 1.5), None);
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn player_by_name() {
         let (dir, conn) = temp_db("name");
         conn.execute_batch(
@@ -1128,8 +1234,9 @@ mod tests {
 
     /// Syncs Fumen's real library (a copy) with osu! and prints what came back. Uses the stored
     /// login only while its token is fresh: renewing it would rotate the refresh token and log the
-    /// real app out. `FUMEN_HISTORY_OUT`: also write the history JSON there (the browser preview's
-    /// tools/browser-preview/.cache/history.json).
+    /// real app out. `FUMEN_HISTORY_OUT` / `FUMEN_SNAPSHOT_OUT`: also write the history / library
+    /// snapshot JSON there (the browser preview's tools/browser-preview/.cache/history.json and
+    /// snapshot.json).
     ///   cargo test --lib osu_scores::tests::real_library -- --ignored --nocapture
     #[test]
     #[ignore]
@@ -1161,9 +1268,13 @@ mod tests {
             println!("no fresh login: local scores only");
         }
         let t = std::time::Instant::now();
-        let json = history_json(&conn, crate::osu_auth::account(&dir).as_ref()).unwrap();
+        let storage = crate::paths::default_lazer_dir().and_then(|d| crate::paths::inspect_lazer(&d)).map(|i| std::path::PathBuf::from(i.storage));
+        let json = history_json(&conn, crate::osu_auth::account(&dir).as_ref(), storage.as_deref()).unwrap();
         if let Some(out) = std::env::var_os("FUMEN_HISTORY_OUT") {
             std::fs::write(out, &json).unwrap();
+        }
+        if let Some(out) = std::env::var_os("FUMEN_SNAPSHOT_OUT") {
+            std::fs::write(out, crate::library::snapshot_json(&conn).unwrap()).unwrap();
         }
         let h: Value = serde_json::from_slice(&json).unwrap();
         let plays = h["plays"].as_array().unwrap();
