@@ -1,0 +1,102 @@
+/* ===========================================================================
+   Skills — osu!mania skill per pattern: radar, list, the charts behind it
+   =========================================================================== */
+
+.skills-view { container-type: inline-size; }
+.skills-head { padding: 22px 0 18px; }
+.skills-keys > button { padding: 0 12px; font-variant-numeric: tabular-nums; }
+.skills-loading { padding-top: 4px; }
+.skills-empty { padding-top: 72px; }
+.skills-empty .empty-sub { max-width: 440px; margin-inline: auto; }
+
+.skills-grid {
+  display: grid;
+  grid-template-columns: minmax(300px, 0.9fr) minmax(0, 1.1fr);
+  gap: 12px;
+  align-items: start;
+}
+@container (max-width: 760px) {
+  .skills-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ---------- Radar ---------- */
+.skills-radar { display: flex; flex-direction: column; align-items: center; padding: 18px 12px 14px; }
+.radar { width: 100%; max-width: 440px; overflow: visible; }
+.radar .ring { fill: none; stroke: var(--stroke); stroke-width: 1; }
+.radar .spoke { stroke: var(--stroke-dim); stroke-width: 1; }
+.radar .ring-label { font-size: 8.5px; fill: var(--t4); font-variant-numeric: tabular-nums; }
+.radar .now {
+  fill: color-mix(in srgb, var(--accent) 22%, transparent);
+  stroke: var(--accent);
+  stroke-width: 1.8;
+  stroke-linejoin: round;
+}
+.radar .then {
+  fill: none;
+  stroke: var(--t3);
+  stroke-width: 1.2;
+  stroke-dasharray: 3 3;
+  stroke-linejoin: round;
+}
+.radar .dot { fill: var(--accent); stroke: var(--surface-1); stroke-width: 1.5; }
+.radar .dot.guess { fill: var(--surface-1); stroke: var(--accent); }
+.radar .axis-label { font-size: 11px; font-weight: 600; fill: var(--t2); }
+.radar .axis-value { font-size: 11px; font-weight: 700; fill: var(--t1); font-variant-numeric: tabular-nums; }
+
+.radar-legend { display: flex; gap: 18px; margin-top: 6px; font-size: var(--fs-11); color: var(--t3); }
+.radar-legend > span { display: inline-flex; align-items: center; gap: 7px; }
+.radar-legend > span::before { content: ""; width: 14px; height: 0; border-top: 2px solid var(--accent); }
+.radar-legend > .lg-then::before { border-top: 1.5px dashed var(--t3); }
+
+/* ---------- Pattern list ---------- */
+.skills-list { display: flex; flex-direction: column; gap: 2px; padding: 8px; }
+.skill { border-radius: var(--r-lg); transition: background .12s var(--ease-std); }
+.skill.open { background: rgba(255, 255, 255, .035); }
+.skill-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto 72px 18px;
+  align-items: center;
+  column-gap: 12px;
+  width: 100%;
+  min-height: 46px;
+  padding: 0 12px;
+  border-radius: var(--r-lg);
+  text-align: left;
+  transition: background .12s var(--ease-std);
+}
+.skill-head:not(:disabled):hover { background: var(--tint-hover); }
+.skill-head:disabled { cursor: default; }
+.skill-name { font-size: var(--fs-13); font-weight: 600; color: var(--t1); }
+.skill.empty .skill-name { color: var(--t3); }
+.skill-charts { font-size: var(--fs-11); color: var(--t3); white-space: nowrap; }
+.skill-delta { font-size: var(--fs-11); font-weight: 700; font-variant-numeric: tabular-nums; }
+.skill-delta.up { color: var(--success); }
+.skill-delta.down { color: var(--danger); }
+.skill-value { text-align: right; font-size: var(--fs-15); color: var(--t1); }
+.skill.empty .skill-value { color: var(--t4); }
+.skill-chev { width: 16px; height: 16px; color: var(--t3); transition: transform .22s var(--ease-out); }
+.skill.open .skill-chev { transform: rotate(180deg); color: var(--t1); }
+
+.skill-charts-list { display: flex; flex-direction: column; padding: 0 4px 8px; animation: fade-in .2s var(--ease-std); }
+.skill-chart {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) 50px minmax(0, 76px) 58px 56px;
+  column-gap: 10px;
+  align-items: center;
+  min-height: 42px;
+  padding: 4px 8px;
+  border-radius: var(--r-md);
+  font-size: var(--fs-12);
+  cursor: pointer;
+  outline-offset: -2px;
+}
+.skill-chart > * { min-width: 0; }
+.skill-chart:hover { background: var(--tint-hover); }
+.skill-chart .t-art { width: 52px; height: 30px; }
+.skill-chart .t-art img { opacity: 1; }
+.skill-chart-sr { display: flex; justify-content: flex-end; }
+.skill-chart-mods { font-size: var(--fs-11); font-weight: 700; letter-spacing: .03em; color: var(--accent-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.skill-chart-acc { text-align: right; color: var(--t2); }
+.skill-chart-worth { text-align: right; color: var(--t1); }
+
+.skills-how { max-width: 760px; margin: 16px 2px 0; font-size: var(--fs-12); line-height: 1.55; color: var(--t3); }
