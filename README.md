@@ -103,6 +103,16 @@ service `fumen-web` on the VPS, reached through the Cloudflare tunnel. `node scr
 deploys it; `node scripts/deploy-site.mjs --secret` types the osu! client secret into the server's
 `.env` (hidden).
 
+## Releases and updates
+
+`npm run release -- patch` (or `minor`, or a version) builds the Windows installer, signs it for
+the updater, tags the release and puts it on GitHub (a release in the private repo) and on the site,
+at `https://fumen.dertesti.dev/updates/`. Installed copies look there when they start and every few
+hours; Settings › About checks on demand, and an update shows up above the profile in the sidebar.
+Installing restarts Fumen (Tauri's updater checks the signature first; not while beatmaps are
+going into lazer). The signing key is `~/.tauri/fumen-updater.key` on the machine that releases,
+never in the repo; without it, installed copies can't be updated, so keep a copy somewhere safe.
+
 ## Development
 
 Requirements: Node 22+, Rust (stable), .NET 8 SDK, Windows (WebView2).
@@ -122,7 +132,8 @@ Other scripts:
 | `npm run typecheck` | TypeScript checks |
 | `npm test` | UI and Rust unit tests |
 | `npm run dev:browser` | UI in a normal browser with Tauri shimmed (see `tools/browser-preview`) |
-| `npm run tauri build` | installer |
+| `npm run release -- patch` | build, sign, tag and publish a release (see above) |
+| `npm run tauri build` | installer only |
 
 ### Layout
 

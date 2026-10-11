@@ -43,7 +43,7 @@ fumen/
 ├─ sidecar/FumenRealm/  .NET 8 + Realm 20.1 — exports lazer's client.realm to JSON
 ├─ sidecar/FumenImport/ .NET — runs lazer's BeatmapImporter on lazer's own runtime
 ├─ lazer-compat.json    lazer versions the import is tested with
-├─ site/                fumen.dertesti.dev — homepage + the osu! login's server half (Node, no deps)
+├─ site/                fumen.dertesti.dev — homepage, the osu! login's server half, /updates/ (Node, no deps)
 └─ docs/
 ```
 
@@ -187,7 +187,9 @@ nothing), and Fumen trades the code (later the refresh token) for tokens at the 
   build, `cargo clippy`, Rust tests), each only when its side changes.
 - After a lazer update: `npm run verify-lazer -- --push` with lazer closed.
 - Site changes: `node scripts/deploy-site.mjs` (the VPS's `.env` holds the osu! secret, never git).
-- Releases later via `tauri-action` with the updater.
+- Releases: `npm run release -- patch` on the PC (signed NSIS installer → GitHub release in the
+  private repo + fumen.dertesti.dev/updates/, which Tauri's updater reads). Built locally, not in
+  CI: Windows minutes count double on a private repo.
 
 ## Risks
 
