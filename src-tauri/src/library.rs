@@ -12,6 +12,7 @@ use serde::Serialize;
 use crate::analysis;
 use crate::db;
 use crate::error::Result;
+use crate::osu_scores::{self, MapBest};
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -124,8 +125,9 @@ struct MapOut {
     played: Option<i64>,
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     hidden: bool,
+    /// the player's best (local and from osu!) and play count
     #[serde(skip_serializing_if = "Option::is_none")]
-    best: Option<Best>,
+    best: Option<MapBest>,
     /// densest two seconds in notes per second (from the chart analysis)
     #[serde(skip_serializing_if = "Option::is_none")]
     peak: Option<f64>,
@@ -148,17 +150,6 @@ struct MapOut {
     category: Option<String>,
 }
 
-#[derive(Serialize, Clone)]
-#[serde(rename_all = "camelCase")]
-struct Best {
-    /// lazer ScoreRank: -1 F, 0 D, 1 C, 2 B, 3 A, 4 S, 5 SH, 6 X (SS), 7 XH.
-    rank: i64,
-    acc: f64,
-    score: i64,
-    plays: i64,
-    last: Option<i64>,
-}
-
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct CollectionOut {
@@ -169,7 +160,7 @@ struct CollectionOut {
     missing: usize,
 }
 
-fn ruleset_mode(id: Option<i64>, name: Option<&str>) -> i64 {
+pub(crate) fn ruleset_mode(id: Option<i64>, name: Option<&str>) -> i64 {
     match (id, name) {
         (Some(i @ 0..=3), _) => i,
         (_, Some("osu")) => 0,
@@ -183,30 +174,8 @@ fn ruleset_mode(id: Option<i64>, name: Option<&str>) -> i64 {
 pub fn snapshot_json(conn: &Connection) -> Result<Vec<u8>> {
     let scanned_at = db::get_meta(conn, "lazer.lastScan")?.and_then(|v| v.parse().ok());
 
-    // best local score per difficulty (by total score), plus play count
-    let mut best: HashMap<String, Best> = HashMap::new();
-    {
-        let mut st = conn.prepare(
-            "SELECT map_md5, rank, accuracy, MAX(total_score), COUNT(*), MAX(date)
-             FROM scores WHERE map_md5 IS NOT NULL GROUP BY map_md5",
-        )?;
-        let rows = st.query_map([], |r| {
-            Ok((
-                r.get::<_, String>(0)?,
-                Best {
-                    rank: r.get::<_, Option<i64>>(1)?.unwrap_or(-1),
-                    acc: r.get::<_, Option<f64>>(2)?.unwrap_or(0.0),
-                    score: r.get::<_, Option<i64>>(3)?.unwrap_or(0),
-                    plays: r.get(4)?,
-                    last: r.get(5)?,
-                },
-            ))
-        })?;
-        for row in rows {
-            let (md5, b) = row?;
-            best.insert(md5, b);
-        }
-    }
+    // the player's best per difficulty (by total score), plus play count
+    let best = osu_scores::best_per_map(conn)?;
 
     let mut sets: Vec<SetOut> = Vec::new();
     let mut set_index: HashMap<String, u32> = HashMap::new();

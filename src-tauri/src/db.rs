@@ -142,6 +142,49 @@ const MIGRATIONS: &[&str] = &[
     r#"
     ALTER TABLE chart_stats ADD COLUMN sr REAL;
     "#,
+    // 8 — what osu! knows about the logged-in player (osu_scores.rs): scores (ids are osu!'s solo
+    //     score ids, the online ids lazer keeps), the difficulties they're on, the most played
+    //     difficulties. A library rescan never touches these.
+    r#"
+    CREATE TABLE osu_beatmaps (
+        id             INTEGER PRIMARY KEY,
+        set_id         INTEGER,
+        md5            TEXT,
+        mode           INTEGER,
+        version        TEXT NOT NULL DEFAULT '',
+        sr             REAL,
+        length         REAL,
+        title          TEXT NOT NULL DEFAULT '',
+        title_unicode  TEXT NOT NULL DEFAULT '',
+        artist         TEXT NOT NULL DEFAULT '',
+        artist_unicode TEXT NOT NULL DEFAULT '',
+        creator        TEXT NOT NULL DEFAULT ''
+    );
+    CREATE TABLE osu_scores (
+        id          INTEGER PRIMARY KEY,
+        user_id     INTEGER NOT NULL,
+        beatmap_id  INTEGER NOT NULL,
+        mode        INTEGER NOT NULL,
+        total_score INTEGER NOT NULL DEFAULT 0,
+        accuracy    REAL NOT NULL DEFAULT 0,
+        max_combo   INTEGER NOT NULL DEFAULT 0,
+        rank        INTEGER NOT NULL DEFAULT -1,
+        pp          REAL,
+        passed      INTEGER NOT NULL DEFAULT 1,
+        date        INTEGER NOT NULL,
+        mods        TEXT NOT NULL DEFAULT '[]',
+        statistics  TEXT NOT NULL DEFAULT '{}',
+        legacy_id   INTEGER,
+        best_pos    INTEGER
+    );
+    CREATE INDEX osu_scores_beatmap ON osu_scores(beatmap_id);
+    CREATE TABLE osu_playcounts (
+        beatmap_id INTEGER PRIMARY KEY,
+        count      INTEGER NOT NULL,
+        position   INTEGER NOT NULL
+    );
+    CREATE INDEX scores_online ON scores(online_id);
+    "#,
 ];
 
 pub fn open(path: &Path) -> Result<Connection> {
