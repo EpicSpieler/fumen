@@ -432,6 +432,17 @@ fn create_collection(state: State<AppState>, name: String, maps: Vec<String>) ->
     collections::create(&mut state.db(), &name, &maps)
 }
 
+/// Saves a search (the UI's filters as JSON) as a smart collection.
+#[tauri::command]
+fn create_smart_collection(state: State<AppState>, name: String, query: String) -> Result<String> {
+    collections::create_smart(&state.db(), &name, &query)
+}
+
+#[tauri::command]
+fn set_collection_query(state: State<AppState>, id: String, query: String) -> Result<()> {
+    collections::set_query(&state.db(), &id, &query)
+}
+
 /// A Fumen copy of one of lazer's collections (Fumen's can be changed).
 #[tauri::command]
 fn copy_lazer_collection(state: State<AppState>, id: String, name: String) -> Result<String> {
@@ -814,6 +825,8 @@ pub fn run() {
             osu_login_cancel,
             get_collections,
             create_collection,
+            create_smart_collection,
+            set_collection_query,
             copy_lazer_collection,
             rename_collection,
             delete_collection,
