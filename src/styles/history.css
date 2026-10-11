@@ -183,6 +183,7 @@
 .map-plays { animation: fade-in .2s var(--ease-std); }
 .plays-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 14px; margin-bottom: 10px; }
 .plays-head .meta-line { color: var(--t3); }
+.plays-goal { order: 2; align-self: center; margin: -4px -6px -4px auto; }
 .map-plays .chart-note { margin-top: 0; }
 
 .acc-graph { display: grid; grid-template-columns: 52px minmax(0, 1fr); gap: 8px; height: 64px; margin-bottom: 10px; }

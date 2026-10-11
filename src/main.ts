@@ -29,6 +29,7 @@ import { readLinks } from "./lib/links";
 import { closeMenus, initControls, toast } from "./ui/controls";
 import { icon, injectIconSprite } from "./ui/icons";
 import { applyAppearance } from "./ui/theme";
+import { initGoals } from "./lib/goals-store";
 import { initHistory, syncIfStale } from "./lib/history";
 import { downloadText, initUpdater, installUpdate, updateEvents, type UpdateState } from "./lib/updater";
 import { HistoryView } from "./views/history";
@@ -712,6 +713,7 @@ async function boot(): Promise<void> {
   initHistory();
   void syncIfStale();
   initUpdater();
+  initGoals();
   document.body.classList.add("ready");
 }
 

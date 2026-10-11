@@ -27,7 +27,7 @@ export function setMenu(
   at: Element | { x: number; y: number },
   setIdx: number,
   mapIdx?: number,
-  opts: { onSearch?: (q: string) => void; inSetPage?: boolean } = {},
+  opts: { onSearch?: (q: string) => void; inSetPage?: boolean; extra?: MenuEntry[] } = {},
 ): void {
   const snap = store.snap;
   if (!snap) return;
@@ -38,6 +38,7 @@ export function setMenu(
     { label: playing ? "Pause" : "Play", icon: playing ? "pause" : "play", action: () => player.playSet(setIdx, mapIdx) },
   ];
   if (!opts.inSetPage) entries.push({ label: "Open beatmap set", icon: "library", action: () => openSet(setIdx, mapIdx) });
+  if (opts.extra?.length) entries.push(...opts.extra);
   entries.push("sep");
   if (set.onlineId) {
     const url = map?.onlineId ? osuMapUrl(set.onlineId, map.onlineId, map.mode) : osuSetUrl(set.onlineId);

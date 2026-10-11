@@ -1,9 +1,11 @@
 /* skills.ts — how good you are at each osu!mania pattern (see lib/skills.ts for how it's worked
- * out): a radar now and 90 days ago, per pattern the charts behind the number, and charts from the
- * library to practice the weakest ones on.
+ * out): a radar now and 90 days ago, per pattern the charts behind the number, the player's goals,
+ * and charts from the library to practice the weakest ones on.
  */
-import { thumbUrl } from "../lib/api";
-import { displayTitle, esc, num, pct, srChip } from "../lib/format";
+import { asApiError, thumbUrl } from "../lib/api";
+import { goalNow, goalTarget, goalTitle, goalValue, progress, type Goal, type GoalContext } from "../lib/goals";
+import { currentContext, goalEvents, goalsNow, loadGoals, removeGoal } from "../lib/goals-store";
+import { displayTitle, esc, num, pct, relativeTime, srChip } from "../lib/format";
 import { historyEvents, historyNow, loadHistory, mapIndexOf, modsText, playWhen } from "../lib/history";
 import {
   bestPerChart, chartStars, keyModes, MIN_CHARTS, MIN_SHARE, MORE_SUGGESTIONS, PATTERN_LABEL, PATTERNS, practice, rateOf, REF_ACC, skills,
@@ -11,9 +13,10 @@ import {
 } from "../lib/skills";
 import { events, store } from "../lib/store";
 import type { Play } from "../lib/types";
-import { attachSegIndicator } from "../ui/controls";
+import { attachSegIndicator, openMenu, toast, type MenuEntry } from "../ui/controls";
 import { icon } from "../ui/icons";
 import { openSet, setMenu } from "./actions";
+import { openGoalDialog } from "./goal-dialog";
 
 /** the comparison polygon: skills as they were this long ago */
 const THEN_MS = 90 * 86_400_000;
@@ -30,6 +33,8 @@ export class SkillsView {
   /** practice: every pattern, not just the weakest; patterns showing more suggestions */
   private allPatterns = false;
   private more = new Set<string>();
+  /** goals reached, listed */
+  private showReached = false;
 
   constructor() {
     this.el = document.createElement("section");
@@ -46,12 +51,14 @@ export class SkillsView {
     this.bind();
     this.offs.push(
       historyEvents.on("history", () => this.render()),
+      goalEvents.on("goals", () => this.render()),
       events.on("library", () => this.render()),
       events.on("prefs", (p) => {
         if ("unicode" in p) this.render();
       }),
     );
     this.render();
+    loadGoals().catch(() => {});
     loadHistory().then(
       () => this.render(),
       () => this.render(),
@@ -69,6 +76,7 @@ export class SkillsView {
       return;
     }
     const modes = keyModes(h.plays, mapIndexOf, snap.maps);
+    const ctx = currentContext();
     if (!modes.length) {
       sub.innerHTML = "";
       keysEl.hidden = true;
@@ -76,7 +84,8 @@ export class SkillsView {
         <div class="empty-state skills-empty">${icon("radar")}
           <div class="empty-title">Skills come from your osu!mania plays</div>
           <div class="empty-sub">Fumen reads the patterns of osu!mania charts. Once you've passed some that are in your library, you'll see here what you're good at.</div>
-        </div>`;
+        </div>
+        ${this.goalsHtml(ctx)}`;
       return;
     }
     const keys = this.keys !== null && modes.some((m) => m.keys === this.keys) ? this.keys : modes[0].keys;
@@ -107,9 +116,10 @@ export class SkillsView {
       .join("");
     body.innerHTML = `
       <div class="skills-grid">
-        <section class="panel skills-radar">${radar(now, then)}</section>
+        <section class="panel skills-radar">${radar(now, then, this.goalMarks(keys))}</section>
         <section class="panel skills-list">${now.map((s, i) => this.row(s, then[i])).join("")}</section>
       </div>
+      ${this.goalsHtml(ctx)}
       ${this.practiceHtml(plan, played, passed)}
       <p class="skills-how">
         A play is worth the chart's star rating at the rate you played it, at ${Math.round(REF_ACC * 100)}% accuracy along osu!'s own osu!mania pp curve:
@@ -138,8 +148,87 @@ export class SkillsView {
           <b class="skill-value num">${s.value !== null ? `${s.value.toFixed(2)}★` : "–"}</b>
           ${s.value !== null ? icon("chevron-down", "skill-chev") : `<span></span>`}
         </button>
-        ${open ? `<div class="skill-charts-list">${s.top.map((c) => chartRow(c, s)).join("")}</div>` : ""}
+        ${
+          open
+            ? `<div class="skill-charts-list">${s.top.map((c) => chartRow(c, s)).join("")}<button class="btn btn-ghost btn-sm skill-goal" type="button">${icon("flag")}<span>Set a goal for ${label.toLowerCase()}</span></button></div>`
+            : ""
+        }
       </div>`;
+  }
+
+  /** Open skill goals in a key mode, as targets per pattern for the radar. */
+  private goalMarks(keys: number): (number | null)[] {
+    const goals = (goalsNow() ?? []).filter((g): g is Extract<Goal, { kind: "skill" }> => g.kind === "skill" && !g.done && g.keys === keys);
+    return PATTERNS.map((p) => {
+      const t = goals.filter((g) => g.pattern === p).map((g) => g.target);
+      return t.length ? Math.min(...t) : null;
+    });
+  }
+
+  /** Goals: the open ones with how far along they are, then the ones reached. */
+  private goalsHtml(ctx: GoalContext | null): string {
+    const goals = goalsNow();
+    if (!goals) return "";
+    const open = goals.filter((g) => !g.done);
+    const reached = goals.filter((g) => g.done).sort((a, b) => b.done! - a.done!);
+    const card = (g: Goal) => {
+      const now = ctx ? goalNow(g, ctx) : null;
+      const p = progress(g, now);
+      const chart = g.kind === "chart" ? mapIndexOf(g.map) : undefined;
+      return `
+        <div class="panel goal${chart !== undefined ? " is-link" : ""}" data-goal="${g.id}"${chart !== undefined ? ` data-map="${chart}" role="button" tabindex="0"` : ""}>
+          <div class="goal-head">
+            ${icon("flag", "goal-ic")}
+            <span class="goal-title">${esc(goalTitle(g))}</span>
+            <button class="icon-btn sm goal-more" type="button" data-tip="More" aria-label="More for this goal">${icon("more")}</button>
+          </div>
+          <div class="goal-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(p * 100)}"><span style="--p:${p.toFixed(3)}"></span></div>
+          <div class="goal-line num">
+            <span>${now !== null ? `${esc(goalValue(g, now))} now` : g.kind === "chart" ? "Not passed yet" : "Nothing yet"}</span>
+            <span class="goal-to">${esc(goalTarget(g))}</span>
+          </div>
+        </div>`;
+    };
+    const reachedRow = (g: Goal) => `
+      <div class="goal-done" data-goal="${g.id}">
+        ${icon("check", "goal-done-ic")}
+        <span class="goal-done-title">${esc(goalTitle(g))}</span>
+        <span class="goal-done-to num">${esc(goalTarget(g))}</span>
+        <span class="goal-done-when" data-tip="Set ${relativeTime(g.created)}">reached ${relativeTime(g.done!)}</span>
+        <button class="icon-btn sm goal-more" type="button" data-tip="More" aria-label="More for this goal">${icon("more")}</button>
+      </div>`;
+    return `
+      <section class="goals">
+        <div class="practice-head">
+          <div>
+            <h2 class="section-title">Goals${open.length ? ` <span class="section-count num">${open.length}</span>` : ""}</h2>
+            ${open.length ? "" : `<div class="practice-sub">Something to work toward: a skill, an accuracy on a chart, or your pp or rank. Fumen ticks it off when your plays get there.</div>`}
+          </div>
+          <button class="btn btn-sm goal-new" type="button">${icon("plus")}<span>New goal</span></button>
+        </div>
+        ${open.length ? `<div class="goals-grid">${open.map(card).join("")}</div>` : ""}
+        ${
+          reached.length
+            ? `<button class="btn btn-ghost btn-sm goals-reached-toggle" type="button" aria-expanded="${this.showReached}">${this.showReached ? "Hide reached" : `Reached ${num(reached.length)}`}</button>
+               ${this.showReached ? `<div class="goals-reached">${reached.map(reachedRow).join("")}</div>` : ""}`
+            : ""
+        }
+      </section>`;
+  }
+
+  private goalMenu(id: string, at: Element): void {
+    const g = goalsNow()?.find((x) => x.id === id);
+    if (!g) return;
+    const entries: MenuEntry[] = [];
+    const chart = g.kind === "chart" ? mapIndexOf(g.map) : undefined;
+    if (chart !== undefined) entries.push({ label: "Open beatmap", icon: "library", action: () => openSet(store.snap!.maps[chart].set, chart) });
+    if (g.kind === "skill") entries.push({ label: `Show ${g.keys}K skills`, icon: "radar", action: () => ((this.keys = g.keys), this.render()) });
+    entries.push({
+      label: "Delete goal",
+      icon: "trash",
+      action: () => void removeGoal(id).catch((e) => toast(`Couldn't delete the goal: ${asApiError(e).message}`, { kind: "danger" })),
+    });
+    openMenu(at, entries, { minWidth: 200 });
   }
 
   /** Practice next: the weakest patterns (or all), each with charts a little above its skill. */
@@ -187,6 +276,15 @@ export class SkillsView {
       </section>`;
   }
 
+  /** The weakest pattern in the key mode shown, for a new goal. */
+  private weakest(): SkillPattern | undefined {
+    const shown = [...this.el.querySelectorAll<HTMLElement>(".skill[data-pattern]")]
+      .map((el) => ({ p: el.dataset.pattern as SkillPattern, v: parseFloat(el.querySelector(".skill-value")?.textContent ?? "") }))
+      .filter((x) => Number.isFinite(x.v))
+      .sort((a, b) => a.v - b.v);
+    return shown[0]?.p;
+  }
+
   /** Re-renders and puts the focus back on the control that asked for it (now a new element). */
   private rerender(focus: string): void {
     this.render();
@@ -211,6 +309,20 @@ export class SkillsView {
         else this.open.add(p);
         return this.rerender(`.skill[data-pattern="${p}"] .skill-head`);
       }
+      if (t.closest(".goal-new")) return openGoalDialog({ kind: "skill", keys: this.keys ?? undefined, pattern: this.weakest() });
+      const goalMore = t.closest<HTMLElement>(".goal-more");
+      if (goalMore) return this.goalMenu(goalMore.closest<HTMLElement>("[data-goal]")!.dataset.goal!, goalMore);
+      if (t.closest(".goals-reached-toggle")) {
+        this.showReached = !this.showReached;
+        return this.rerender(".goals-reached-toggle");
+      }
+      const skillGoal = t.closest<HTMLElement>(".skill-goal");
+      if (skillGoal) {
+        const keys = +this.el.querySelector<HTMLElement>(".skills-keys .active")?.dataset.keys! || undefined;
+        return openGoalDialog({ kind: "skill", keys, pattern: skillGoal.closest<HTMLElement>(".skill")!.dataset.pattern as SkillPattern });
+      }
+      const goalCard = t.closest<HTMLElement>(".goal[data-map]");
+      if (goalCard) return openSet(store.snap!.maps[+goalCard.dataset.map!].set, +goalCard.dataset.map!);
       if (t.closest(".practice-all")) {
         this.allPatterns = !this.allPatterns;
         return this.rerender(".practice-all");
@@ -230,10 +342,13 @@ export class SkillsView {
       if (!row) return;
       e.preventDefault();
       const mapIdx = +row.dataset.map!;
-      setMenu({ x: e.clientX, y: e.clientY }, store.snap!.maps[mapIdx].set, mapIdx);
+      const rate = row.dataset.rate ? +row.dataset.rate : undefined;
+      setMenu({ x: e.clientX, y: e.clientY }, store.snap!.maps[mapIdx].set, mapIdx, {
+        extra: [{ label: "Set a goal…", icon: "flag", action: () => openGoalDialog({ kind: "chart", mapIdx, rate }) }],
+      });
     });
     this.el.addEventListener("keydown", (e) => {
-      const row = (e.target as Element).closest<HTMLElement>(".skill-chart[data-map]");
+      const row = (e.target as Element).closest<HTMLElement>(".skill-chart[data-map], .goal[data-map]");
       if (row && (e.key === "Enter" || e.key === " ")) {
         e.preventDefault();
         openSet(store.snap!.maps[+row.dataset.map!].set, +row.dataset.map!);
@@ -302,7 +417,7 @@ function suggestionRow(s: Suggestion, pattern: SkillPattern, aim: Aim, state: st
       ? `A ${acc} pass here takes ${name} from ${aim.from.toFixed(2)}★ to ${s.after.toFixed(2)}★`
       : `A ${acc} pass here starts ${name} at ${s.after.toFixed(2)}★`;
   return `
-    <div class="skill-chart practice-chart" data-map="${s.mapIdx}" role="button" tabindex="0">
+    <div class="skill-chart practice-chart" data-map="${s.mapIdx}" data-rate="${s.rate}" role="button" tabindex="0">
       <span class="t-art${bg ? "" : " img-missing"}">${bg ? `<img src="${thumbUrl(bg, 160)}" alt="" loading="lazy" decoding="async" />` : ""}</span>
       <div class="prow-text">
         <div class="t-title">${esc(displayTitle(set, store.prefs.unicode))}</div>
@@ -316,8 +431,8 @@ function suggestionRow(s: Suggestion, pattern: SkillPattern, aim: Aim, state: st
 
 /** The six patterns around a hexagon: now (filled) and 90 days ago (dashed). The centre isn't
  * zero: rings are labelled in stars, so small differences show. */
-function radar(now: Skill[], then: Skill[]): string {
-  const values = [...now, ...then].map((s) => s.value).filter((v): v is number => v !== null);
+function radar(now: Skill[], then: Skill[], goals: (number | null)[]): string {
+  const values = [...[...now, ...then].map((s) => s.value), ...goals].filter((v): v is number => v !== null);
   const max = values.length ? Math.max(...values) : 1;
   const min = values.length ? Math.min(...values) : 0;
   const step = max - min > 3 ? 1 : 0.5;
@@ -353,6 +468,13 @@ function radar(now: Skill[], then: Skill[]): string {
       return `<circle class="dot${s.charts < MIN_CHARTS ? " guess" : ""}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3.2" />`;
     })
     .join("");
+  const marks = goals
+    .map((v, i) => {
+      if (v === null) return "";
+      const [x, y] = at(i, v);
+      return `<path class="goal-mark" d="M${x.toFixed(1)} ${(y - 4.2).toFixed(1)}l4.2 4.2-4.2 4.2-4.2-4.2z"><title>Goal: ${v.toFixed(2)}★</title></path>`;
+    })
+    .join("");
   const labels = now
     .map((s, i) => {
       const [x, y] = at(i, hi);
@@ -366,10 +488,11 @@ function radar(now: Skill[], then: Skill[]): string {
     <svg class="radar" viewBox="-170 -140 340 290" role="img" aria-label="Skill per pattern">
       ${rings.join("")}${spokes}${thenPoly}
       <polygon class="now" points="${poly(nowPts)}" />
-      ${dots}${labels}
+      ${dots}${marks}${labels}
     </svg>
     <div class="radar-legend">
       <span class="lg-now">Now</span>
       ${hasThen ? `<span class="lg-then">90 days ago</span>` : ""}
+      ${goals.some((v) => v !== null) ? `<span class="lg-goal">Goal</span>` : ""}
     </div>`;
 }
