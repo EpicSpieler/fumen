@@ -196,6 +196,14 @@ const MIGRATIONS: &[&str] = &[
         PRIMARY KEY (hash, rate)
     );
     "#,
+    // 10 — the player's goals (src/goals.rs): JSON as the UI keeps it
+    r#"
+    CREATE TABLE goals (
+        id      TEXT PRIMARY KEY,
+        created INTEGER NOT NULL,
+        data    TEXT NOT NULL
+    );
+    "#,
 ];
 
 pub fn open(path: &Path) -> Result<Connection> {

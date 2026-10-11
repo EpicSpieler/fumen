@@ -4,6 +4,7 @@ mod charts;
 mod db;
 mod downloads;
 mod error;
+mod goals;
 mod hitsounds;
 mod lazer;
 mod lazer_import;
@@ -420,6 +421,21 @@ async fn get_history(app: AppHandle) -> Result<tauri::ipc::Response> {
     .map_err(|e| Error::known("internal", e.to_string()))?
 }
 
+#[tauri::command]
+fn get_goals(state: State<AppState>) -> Result<Vec<serde_json::Value>> {
+    goals::list(&state.db())
+}
+
+#[tauri::command]
+fn put_goal(state: State<AppState>, goal: serde_json::Value) -> Result<()> {
+    goals::put(&state.db(), &goal)
+}
+
+#[tauri::command]
+fn delete_goal(state: State<AppState>, id: String) -> Result<()> {
+    goals::delete(&state.db(), &id)
+}
+
 /// Reads the player's scores, stats and play counts from osu!. Emits "history-changed" (its
 /// payload, here and elsewhere: whether the library's best scores may have changed).
 #[tauri::command]
@@ -759,6 +775,9 @@ pub fn run() {
             osu_account,
             osu_login,
             osu_login_cancel,
+            get_goals,
+            put_goal,
+            delete_goal,
             osu_refresh_account,
             osu_logout,
             get_history,
