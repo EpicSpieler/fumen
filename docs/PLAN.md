@@ -147,7 +147,17 @@ nothing), and Fumen trades the code (later the refresh token) for tokens at the 
 - [ ] Taiko / catch / osu! previews
 - [x] "tech" detection: the pattern report's "Tech" (mixed speeds) and SV
 
-## v0.4 — you (in progress)
+## v0.3 — collections (in progress)
+
+- [x] Fumen collections: own tables (migration 11, `src/collections.rs`), difficulties by MD5 (ones
+      not in the library kept and counted), resolved to library ids for the UI; make / rename /
+      delete, add and take out from row menus, drag & drop from the library onto the sidebar (or its
+      + for a new one); lazer's collections read-only below them, copyable into Fumen
+- [ ] Smart collections (saved searches and filters)
+- [ ] Export: into lazer (lazer closed, tested versions, backup first) and to `collection.db`
+- [ ] stable as a source (`osu!.db` + Songs)
+
+## v0.4 — you
 
 - [x] Adding beatmaps: osu! links (set / beatmap pages, `osu://`, IDs) → set IDs (beatmap links via
       osu.ppy.sh's redirect) → `.osz` from mirrors (osu.direct, catboy.best, nerinyan.moe, checked to
