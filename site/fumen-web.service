@@ -1,0 +1,21 @@
+# systemd unit for Fumen's site on the VPS: /etc/systemd/system/fumen-web.service
+# (scripts/deploy-site.mjs installs and restarts it)
+[Unit]
+Description=Fumen site (fumen.dertesti.dev)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=dertesti
+WorkingDirectory=/home/dertesti/fumen-web
+EnvironmentFile=/home/dertesti/fumen-web/.env
+ExecStart=/usr/bin/node server.mjs
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadOnlyPaths=/home/dertesti/fumen-web
+
+[Install]
+WantedBy=multi-user.target
