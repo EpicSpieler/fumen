@@ -185,6 +185,17 @@ const MIGRATIONS: &[&str] = &[
     );
     CREATE INDEX scores_online ON scores(online_id);
     "#,
+    // 9 — osu!mania star ratings at rates people played that the library doesn't carry (0.75× and
+    //     1.5× are in chart_stats), from Fumen's calculator: rate × 100, for analysis `version`
+    r#"
+    CREATE TABLE rate_stars (
+        hash    TEXT NOT NULL,
+        rate    INTEGER NOT NULL,
+        version INTEGER NOT NULL,
+        sr      REAL NOT NULL,
+        PRIMARY KEY (hash, rate)
+    );
+    "#,
 ];
 
 pub fn open(path: &Path) -> Result<Connection> {

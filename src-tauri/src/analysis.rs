@@ -54,6 +54,18 @@ pub struct Share {
     pub share: f32,
 }
 
+/// The pattern shares as whole percent in `Pattern::ALL` order (stream, jumpstream, handstream,
+/// chordjack, jacks, ln), from the JSON cached in `chart_stats.patterns`; None without any.
+pub fn shares_percent(json: &str) -> Option<[u8; 6]> {
+    let list: Vec<serde_json::Value> = serde_json::from_str(json).ok()?;
+    let mut out = [0u8; 6];
+    for s in &list {
+        let Some(i) = s["pattern"].as_str().and_then(|n| Pattern::ALL.iter().position(|p| p.name() == n)) else { continue };
+        out[i] = (s["share"].as_f64().unwrap_or(0.0) * 100.0).round().clamp(0.0, 100.0) as u8;
+    }
+    out.iter().any(|v| *v > 0).then_some(out)
+}
+
 #[derive(Debug, Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Analysis {
@@ -322,6 +334,10 @@ mod tests {
         }
         let a = analyse(&c);
         assert_eq!(a.patterns[0].pattern, Pattern::Ln);
+        let json = serde_json::to_string(&a.patterns).unwrap();
+        assert_eq!(shares_percent(&json).unwrap()[5], (a.patterns[0].share * 100.0).round() as u8);
+        assert_eq!(shares_percent("[]"), None);
+        assert_eq!(shares_percent(r#"[{"pattern":"jacks","share":0.254},{"pattern":"stream","share":0.5}]"#), Some([50, 0, 0, 0, 25, 0]));
         assert!(a.ln_time > 0.9);
         assert_eq!(a.lanes, vec![20, 20, 20, 20]);
         assert_eq!(a.chords, [80, 0, 0, 0]);
