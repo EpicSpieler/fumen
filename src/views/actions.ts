@@ -3,7 +3,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { osuMapUrl, osuSetUrl } from "../lib/api";
 import {
   addToCollection, collectionMaps, copyLazerCollection, createCollection, deleteCollection, fumenCollection, fumenCollections,
-  isSmart, removeFromCollection, renameCollection,
+  isSmart, lazerTarget, putIntoLazer, removeFromCollection, renameCollection, saveCollectionDb,
 } from "../lib/collections";
 import { num } from "../lib/format";
 import { go } from "../lib/router";
@@ -123,6 +123,15 @@ export function collectionMenu(
           if (name && name !== mine.name) await renameCollection(id, name);
         })(),
       },
+      "sep",
+      {
+        label: lazerTarget(mine) ? "Update in osu!lazer" : "Put into osu!lazer",
+        icon: "arrow-right",
+        hint: "lazer closed",
+        action: () => void putIntoLazer([mine]),
+      },
+      { label: "Save as collection.db…", icon: "download", hint: "stable", action: () => void saveCollectionDb([mine]) },
+      "sep",
       {
         label: "Delete collection",
         icon: "trash",

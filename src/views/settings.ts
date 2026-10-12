@@ -3,6 +3,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import { open } from "@tauri-apps/plugin-dialog";
 import { api, asApiError } from "../lib/api";
 import { esc, MODE_LABEL, num, relativeTime } from "../lib/format";
+import { collectionEvents, fumenCollections, putIntoLazer, saveCollectionDb } from "../lib/collections";
 import { syncHistory } from "../lib/history";
 import { checkForUpdate, downloadText, installUpdate, updateEvents, updateState } from "../lib/updater";
 import { describeScan, isScanning, runScan } from "../lib/scan";
@@ -54,6 +55,7 @@ export class SettingsView {
       events.on("status", () => this.renderLibrary()),
       events.on("scan", () => this.renderLibrary()),
       updateEvents.on("change", () => this.renderUpdate()),
+      collectionEvents.on("collections", () => this.renderCollections()),
     );
     this.el.addEventListener("click", (e) => void this.onClick(e));
     shown = this;
@@ -90,6 +92,11 @@ export class SettingsView {
             </div>
             <input type="checkbox" role="switch" data-setting="autoRescan" ${store.settings?.autoRescan !== false ? "checked" : ""} />
           </div>
+        </section>
+
+        <section class="settings-section">
+          <div class="label-caps settings-label">Collections</div>
+          <div class="setting-row" data-row="collections"></div>
         </section>
 
         <section class="settings-section">
@@ -145,7 +152,7 @@ export class SettingsView {
           <div class="setting-row">
             <div class="setting-text">
               <div class="setting-title about-version">Fumen ${esc(this.version)}</div>
-              <div class="setting-desc">Fumen reads osu!lazer's database from a private copy. Beatmaps you add go into lazer through lazer's own import, only while lazer is closed and only on lazer versions tested with Fumen.</div>
+              <div class="setting-desc">Fumen reads osu!lazer's database from a private copy. Beatmaps and collections you put into lazer go in through lazer's own code, only while lazer is closed, only on lazer versions tested with Fumen, and with a backup of its database first.</div>
             </div>
           </div>
           <div class="setting-row" data-row="update"></div>
@@ -153,6 +160,7 @@ export class SettingsView {
       </div>`;
     this.el.querySelectorAll<HTMLElement>(".seg-pill").forEach((s) => attachSegIndicator(s));
     this.renderLibrary();
+    this.renderCollections();
     this.renderAccount();
     this.renderUpdate();
   }
@@ -240,6 +248,21 @@ export class SettingsView {
     }
   }
 
+  private renderCollections(): void {
+    const row = this.el.querySelector<HTMLElement>('[data-row="collections"]');
+    if (!row) return;
+    const n = fumenCollections().length;
+    row.innerHTML = `
+      <div class="setting-text">
+        <div class="setting-title">Your collections in osu!</div>
+        <div class="setting-desc">${n ? `${n === 1 ? "Fumen's collection" : `All ${num(n)} of Fumen's collections`} into osu!lazer's (each one updates the lazer collection it went into before, or the one with its name), or as a collection.db for osu!stable and Collection Manager. Single ones: right-click them in the sidebar.` : "Make a collection in the sidebar first."}</div>
+      </div>
+      <div class="setting-actions">
+        <button class="btn btn-sm s-cols-db" type="button"${n ? "" : " disabled"}>${icon("download")}Save collection.db…</button>
+        <button class="btn btn-sm s-cols-lazer" type="button"${n ? "" : " disabled"}>${icon("arrow-right")}Put into osu!lazer</button>
+      </div>`;
+  }
+
   private renderLibrary(): void {
     const pathRow = this.el.querySelector<HTMLElement>('[data-row="path"]');
     const libRow = this.el.querySelector<HTMLElement>('[data-row="library"]');
@@ -286,6 +309,8 @@ export class SettingsView {
       applyAppearance();
       return;
     }
+    if (t.closest(".s-cols-lazer")) return void putIntoLazer(fumenCollections());
+    if (t.closest(".s-cols-db")) return void saveCollectionDb(fumenCollections());
     const sw = t.closest<HTMLElement>(".swatch");
     if (sw) {
       this.el.querySelectorAll(".swatch").forEach((b) => b.classList.toggle("active", b === sw));

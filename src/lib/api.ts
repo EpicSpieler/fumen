@@ -7,7 +7,7 @@ import type {
   ChartData,
   ChartSounds,
   DanRating,
-  FumenCollection,
+  CollectionPick, FumenCollection,
   History,
   ImportProgress,
   ImportSummary,
@@ -81,6 +81,10 @@ export const api = {
   /** a saved search (FilterState as JSON) as a smart collection */
   createSmartCollection: (name: string, query: string) => invoke<string>("create_smart_collection", { name, query }),
   setCollectionQuery: (id: string, query: string) => invoke<void>("set_collection_query", { id, query }),
+  /** into lazer's collections (lazer closed, tested version, backup first); then a rescan */
+  putCollectionsIntoLazer: (picks: CollectionPick[]) => invoke<{ created: number; updated: number }>("put_collections_into_lazer", { picks }),
+  /** a stable collection.db at `path`; how many collections went in */
+  saveCollectionDb: (path: string, picks: CollectionPick[]) => invoke<number>("save_collection_db", { path, picks }),
   renameCollection: (id: string, name: string) => invoke<void>("rename_collection", { id, name }),
   deleteCollection: (id: string) => invoke<void>("delete_collection", { id }),
   /** how many weren't in it yet */
