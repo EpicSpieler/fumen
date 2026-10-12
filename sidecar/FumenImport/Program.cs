@@ -11,6 +11,7 @@ namespace FumenImport;
 ///
 ///   fumen-import info                               lazer's version and database schema version
 ///   fumen-import import <data-dir> <archive>...     into lazer's library (lazer must be closed)
+///   fumen-import collections <data-dir> <json>      collections into lazer's (lazer must be closed)
 ///   fumen-import selftest <empty-dir> <archive>     into a fresh library, twice
 ///
 /// Output for Fumen: lines starting with "@fumen " followed by JSON (anything else is lazer's
@@ -30,6 +31,7 @@ internal static class Program
                 ["members", var type] => Members(type),
                 ["checkschema", var file, var version] => CheckSchema(file, int.Parse(version)),
                 ["import", var dir, .. var files] when files.Length > 0 => Import(dir, files),
+                ["collections", var dir, var json] => Collections(dir, json),
                 ["selftest", var dir, var file] => SelfTest(dir, file),
                 _ => Usage(),
             };
@@ -49,7 +51,7 @@ internal static class Program
 
     private static int Usage()
     {
-        Console.Error.WriteLine("usage: fumen-import info | import <data-dir> <archive>... | selftest <empty-dir> <archive>");
+        Console.Error.WriteLine("usage: fumen-import info | import <data-dir> <archive>... | collections <data-dir> <json> | selftest <empty-dir> <archive>");
         return 2;
     }
 
@@ -120,6 +122,25 @@ internal static class Program
         return 0;
     }
 
+    /// Puts collections into lazer's: `json` is a file with [{ key, lazerId?, name, md5s }]. Each
+    /// goes into the lazer collection with that id, else the first one with that name, else a new
+    /// one, and then holds exactly these difficulties under this name. lazer's other collections
+    /// stay as they are. One line per collection: { key, id, created }.
+    private static int Collections(string dataDir, string json)
+    {
+        var realmFile = Path.Combine(dataDir, Lazer.ClientDatabase);
+        if (!File.Exists(realmFile))
+            throw new FileNotFoundException($"No lazer database at {realmFile}");
+        Lazer.CheckSchema(realmFile);
+        var wanted = JsonSerializer.Deserialize<List<CollectionIn>>(File.ReadAllText(json), new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+                     ?? throw new InvalidDataException("no collections given");
+
+        using var lazer = Lazer.Open(dataDir);
+        foreach (var (c, id, created) in lazer.PutCollections(wanted))
+            Emit(new { key = c.Key, id, created });
+        return 0;
+    }
+
     /// Imports into a fresh lazer library in `dir` (rulesets set up like on lazer's first start),
     /// then again: lazer must keep the one set. What's in the database afterwards is checked by
     /// Fumen with its own reader (the fumen-realm export).
@@ -140,6 +161,8 @@ internal static class Program
         return sameSet ? 0 : 1;
     }
 }
+
+internal sealed record CollectionIn(string Key, string? LazerId, string Name, List<string> Md5s);
 
 internal sealed class SchemaMismatch(string message, ulong file, int code) : Exception(message)
 {
@@ -276,6 +299,70 @@ internal sealed class Lazer : IDisposable
         // null: lazer found nothing to import in the archive
         var live = running.GetType().GetProperty("Result")!.GetValue(running);
         return live == null ? [] : [(Guid)live.GetType().GetProperty("ID", BindingFlags.Public | BindingFlags.Instance)!.GetValue(live)!];
+    }
+
+    /// Writes collections in one of lazer's own write transactions (RealmAccess.Write); returns
+    /// lazer's id for each and whether it was made new.
+    public List<(CollectionIn, Guid, bool)> PutCollections(IReadOnlyList<CollectionIn> wanted)
+    {
+        var realmType = T(Realms, "Realms.Realm");
+        // void Write(Action<Realm> action)
+        var write = _realm.GetType().GetMethods(BindingFlags.Public | BindingFlags.Instance)
+            .FirstOrDefault(m => m.Name == "Write" && m.ReturnType == typeof(void) && m.GetParameters() is [{ ParameterType: var p }]
+                                 && p == typeof(Action<>).MakeGenericType(realmType))
+            ?? throw new MissingMethodException("RealmAccess.Write(Action<Realm>) is gone (lazer changed?)");
+        var writer = new CollectionWriter(T(Game, "osu.Game.Collections.BeatmapCollection"), realmType, wanted);
+        var apply = typeof(CollectionWriter).GetMethod(nameof(CollectionWriter.Apply))!.MakeGenericMethod(realmType);
+        write.Invoke(_realm, [Delegate.CreateDelegate(typeof(Action<>).MakeGenericType(realmType), writer, apply)]);
+        return writer.Done;
+    }
+
+    /// The writing itself, on lazer's Realm (its type only known at run time).
+    private sealed class CollectionWriter(Type collectionType, Type realmType, IReadOnlyList<CollectionIn> wanted)
+    {
+        public readonly List<(CollectionIn, Guid, bool)> Done = [];
+
+        public void Apply<TRealm>(TRealm realm)
+        {
+            Done.Clear();
+            var all = realmType.GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                .First(m => m.Name == "All" && m.IsGenericMethodDefinition && m.GetParameters().Length == 0)
+                .MakeGenericMethod(collectionType);
+            var add = realmType.GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                .FirstOrDefault(m => m.Name == "Add" && m.IsGenericMethodDefinition && m.GetParameters() is [{ ParameterType.IsGenericParameter: true }, { ParameterType: var u }] && u == typeof(bool))
+                ?.MakeGenericMethod(collectionType)
+                ?? throw new MissingMethodException("Realm.Add<T>(T, bool) is gone (Realm changed?)");
+            var id = collectionType.GetProperty("ID")!;
+            var name = collectionType.GetProperty("Name")!;
+            var hashes = collectionType.GetProperty("BeatmapMD5Hashes")!;
+            var modified = collectionType.GetProperty("LastModified")!;
+            var existing = ((System.Collections.IEnumerable)all.Invoke(realm, null)!).Cast<object>().ToList();
+
+            foreach (var c in wanted)
+            {
+                var target = (Guid.TryParse(c.LazerId, out var g) ? existing.FirstOrDefault(e => (Guid)id.GetValue(e)! == g) : null)
+                             ?? existing.FirstOrDefault(e => (string?)name.GetValue(e) == c.Name);
+                var md5s = c.Md5s.Distinct().ToList();
+                if (target == null)
+                {
+                    target = Construct(collectionType, c.Name, md5s);
+                    add.Invoke(realm, [target, false]);
+                    existing.Add(target);
+                    Done.Add((c, (Guid)id.GetValue(target)!, true));
+                    continue;
+                }
+                // the generic list: Realm's non-generic IList.Add recurses into itself
+                var list = (IList<string>)hashes.GetValue(target)!;
+                if ((string?)name.GetValue(target) != c.Name) name.SetValue(target, c.Name);
+                if (!list.SequenceEqual(md5s))
+                {
+                    list.Clear();
+                    foreach (var h in md5s) list.Add(h);
+                }
+                modified.SetValue(target, DateTimeOffset.Now);
+                Done.Add((c, (Guid)id.GetValue(target)!, false));
+            }
+        }
     }
 
     /// The constructor of `type` that takes these arguments (trailing optional ones left out).

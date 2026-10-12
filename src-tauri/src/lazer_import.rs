@@ -17,6 +17,9 @@
 //!   5. lazer gets a copy of each archive (it deletes what it imported).
 //!
 //! What lazer would do online (ranked status, star ratings) it does itself on its next start.
+//!
+//! Collections go in the same way, with the same checks (`put_collections`): lazer's own
+//! `RealmAccess.Write` on its `BeatmapCollection`s.
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -308,8 +311,8 @@ fn run(host: &Path, args: &[&std::ffi::OsStr]) -> Result<(i32, Vec<serde_json::V
     Ok((out.status.code().unwrap_or(-1), lines))
 }
 
-/// The error the importer reported, as one of Fumen's.
-fn importer_error(code: i32, lines: &[serde_json::Value]) -> Error {
+/// The error the importer reported, as one of Fumen's (`what`: "Importing into lazer").
+fn importer_error(code: i32, lines: &[serde_json::Value], what: &str) -> Error {
     let msg = lines
         .iter()
         .rev()
@@ -318,7 +321,7 @@ fn importer_error(code: i32, lines: &[serde_json::Value]) -> Error {
         .to_string();
     match code {
         3 => Error::known("lazer-schema", msg),
-        _ => Error::known("import-failed", format!("Importing into lazer failed: {msg}")),
+        _ => Error::known("import-failed", format!("{what} failed: {msg}")),
     }
 }
 
@@ -349,7 +352,7 @@ pub fn import(storage: &Path, cache: &Path, backups: &Path, files: &[PathBuf], c
     args.extend(files.iter().map(|f| f.as_os_str()));
     let (code, lines) = run(&host, &args)?;
     if code != 0 {
-        return Err(importer_error(code, &lines));
+        return Err(importer_error(code, &lines, "Importing into lazer"));
     }
     Ok(lines
         .iter()
@@ -359,6 +362,50 @@ pub fn import(storage: &Path, cache: &Path, backups: &Path, files: &[PathBuf], c
             ok: l["ok"].as_bool().unwrap_or(false),
             sets: l["sets"].as_array().map(|a| a.iter().filter_map(|s| s.as_str().map(str::to_string)).collect()).unwrap_or_default(),
             message: l["message"].as_str().map(str::to_string),
+        })
+        .collect())
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PutCollection {
+    /// Fumen's id
+    pub key: String,
+    /// lazer's
+    pub id: String,
+    /// made new (else one of lazer's was changed)
+    pub created: bool,
+}
+
+/// Puts collections into lazer's, with the same checks as an import: each goes into the lazer
+/// collection it went into before (`lazer_id`), else the one with its name, else a new one.
+pub fn put_collections(
+    storage: &Path,
+    cache: &Path,
+    backups: &Path,
+    cols: &[crate::collections::Outgoing],
+    compat: &Compat,
+) -> Result<Vec<PutCollection>> {
+    let st = status(Some(storage), compat);
+    if let Some(reason) = st.reason {
+        return Err(Error::known(error_code(reason), st.message.unwrap_or_default()));
+    }
+    let lazer = installed().ok_or_else(|| Error::known("lazer-not-installed", "osu!lazer's installation wasn't found."))?;
+    let host = host_dir(cache, &lazer)?;
+    backup(storage, backups)?;
+
+    let json = cache.join(format!("collections-{}.json", crate::lazer::now_ms()));
+    std::fs::write(&json, serde_json::to_vec(cols)?)?;
+    let result = run(&host, &["collections".as_ref(), storage.as_os_str(), json.as_os_str()]);
+    let _ = std::fs::remove_file(&json);
+    let (code, lines) = result?;
+    if code != 0 {
+        return Err(importer_error(code, &lines, "Writing lazer's collections"));
+    }
+    Ok(lines
+        .iter()
+        .filter_map(|l| {
+            Some(PutCollection { key: l.get("key")?.as_str()?.to_string(), id: l.get("id")?.as_str()?.to_string(), created: l["created"].as_bool()? })
         })
         .collect())
 }
@@ -589,6 +636,55 @@ mod tests {
         assert_eq!((code, out[0]["sets"][0].as_str()), (0, Some(id.as_str())), "re-import: {out:?}");
         assert_eq!(sets_by_id(&export(&realm, &work.join("again.json"))).len(), new.len(), "sets after importing again");
         println!("importing the same set again: no new set");
+
+        // 4. collections: one new, one of lazer's changed (by id and renamed), the rest untouched
+        let base = export(&realm, &work.join("base.json"));
+        let md5s: Vec<String> = base["sets"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .flat_map(|s| s["maps"].as_array().unwrap().iter().filter_map(|m| m["md5"].as_str().map(str::to_string)))
+            .take(3)
+            .collect();
+        let mut cols = vec![crate::collections::Outgoing { key: "new".into(), lazer_id: None, name: "Fumen verify".into(), md5s: md5s.clone() }];
+        let changed = base["collections"].as_array().unwrap().first().map(|c| c["id"].as_str().unwrap().to_string());
+        if let Some(id) = &changed {
+            cols.push(crate::collections::Outgoing { key: "old".into(), lazer_id: Some(id.clone()), name: "Fumen verify 2".into(), md5s: md5s[..1].to_vec() });
+        }
+        let json = work.join("collections.json");
+        std::fs::write(&json, serde_json::to_vec(&cols).unwrap()).unwrap();
+        let put = |expect_new: bool| {
+            let (code, out) = importer(&host, &["collections", real.to_str().unwrap(), json.to_str().unwrap()]);
+            assert_eq!(code, 0, "collections: {out:?}");
+            assert_eq!(out.len(), cols.len(), "collections: {out:?}");
+            assert_eq!(out[0]["created"], expect_new, "collections: {out:?}");
+            if changed.is_some() {
+                assert_eq!((out[1]["created"].as_bool(), out[1]["id"].as_str()), (Some(false), changed.as_deref()), "collections: {out:?}");
+            }
+            out[0]["id"].as_str().unwrap().to_string()
+        };
+        let new_id = put(true);
+        let after = export(&realm, &work.join("cols.json"));
+        let by_id = |e: &serde_json::Value| -> std::collections::BTreeMap<String, serde_json::Value> {
+            e["collections"].as_array().unwrap().iter().map(|c| (c["id"].as_str().unwrap().to_string(), c.clone())).collect()
+        };
+        let (was, now) = (by_id(&base), by_id(&after));
+        assert_eq!(now.len(), was.len() + 1, "collections after writing");
+        assert_eq!(now[&new_id]["name"], "Fumen verify");
+        assert_eq!(now[&new_id]["md5s"], serde_json::json!(md5s));
+        for (cid, c) in &was {
+            if Some(cid) == changed.as_ref() {
+                assert_eq!((&now[cid]["name"], &now[cid]["md5s"]), (&serde_json::json!("Fumen verify 2"), &serde_json::json!(md5s[..1])));
+            } else {
+                assert_eq!(now.get(cid), Some(c), "collection {cid} changed");
+            }
+        }
+        for part in ["sets", "scores", "skins", "rulesetSettings"] {
+            assert_eq!(base[part], after[part], "{part} changed by writing collections");
+        }
+        assert_eq!(put(false), new_id, "writing again made another collection");
+        assert_eq!(by_id(&export(&realm, &work.join("cols2.json"))).len(), now.len());
+        println!("collections: one made, one changed, written again without a copy, nothing else touched");
 
         let _ = std::fs::remove_dir_all(&work);
         if write {

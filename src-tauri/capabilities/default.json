@@ -12,6 +12,7 @@
     "core:window:allow-start-dragging",
     "core:window:allow-is-maximized",
     "dialog:allow-open",
+    "dialog:allow-save",
     "opener:allow-open-url",
     "opener:allow-reveal-item-in-dir",
     "updater:default"

@@ -443,6 +443,55 @@ fn set_collection_query(state: State<AppState>, id: String, query: String) -> Re
     collections::set_query(&state.db(), &id, &query)
 }
 
+#[derive(Serialize)]
+struct LazerCollectionsPut {
+    created: usize,
+    updated: usize,
+}
+
+/// Puts Fumen collections into lazer's (when that's safe, see `lazer_import.rs`), then updates
+/// Fumen's library so lazer's collections show them.
+#[tauri::command]
+async fn put_collections_into_lazer(app: AppHandle, picks: Vec<collections::Pick>) -> Result<LazerCollectionsPut> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        if state.scanning.swap(true, Ordering::SeqCst) {
+            return Err(Error::known("busy", "The library is being updated; try again in a moment."));
+        }
+        let result = (|| {
+            let storage = state
+                .storage()
+                .ok_or_else(|| Error::known("lazer-not-found", "osu!lazer's data folder wasn't found. Pick it in Settings."))?;
+            let cols = collections::outgoing(&state.db(), &picks)?;
+            let compat = state.compat();
+            let done = lazer_import::put_collections(&storage, &state.cache_dir, &state.data_dir.join("lazer-backups"), &cols, &compat)?;
+            {
+                let conn = state.db();
+                for d in &done {
+                    collections::set_lazer_id(&conn, &d.key, &d.id)?;
+                }
+            }
+            if let Err(e) = run_scan(&app, &state) {
+                eprintln!("[collections] library update after writing lazer's collections: {e}");
+            }
+            let created = done.iter().filter(|d| d.created).count();
+            Ok(LazerCollectionsPut { created, updated: done.len() - created })
+        })();
+        state.scanning.store(false, Ordering::SeqCst);
+        result
+    })
+    .await
+    .map_err(|e| Error::known("internal", e.to_string()))?
+}
+
+/// Writes the picked collections as a stable `collection.db` at `path` (picked by the user).
+#[tauri::command]
+fn save_collection_db(state: State<AppState>, path: String, picks: Vec<collections::Pick>) -> Result<usize> {
+    let cols = collections::outgoing(&state.db(), &picks)?;
+    collections::save_collection_db(std::path::Path::new(&path), &cols)?;
+    Ok(cols.len())
+}
+
 /// A Fumen copy of one of lazer's collections (Fumen's can be changed).
 #[tauri::command]
 fn copy_lazer_collection(state: State<AppState>, id: String, name: String) -> Result<String> {
@@ -827,6 +876,8 @@ pub fn run() {
             create_collection,
             create_smart_collection,
             set_collection_query,
+            put_collections_into_lazer,
+            save_collection_db,
             copy_lazer_collection,
             rename_collection,
             delete_collection,
