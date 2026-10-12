@@ -185,7 +185,7 @@ mod tests {
                 if m["rulesetId"].as_i64() != Some(3) {
                     continue;
                 }
-                let Ok(c) = crate::charts::load(&storage, hash) else { continue };
+                let Ok(c) = crate::charts::load(&crate::paths::Files::lazer(&storage), hash) else { continue };
                 if c.mode != 3 {
                     continue;
                 }

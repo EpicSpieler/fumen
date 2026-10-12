@@ -17,6 +17,7 @@ mod paths;
 mod protocol;
 mod settings;
 mod skins;
+mod stable;
 mod stars;
 #[cfg(test)]
 mod test_http;
@@ -33,7 +34,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 
 use error::{Error, Result};
 use lazer::ImportCounts;
-use paths::LazerInstall;
+use paths::{LazerInstall, StableInstall};
 use settings::Settings;
 
 pub struct AppState {
@@ -46,6 +47,8 @@ pub struct AppState {
     remote_compat: Mutex<Option<(std::time::Instant, Option<lazer_import::Compat>)>>,
     /// lazer's resolved storage folder (holds client.realm + files/), for the protocol handler.
     storage: RwLock<Option<PathBuf>>,
+    /// stable's files by key (see stable.rs), as of the last scan
+    stable_files: RwLock<std::sync::Arc<paths::StableFiles>>,
     scanning: AtomicBool,
     analysing: AtomicBool,
     /// another analysis pass was requested while one was running
@@ -98,6 +101,34 @@ impl AppState {
         paths::inspect_lazer(&dir)
     }
 
+/// stable, when it's found and wanted.
+    fn stable_install(&self) -> Option<StableInstall> {
+        let s = self.settings();
+        if !s.use_stable {
+            return None;
+        }
+        paths::inspect_stable(&s.stable_override().or_else(paths::default_stable_dir)?)
+    }
+
+    /// Where the library's file keys point (lazer's store, stable's Songs folder).
+    fn files(&self) -> paths::Files {
+        paths::Files {
+            lazer: self.storage(),
+            stable: self.stable_files.read().map(|f| f.clone()).unwrap_or_default(),
+        }
+    }
+
+    fn reload_stable_files(&self) {
+        match stable::load_files(&self.db()) {
+            Ok(f) => {
+                if let Ok(mut s) = self.stable_files.write() {
+                    *s = std::sync::Arc::new(f);
+                }
+            }
+            Err(e) => eprintln!("[stable] files: {e}"),
+        }
+    }
+
     fn refresh_storage(&self) {
         let storage = self.install().map(|i| PathBuf::from(i.storage));
         if let Ok(mut s) = self.storage.write() {
@@ -135,6 +166,12 @@ fn inspect_lazer_path(path: String) -> Option<LazerInstall> {
     paths::inspect_lazer(&PathBuf::from(path))
 }
 
+/// Validates a folder the user picked; `None` if it isn't osu!stable's (no osu!.db or Songs).
+#[tauri::command]
+fn inspect_stable_path(path: String) -> Option<StableInstall> {
+    paths::inspect_stable(&PathBuf::from(path))
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct LibraryStatus {
@@ -145,15 +182,43 @@ struct LibraryStatus {
     /// lazer's database changed (or moved) since the last import.
     changed: bool,
     scanning: bool,
+    stable: StableStatus,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct StableStatus {
+    /// found (and wanted)
+    install: Option<StableInstall>,
+    default_path: Option<String>,
+    enabled: bool,
+    scanned_at: Option<i64>,
+    counts: Option<Value>,
 }
 
 #[tauri::command]
 fn library_status(state: State<'_, AppState>) -> Result<LibraryStatus> {
     let install = state.install();
+    let stable_install = state.stable_install();
     let conn = state.db();
-    let scanned_at = db::get_meta(&conn, "lazer.lastScan")?.and_then(|v| v.parse().ok());
-    let counts = db::get_meta(&conn, "lazer.counts")?.and_then(|v| serde_json::from_str(&v).ok());
-    let changed = match (&install, scanned_at) {
+    let lazer_scanned: Option<i64> = db::get_meta(&conn, "lazer.lastScan")?.and_then(|v| v.parse().ok());
+    let stable_scanned: Option<i64> = db::get_meta(&conn, "stable.lastScan")?.and_then(|v| v.parse().ok());
+    let scanned_at = lazer_scanned.max(stable_scanned);
+    let stable_counts: Option<Value> = db::get_meta(&conn, "stable.counts")?.and_then(|v| serde_json::from_str(&v).ok());
+    // the library's counts: lazer's, with stable's sets, difficulties and collections added
+    let mut counts: Option<Value> = db::get_meta(&conn, "lazer.counts")?.and_then(|v| serde_json::from_str(&v).ok());
+    if let Some(sc) = &stable_counts {
+        let c = counts.get_or_insert_with(|| serde_json::json!({ "sets": 0, "maps": 0, "scores": 0, "collections": 0 }));
+        for k in ["sets", "maps", "collections"] {
+            c[k] = (c[k].as_u64().unwrap_or(0) + sc[k].as_u64().unwrap_or(0)).into();
+        }
+    }
+    let stable_changed = match &stable_install {
+        Some(s) => !stable::is_current(&conn, s)?,
+        // switched off or gone: its sets go on the next import
+        None => stable_scanned.is_some(),
+    };
+    let changed = scanned_at.is_some() && stable_changed || match (&install, lazer_scanned) {
         (Some(i), Some(_)) => {
             db::get_meta(&conn, "lazer.realmModified")?.as_deref() != Some(&i.realm_modified.to_string())
                 || db::get_meta(&conn, "lazer.realmSize")?.as_deref() != Some(&i.realm_size.to_string())
@@ -174,6 +239,13 @@ fn library_status(state: State<'_, AppState>) -> Result<LibraryStatus> {
         counts,
         changed,
         scanning: state.scanning.load(Ordering::SeqCst),
+        stable: StableStatus {
+            install: stable_install,
+            default_path: paths::default_stable_dir().map(|p| p.to_string_lossy().into_owned()),
+            enabled: state.settings().use_stable,
+            scanned_at: stable_scanned,
+            counts: stable_counts,
+        },
     })
 }
 
@@ -185,8 +257,8 @@ struct ScanProgress {
     total: u64,
 }
 
-/// Imports lazer's library: sidecar export → SQLite. Emits `scan-progress` along the way and
-/// `library-changed` when the new data is committed.
+/// Imports lazer's library (sidecar export → SQLite) and stable's (osu!.db + Songs). Emits
+/// `scan-progress` along the way and `library-changed` when the new data is committed.
 #[tauri::command]
 async fn scan_library(app: AppHandle) -> Result<ImportCounts> {
     tauri::async_runtime::spawn_blocking(move || {
@@ -206,20 +278,41 @@ fn run_scan(app: &AppHandle, state: &AppState) -> Result<ImportCounts> {
     let emit = |stage: &str, done: u64, total: u64| {
         let _ = app.emit("scan-progress", ScanProgress { stage: stage.into(), done, total });
     };
-    let install = state.install().ok_or_else(|| {
-        Error::known("lazer-not-found", "osu!lazer's data folder wasn't found. Pick it in Settings.")
-    })?;
+    let install = state.install();
+    let stable_install = state.stable_install();
+    if install.is_none() && stable_install.is_none() {
+        return Err(Error::known("lazer-not-found", "osu!lazer's data folder wasn't found. Pick it in Settings."));
+    }
 
-    std::fs::create_dir_all(&state.cache_dir)?;
-    let out = state.cache_dir.join("lazer-export.json");
-    lazer::run_export(&PathBuf::from(&install.storage), &out, |stage, done, total| emit(stage, done, total))?;
-
-    emit("import", 0, 1);
-    let counts = {
-        let mut conn = state.db();
-        lazer::import(&mut conn, &out, &install)?
-    };
-    let _ = std::fs::remove_file(&out);
+    let mut counts = ImportCounts::default();
+    if let Some(install) = &install {
+        std::fs::create_dir_all(&state.cache_dir)?;
+        let out = state.cache_dir.join("lazer-export.json");
+        lazer::run_export(&PathBuf::from(&install.storage), &out, |stage, done, total| emit(stage, done, total))?;
+        emit("import", 0, 1);
+        counts = {
+            let mut conn = state.db();
+            lazer::import(&mut conn, &out, install)?
+        };
+        let _ = std::fs::remove_file(&out);
+    }
+    match &stable_install {
+        Some(st) => {
+            // osu!.db unchanged: stable's part of the library is still right
+            let current = stable::is_current(&state.db(), st)?;
+            let c = if current {
+                stable::last_counts(&state.db())?
+            } else {
+                emit("stable", 0, 1);
+                stable::import(&mut state.db(), st, |done, total| emit("stable", done, total))?
+            };
+            counts.sets += c.sets;
+            counts.maps += c.maps;
+            counts.collections += c.collections;
+        }
+        None => stable::clear(&mut state.db())?,
+    }
+    state.reload_stable_files();
     state.refresh_storage();
     if let Err(e) = skins::refresh_builtin(&state.cache_dir) {
         eprintln!("[skins] built-in textures: {e}");
@@ -261,8 +354,8 @@ fn start_analysis(app: &AppHandle) {
 }
 
 fn run_analysis(app: &AppHandle, state: &AppState) -> Result<bool> {
-    let Some(storage) = state.storage() else { return Ok(false) };
-    if !storage.join("files").is_dir() {
+    let files = state.files();
+    if files.is_empty() {
         return Ok(false);
     }
     let hashes = charts::pending(&state.db())?;
@@ -276,7 +369,7 @@ fn run_analysis(app: &AppHandle, state: &AppState) -> Result<bool> {
     emit(0);
     let mut done = 0u64;
     for chunk in hashes.chunks(400) {
-        let rows = charts::analyse_batch(&storage, chunk);
+        let rows = charts::analyse_batch(&files, chunk);
         charts::store(&mut state.db(), &rows)?;
         done += chunk.len() as u64;
         emit(done);
@@ -284,7 +377,7 @@ fn run_analysis(app: &AppHandle, state: &AppState) -> Result<bool> {
     Ok(true)
 }
 
-/// A difficulty's chart, read from lazer's files.
+/// A difficulty's chart, read from lazer's files or stable's.
 fn load_chart(app: &AppHandle, id: &str) -> Result<chart::Chart> {
     let state = app.state::<AppState>();
     let hash: Option<String> = state
@@ -293,10 +386,7 @@ fn load_chart(app: &AppHandle, id: &str) -> Result<chart::Chart> {
         .optional()?
         .flatten();
     let hash = hash.ok_or_else(|| Error::known("chart-missing", "This difficulty isn't in the library anymore."))?;
-    let storage = state
-        .storage()
-        .ok_or_else(|| Error::known("lazer-not-found", "osu!lazer's data folder wasn't found. Pick it in Settings."))?;
-    charts::load(&storage, &hash)
+    charts::load(&state.files(), &hash)
 }
 
 /// One difficulty's notes, timing and full analysis as raw JSON (see `charts.rs`).
@@ -321,11 +411,9 @@ async fn get_dan(app: AppHandle, id: String, rate: f64) -> Result<Option<mma::da
 async fn get_hitsounds(app: AppHandle, id: String) -> Result<hitsounds::Sounds> {
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
-        let storage = state
-            .storage()
-            .ok_or_else(|| Error::known("lazer-not-found", "osu!lazer's data folder wasn't found. Pick it in Settings."))?;
+        let files = state.files();
         let conn = state.db();
-        hitsounds::for_map(&conn, &storage, &id)
+        hitsounds::for_map(&conn, &files, &id)
     })
     .await
     .map_err(|e| Error::known("internal", e.to_string()))?
@@ -414,9 +502,9 @@ async fn get_history(app: AppHandle) -> Result<tauri::ipc::Response> {
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
         let account = osu_auth::account(&state.data_dir);
-        let storage = state.storage();
+        let files = state.files();
         let conn = state.db();
-        osu_scores::history_json(&conn, account.as_ref(), storage.as_deref()).map(tauri::ipc::Response::new)
+        osu_scores::history_json(&conn, account.as_ref(), Some(&files)).map(tauri::ipc::Response::new)
     })
     .await
     .map_err(|e| Error::known("internal", e.to_string()))?
@@ -841,6 +929,7 @@ pub fn run() {
                 data_dir,
                 remote_compat: Mutex::new(None),
                 storage: RwLock::new(None),
+                stable_files: RwLock::new(Default::default()),
                 scanning: AtomicBool::new(false),
                 analysing: AtomicBool::new(false),
                 analyse_again: AtomicBool::new(false),
@@ -850,6 +939,7 @@ pub fn run() {
                 map_synced: Mutex::new(std::collections::HashMap::new()),
             };
             state.refresh_storage();
+            state.reload_stable_files();
             app.manage(state);
             // difficulties imported by an older version (or before a crash) still need analysing
             start_analysis(app.handle());
@@ -859,6 +949,7 @@ pub fn run() {
             get_settings,
             update_settings,
             inspect_lazer_path,
+            inspect_stable_path,
             library_status,
             scan_library,
             get_library,

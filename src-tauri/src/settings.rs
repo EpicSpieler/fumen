@@ -14,12 +14,16 @@ pub struct Settings {
     pub lazer_path: Option<String>,
     /// Re-import automatically when lazer's database changed since the last scan.
     pub auto_rescan: bool,
+    /// osu!stable folder override; `None` = auto-detect.
+    pub stable_path: Option<String>,
+    /// stable's beatmaps in the library too (when it's found).
+    pub use_stable: bool,
     pub ui: Map<String, Value>,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Settings { lazer_path: None, auto_rescan: true, ui: Map::new() }
+        Settings { lazer_path: None, auto_rescan: true, stable_path: None, use_stable: true, ui: Map::new() }
     }
 }
 
@@ -65,5 +69,9 @@ impl Settings {
 
     pub fn lazer_override(&self) -> Option<PathBuf> {
         self.lazer_path.as_deref().filter(|p| !p.trim().is_empty()).map(PathBuf::from)
+    }
+
+    pub fn stable_override(&self) -> Option<PathBuf> {
+        self.stable_path.as_deref().filter(|p| !p.trim().is_empty()).map(PathBuf::from)
     }
 }

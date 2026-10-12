@@ -2,9 +2,9 @@
 //!
 //! A single difficulty is read on demand for the chart panel (notes + full analysis). The library
 //! job analyses every difficulty once and caches a summary by `.osu` hash, so search can filter by
-//! pattern and peak density. lazer stores files content-addressed, so a cached row never goes stale.
+//! pattern and peak density. lazer stores files content-addressed (and stable's get keys that
+//! change with the file, see stable.rs), so a cached row never goes stale.
 
-use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use rusqlite::{params, Connection};
@@ -17,10 +17,10 @@ use crate::mma::{dan, patterns};
 use crate::paths;
 use crate::stars;
 
-pub fn load(storage: &Path, hash: &str) -> Result<Chart> {
-    let path = paths::lazer_file(storage, hash).ok_or_else(|| Error::known("chart-missing", "This difficulty has no chart file."))?;
+pub fn load(files: &paths::Files, hash: &str) -> Result<Chart> {
+    let path = files.path(hash).ok_or_else(|| Error::known("chart-missing", "This difficulty has no chart file."))?;
     let bytes = std::fs::read(&path).map_err(|e| match e.kind() {
-        std::io::ErrorKind::NotFound => Error::known("chart-missing", "This difficulty's .osu file is missing from lazer's files."),
+        std::io::ErrorKind::NotFound => Error::known("chart-missing", "This difficulty's .osu file is missing."),
         _ => e.into(),
     })?;
     // very old files can be in a legacy code page; the parts we read are ASCII anyway
@@ -151,7 +151,7 @@ fn summarize(hash: &str, chart: &Chart) -> Summary {
 
 /// Reads and analyses files in parallel. Files that can't be read are left out (and retried on
 /// the next run) rather than cached as empty.
-pub fn analyse_batch(storage: &Path, hashes: &[String]) -> Vec<Summary> {
+pub fn analyse_batch(files: &paths::Files, hashes: &[String]) -> Vec<Summary> {
     let next = AtomicUsize::new(0);
     let workers = std::thread::available_parallelism().map_or(4, |n| n.get()).clamp(1, 8);
     std::thread::scope(|s| {
@@ -162,7 +162,7 @@ pub fn analyse_batch(storage: &Path, hashes: &[String]) -> Vec<Summary> {
                     loop {
                         let i = next.fetch_add(1, Ordering::Relaxed);
                         let Some(hash) = hashes.get(i) else { break };
-                        if let Ok(chart) = load(storage, hash) {
+                        if let Ok(chart) = load(files, hash) {
                             out.push(summarize(hash, &chart));
                         }
                     }
@@ -231,7 +231,7 @@ mod tests {
         hashes.sort();
         hashes.dedup();
         let t = std::time::Instant::now();
-        let out = analyse_batch(&storage, &hashes);
+        let out = analyse_batch(&paths::Files::lazer(storage), &hashes);
         eprintln!("analysed {} of {} charts in {:?}", out.len(), hashes.len(), t.elapsed());
         let mut tags: std::collections::BTreeMap<String, usize> = Default::default();
         for s in &out {
@@ -282,7 +282,7 @@ mod tests {
                 if !wanted.iter().any(|w| title.contains(w.as_str())) && !file.exists() {
                     continue;
                 }
-                let Ok(chart) = load(&storage, hash) else { continue };
+                let Ok(chart) = load(&paths::Files::lazer(&storage), hash) else { continue };
                 let mut v: serde_json::Value = serde_json::from_slice(&chart_json(&chart).unwrap()).unwrap();
                 if chart.mode == 3 {
                     let dans: serde_json::Map<String, serde_json::Value> = stars::RATES
