@@ -261,10 +261,8 @@ pub fn import(conn: &mut Connection, json: &Path, install: &LazerInstall) -> Res
     let mut counts = ImportCounts::default();
     let tx = conn.transaction()?;
     tx.execute_batch(
-        "DELETE FROM lazer_collection_items;
-         DELETE FROM lazer_collections;
+        "DELETE FROM lazer_collections WHERE source = 'lazer';
          DELETE FROM scores;
-         DELETE FROM maps;
          DELETE FROM sets WHERE source = 'lazer';
          DELETE FROM skins;",
     )?;
@@ -499,7 +497,7 @@ mod tests {
         // with lazer's files at hand (FUMEN_TEST_STORAGE), the snapshot carries the chart analysis too
         if let Some(storage) = std::env::var_os("FUMEN_TEST_STORAGE") {
             let hashes = crate::charts::pending(&conn).unwrap();
-            let rows = crate::charts::analyse_batch(Path::new(&storage), &hashes);
+            let rows = crate::charts::analyse_batch(&crate::paths::Files::lazer(&storage), &hashes);
             crate::charts::store(&mut conn, &rows).unwrap();
             // hitsounds come with the sets' sound files: some chart has its own samples
             let ids: Vec<String> = conn
@@ -511,7 +509,7 @@ mod tests {
                 .unwrap();
             let own = ids
                 .iter()
-                .filter_map(|id| crate::hitsounds::for_map(&conn, Path::new(&storage), id).ok())
+                .filter_map(|id| crate::hitsounds::for_map(&conn, &crate::paths::Files::lazer(&storage), id).ok())
                 .filter(|s| s.samples.iter().any(|x| matches!(x, crate::hitsounds::Sample::File(_))))
                 .count();
             eprintln!("hitsounds: {own} of {} charts with .wav files in their set use them", ids.len());

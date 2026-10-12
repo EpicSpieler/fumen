@@ -1,11 +1,12 @@
 //! `fumen://` — serves osu! files to the webview.
 //!
-//!   fumen://localhost/file/<sha256>          raw file from lazer's store (Range-capable, for audio)
-//!   fumen://localhost/thumb/<width>/<sha256> cached JPEG thumbnail of an image file
+//!   fumen://localhost/file/<key>             raw file from lazer's store or stable's Songs folder
+//!                                            (Range-capable, for audio)
+//!   fumen://localhost/thumb/<width>/<key>    cached JPEG thumbnail of an image file
 //!   fumen://localhost/skin/<skin>/<file>       lazer's built-in skin textures and hit sounds (see skins.rs)
 //!
-//! On Windows the webview sees these as `http://fumen.localhost/...`. Files are content-addressed,
-//! so responses are cacheable forever. CORS is open so canvases can sample colours from images.
+//! On Windows the webview sees these as `http://fumen.localhost/...`. A key stands for one content
+//! (lazer's hashes; stable's keys change with the file), so responses are cacheable forever. CORS is open so canvases can sample colours from images.
 
 use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
@@ -13,7 +14,6 @@ use std::path::Path;
 use tauri::http::{header, Request, Response, StatusCode};
 use tauri::{AppHandle, Manager};
 
-use crate::paths::lazer_file;
 use crate::{skins, thumbs};
 use crate::AppState;
 
@@ -34,16 +34,16 @@ fn route(app: &AppHandle, req: &Request<Vec<u8>>) -> Result<Response<Vec<u8>>, S
         let path = skins::builtin_file(state.cache_dir(), skin, name).ok_or(StatusCode::BAD_REQUEST)?;
         return serve_file(&path, req);
     }
-    let storage = state.storage().ok_or(StatusCode::NOT_FOUND)?;
+    let files = state.files();
 
     match parts.as_slice() {
         ["file", hash] => {
-            let path = lazer_file(&storage, hash).ok_or(StatusCode::BAD_REQUEST)?;
+            let path = files.path(hash).ok_or(StatusCode::NOT_FOUND)?;
             serve_file(&path, req)
         }
         ["thumb", width, hash] => {
             let width: u32 = width.parse().map_err(|_| StatusCode::BAD_REQUEST)?;
-            let source = lazer_file(&storage, hash).ok_or(StatusCode::BAD_REQUEST)?;
+            let source = files.path(hash).ok_or(StatusCode::NOT_FOUND)?;
             if !source.is_file() {
                 return Err(StatusCode::NOT_FOUND);
             }

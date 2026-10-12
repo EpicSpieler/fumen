@@ -3,8 +3,11 @@
 //! The whole library (~5k sets / ~22k difficulties for a big install) is sent once as compact
 //! JSON; the UI filters and sorts it in memory, so typing in the search box never waits on IPC.
 //! Sets and maps reference each other by array index.
+//!
+//! lazer's and stable's sets are in it together; a difficulty that's in both games is lazer's
+//! (stable's copy is left out, and a stable set left without difficulties with it).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use rusqlite::{Connection, OptionalExtension};
 use serde::Serialize;
@@ -87,6 +90,9 @@ struct SetOut {
     preview: Option<i64>,
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     protected: bool,
+    /// "stable" for osu!stable's (lazer's: left out)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    from: Option<&'static str>,
     maps: Vec<u32>,
 }
 
@@ -162,6 +168,9 @@ struct CollectionOut {
     maps: Vec<u32>,
     /// Entries whose difficulty isn't in the library (deleted / never downloaded).
     missing: usize,
+    /// "stable" for osu!stable's (lazer's: left out)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    from: Option<&'static str>,
 }
 
 pub(crate) fn ruleset_mode(id: Option<i64>, name: Option<&str>) -> i64 {
@@ -176,7 +185,14 @@ pub(crate) fn ruleset_mode(id: Option<i64>, name: Option<&str>) -> i64 {
 }
 
 pub fn snapshot_json(conn: &Connection) -> Result<Vec<u8>> {
-    let scanned_at = db::get_meta(conn, "lazer.lastScan")?.and_then(|v| v.parse().ok());
+    let scan = |k: &str| -> Result<Option<i64>> { Ok(db::get_meta(conn, k)?.and_then(|v| v.parse().ok())) };
+    let scanned_at = scan("lazer.lastScan")?.max(scan("stable.lastScan")?);
+
+    // difficulties lazer has: stable's copies of them stay out
+    let lazer_md5s: HashSet<String> = conn
+        .prepare("SELECT m.md5 FROM maps m JOIN sets s ON s.id = m.set_id WHERE s.source = 'lazer' AND m.md5 IS NOT NULL")?
+        .query_map([], |r| r.get(0))?
+        .collect::<rusqlite::Result<_>>()?;
 
     // the player's best per difficulty (by total score), plus play count
     let best = osu_scores::best_per_map(conn)?;
@@ -185,9 +201,14 @@ pub fn snapshot_json(conn: &Connection) -> Result<Vec<u8>> {
     let mut set_index: HashMap<String, u32> = HashMap::new();
     {
         let mut st = conn.prepare(
-            "SELECT id, online_id, status, date_added, date_ranked, title, title_unicode, artist,
-                    artist_unicode, creator, source_text, tags, bg, audio, preview_time, protected
-             FROM sets ORDER BY date_added DESC, id",
+            "SELECT s.id, s.online_id, s.status, s.date_added, s.date_ranked, s.title, s.title_unicode, s.artist,
+                    s.artist_unicode, s.creator, s.source_text, s.tags, s.bg, s.audio, s.preview_time, s.protected,
+                    s.source
+             FROM sets s
+             WHERE s.source != 'stable' OR EXISTS (
+                 SELECT 1 FROM maps m WHERE m.set_id = s.id AND (m.md5 IS NULL OR m.md5 NOT IN (
+                     SELECT m2.md5 FROM maps m2 JOIN sets s2 ON s2.id = m2.set_id WHERE s2.source = 'lazer' AND m2.md5 IS NOT NULL)))
+             ORDER BY s.date_added DESC, s.id",
         )?;
         let rows = st.query_map([], |r| {
             Ok(SetOut {
@@ -207,6 +228,7 @@ pub fn snapshot_json(conn: &Connection) -> Result<Vec<u8>> {
                 audio: r.get(13)?,
                 preview: r.get(14)?,
                 protected: r.get(15)?,
+                from: (r.get::<_, String>(16)? == "stable").then_some("stable"),
                 maps: Vec::new(),
             })
         })?;
@@ -244,6 +266,9 @@ pub fn snapshot_json(conn: &Connection) -> Result<Vec<u8>> {
             let ruleset: Option<String> = r.get(4)?;
             let mode = ruleset_mode(r.get(5)?, ruleset.as_deref());
             let md5: Option<String> = r.get(16)?;
+            if set.from.is_some() && md5.as_ref().is_some_and(|h| lazer_md5s.contains(h)) {
+                continue;
+            }
             let bg: Option<String> = r.get(17)?;
             let audio: Option<String> = r.get(18)?;
             let preview: Option<i64> = r.get(19)?;
@@ -294,16 +319,18 @@ pub fn snapshot_json(conn: &Connection) -> Result<Vec<u8>> {
 
     let mut collections: Vec<CollectionOut> = Vec::new();
     {
-        let mut st = conn.prepare("SELECT id, name FROM lazer_collections ORDER BY position")?;
-        let cols: Vec<(String, String)> =
-            st.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?.collect::<Result<_, _>>()?;
+        // lazer's, then stable's
+        let mut st = conn.prepare("SELECT id, name, source FROM lazer_collections ORDER BY source = 'stable', position")?;
+        let cols: Vec<(String, String, String)> =
+            st.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?.collect::<Result<_, _>>()?;
         let mut items = conn.prepare(
             "SELECT md5 FROM lazer_collection_items WHERE collection_id = ?1 ORDER BY position",
         )?;
-        for (id, name) in cols {
+        for (id, name, source) in cols {
             let md5s: Vec<String> =
                 items.query_map([&id], |r| r.get(0))?.collect::<Result<_, _>>()?;
-            let mut out = CollectionOut { id, name, maps: Vec::new(), missing: 0 };
+            let from = (source == "stable").then_some("stable");
+            let mut out = CollectionOut { id, name, maps: Vec::new(), missing: 0, from };
             for h in md5s {
                 match md5_index.get(&h) {
                     Some(&mi) => out.maps.push(mi),
@@ -330,6 +357,36 @@ pub fn snapshot_json(conn: &Connection) -> Result<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn stable_copies_of_lazers_stay_out() {
+        let dir = std::env::temp_dir().join(format!("fumen-snap-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let conn = crate::db::open(&dir.join("f.db")).unwrap();
+        conn.execute_batch(
+            "INSERT INTO sets (id, source, title) VALUES ('L', 'lazer', 'both'), ('S1', 'stable', 'both'), ('S2', 'stable', 'mixed');
+             INSERT INTO maps (id, set_id, md5, ruleset_id) VALUES ('l1', 'L', 'h1', 3), ('s1', 'S1', 'h1', 3),
+                 ('s2', 'S2', 'h1', 3), ('s3', 'S2', 'h3', 3);
+             INSERT INTO lazer_collections (id, name, position, source) VALUES ('c', 'mine', 0, 'stable');
+             INSERT INTO lazer_collection_items (collection_id, md5, position) VALUES ('c', 'h1', 0), ('c', 'h3', 1);",
+        )
+        .unwrap();
+        let v: serde_json::Value = serde_json::from_slice(&snapshot_json(&conn).unwrap()).unwrap();
+        let ids = |k: &str| v[k].as_array().unwrap().iter().map(|x| x["id"].as_str().unwrap().to_string()).collect::<Vec<_>>();
+        let mut sets = ids("sets");
+        sets.sort();
+        assert_eq!(sets, ["L", "S2"]);
+        let mut maps = ids("maps");
+        maps.sort();
+        assert_eq!(maps, ["l1", "s3"]);
+        let s2 = v["sets"].as_array().unwrap().iter().find(|s| s["id"] == "S2").unwrap();
+        assert_eq!(s2["from"], "stable");
+        assert!(v["sets"].as_array().unwrap().iter().find(|s| s["id"] == "L").unwrap().get("from").is_none());
+        let c = &v["collections"][0];
+        assert_eq!((c["from"].as_str(), c["maps"].as_array().unwrap().len(), c["missing"].as_u64()), (Some("stable"), 2, Some(0)));
+        drop(conn);
+        let _ = std::fs::remove_dir_all(dir);
+    }
 
     #[test]
     fn modes() {

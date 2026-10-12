@@ -20,7 +20,6 @@
 //! beatmap file (by hash) or a skin sample name ("soft-hitclap").
 
 use std::collections::HashMap;
-use std::path::Path;
 
 use rusqlite::{Connection, OptionalExtension};
 use serde::Serialize;
@@ -162,8 +161,8 @@ impl Out {
 }
 
 /// A library difficulty's hitsounds: its .osu and its set's sound files and storyboard, read
-/// from lazer's store.
-pub fn for_map(conn: &Connection, storage: &Path, id: &str) -> Result<Sounds> {
+/// from lazer's store or stable's Songs folder.
+pub fn for_map(conn: &Connection, files: &paths::Files, id: &str) -> Result<Sounds> {
     let row: Option<(Option<String>, String)> = conn
         .query_row("SELECT m.hash, s.sounds FROM maps m JOIN sets s ON s.id = m.set_id WHERE m.id = ?1", [id], |r| {
             Ok((r.get(0)?, r.get(1)?))
@@ -173,10 +172,10 @@ pub fn for_map(conn: &Connection, storage: &Path, id: &str) -> Result<Sounds> {
     let hash = hash.ok_or_else(|| Error::known("chart-missing", "This difficulty has no chart file."))?;
     let read = |hash: &str| -> Option<String> {
         // old files can be in a legacy code page; what's read here is ASCII in practice
-        let bytes = std::fs::read(paths::lazer_file(storage, hash)?).ok()?;
+        let bytes = files.read(hash)?;
         Some(String::from_utf8_lossy(&bytes).into_owned())
     };
-    let osu = read(&hash).ok_or_else(|| Error::known("chart-missing", "This difficulty's .osu file is missing from lazer's files."))?;
+    let osu = read(&hash).ok_or_else(|| Error::known("chart-missing", "This difficulty's .osu file is missing."))?;
     let files = SetFiles::new(serde_json::from_str::<Vec<(String, String)>>(&sounds).unwrap_or_default());
     let osb = files.storyboard().and_then(read);
     Ok(resolve(&osu, osb.as_deref(), &files))

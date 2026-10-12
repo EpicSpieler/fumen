@@ -226,6 +226,15 @@ const MIGRATIONS: &[&str] = &[
     r#"
     ALTER TABLE collections ADD COLUMN lazer_id TEXT;
     "#,
+    // 13 — osu!stable as a source (src/stable.rs): its collections next to lazer's, and its files
+    //      by key (path, size, modification time) → path in its Songs folder
+    r#"
+    ALTER TABLE lazer_collections ADD COLUMN source TEXT NOT NULL DEFAULT 'lazer';
+    CREATE TABLE stable_files (
+        key  TEXT PRIMARY KEY,
+        path TEXT NOT NULL
+    );
+    "#,
 ];
 
 pub fn open(path: &Path) -> Result<Connection> {

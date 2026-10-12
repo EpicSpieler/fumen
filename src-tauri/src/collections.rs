@@ -87,7 +87,7 @@ pub fn list(conn: &Connection) -> Result<Vec<Collection>> {
         st.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)))?.collect::<Result<_, _>>()?;
     // a difficulty can sit in two sets (the same .osu imported twice): any of them will do
     let mut items = conn.prepare(
-        "SELECT (SELECT m.id FROM maps m WHERE m.md5 = ci.md5 LIMIT 1)
+        "SELECT (SELECT m.id FROM maps m JOIN sets s ON s.id = m.set_id WHERE m.md5 = ci.md5 ORDER BY s.source = 'stable' LIMIT 1)
          FROM collection_items ci WHERE ci.collection_id = ?1 ORDER BY ci.added, ci.rowid",
     )?;
     let mut out = Vec::with_capacity(cols.len());
@@ -169,9 +169,11 @@ pub fn copy_lazer(conn: &mut Connection, lazer_id: &str, name: &str) -> Result<S
     };
     let id = new_id();
     let position: i64 = tx.query_row("SELECT COALESCE(MAX(position), -1) + 1 FROM collections", [], |r| r.get(0))?;
+    // stable's collections (st-col-…) have no lazer collection to go back to
+    let back = (!lazer_id.starts_with("st-")).then_some(lazer_id);
     tx.execute(
         "INSERT INTO collections (id, name, created, position, lazer_id) VALUES (?1, ?2, ?3, ?4, ?5)",
-        params![id, clean_name(name)?, now_ms(), position, lazer_id],
+        params![id, clean_name(name)?, now_ms(), position, back],
     )?;
     insert_md5s(&tx, &id, &md5s)?;
     tx.commit()?;
@@ -322,13 +324,15 @@ mod tests {
         let c = Connection::open_in_memory().unwrap();
         c.execute_batch(
             "PRAGMA foreign_keys = ON;
-             CREATE TABLE maps (id TEXT PRIMARY KEY, md5 TEXT);
+             CREATE TABLE sets (id TEXT PRIMARY KEY, source TEXT NOT NULL);
+             CREATE TABLE maps (id TEXT PRIMARY KEY, md5 TEXT, set_id TEXT NOT NULL DEFAULT 'L');
+             INSERT INTO sets VALUES ('L', 'lazer'), ('S', 'stable');
              CREATE TABLE lazer_collection_items (collection_id TEXT, md5 TEXT, position INTEGER);
              CREATE TABLE collections (id TEXT PRIMARY KEY, name TEXT NOT NULL, created INTEGER NOT NULL, position INTEGER NOT NULL, query TEXT, lazer_id TEXT);
              CREATE TABLE collection_items (
                  collection_id TEXT NOT NULL REFERENCES collections(id) ON DELETE CASCADE,
                  md5 TEXT NOT NULL, added INTEGER NOT NULL, PRIMARY KEY (collection_id, md5));
-             INSERT INTO maps VALUES ('a', 'ha'), ('b', 'hb'), ('c', 'hc'), ('nohash', NULL);
+             INSERT INTO maps (id, md5) VALUES ('a', 'ha'), ('b', 'hb'), ('c', 'hc'), ('nohash', NULL);
              INSERT INTO lazer_collection_items VALUES ('L', 'hb', 0), ('L', 'gone', 1), ('L', 'ha', 2);",
         )
         .unwrap();
@@ -387,7 +391,10 @@ mod tests {
         assert_eq!(all[0].maps, ["b", "a"]);
         assert_eq!(all[0].missing, 1);
         // the missing one comes back when the map does
-        c.execute("INSERT INTO maps VALUES ('g', 'gone')", []).unwrap();
+        c.execute("INSERT INTO maps VALUES ('g', 'gone', 'L')", []).unwrap();
+        assert_eq!(list(&c).unwrap()[0].maps, ["b", "g", "a"]);
+        // a difficulty in both games is lazer's
+        c.execute("INSERT INTO maps VALUES ('0-stable', 'hb', 'S')", []).unwrap();
         assert_eq!(list(&c).unwrap()[0].maps, ["b", "g", "a"]);
         // …and it remembers where it came from, to go back there
         assert_eq!(list(&c).unwrap()[0].lazer_id.as_deref(), Some("L"));
