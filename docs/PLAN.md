@@ -147,7 +147,7 @@ nothing), and Fumen trades the code (later the refresh token) for tokens at the 
 - [ ] Taiko / catch / osu! previews
 - [x] "tech" detection: the pattern report's "Tech" (mixed speeds) and SV
 
-## v0.3 — collections (in progress)
+## v0.3 — collections
 
 - [x] Fumen collections: own tables (migration 11, `src/collections.rs`), difficulties by MD5 (ones
       not in the library kept and counted), resolved to library ids for the UI; make / rename /
@@ -161,7 +161,13 @@ nothing), and Fumen trades the code (later the refresh token) for tokens at the 
       BeatmapCollections; lazer closed, tested versions, schema guard, backup first; matched by the
       remembered lazer id (migration 12, also set by "Copy into Fumen"), else by name, else new;
       verify-lazer checks it) and to a stable `collection.db` (written in Rust, via a temp file)
-- [ ] stable as a source (`osu!.db` + Songs)
+- [x] stable as a source (`src/stable.rs`): osu!.db read in Rust (every version since 2014,
+      entry sizes before 20191106, float star ratings since 20250107), backgrounds from each
+      chart's [Events], sets with `source = 'stable'`; files get keys from path + size + mtime
+      (`stable_files`, migration 13) that the file resolver (`paths::Files`) serves next to lazer's
+      hashes, so covers, audio, charts, analysis and hit sounds work unchanged; collection.db as
+      "In osu!stable" collections (copyable into Fumen); lazer's copy of a difficulty wins in the
+      snapshot; rescans skip stable while osu!.db is unchanged. Scores (scores.db): later
 
 ## v0.4 — you
 

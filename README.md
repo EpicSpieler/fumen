@@ -14,6 +14,9 @@ database first (see [Adding beatmaps](#adding-beatmaps)).
 ## Features
 
 - Imports the osu!lazer library: sets, difficulties, local scores and collections
+- …and osu!stable's, when it's installed (Settings can switch it off or pick its folder): its
+  osu!.db, the files in its Songs folder and its collection.db, read only. A difficulty that's in
+  both games shows once (lazer's); `game=stable` / `game=lazer` in the search tells them apart
 - Your own collections: make them with + in the sidebar, drag sets or difficulties onto them, or
   right-click › Add to collection; rename, delete, take maps out. lazer's collections show below
   and can be copied into Fumen to change them. They hold difficulties by their MD5, like lazer's
