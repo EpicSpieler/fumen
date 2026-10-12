@@ -346,7 +346,8 @@ function syncNav(route: Route): void {
 
 function renderCollections(): void {
   const snap = store.snap;
-  const lazer = snap?.collections ?? [];
+  const lazer = (snap?.collections ?? []).filter((c) => !c.from);
+  const stable = (snap?.collections ?? []).filter((c) => c.from === "stable");
   const mine = snap ? fumenCollections() : [];
   sideBox.hidden = !snap;
   const item = (id: string, name: string, maps: number[], fumen: boolean, smart = false) => {
@@ -363,6 +364,8 @@ function renderCollections(): void {
     !mine.length ? `<div class="side-empty">Make one with + or drag a set here.</div>` : "",
     lazer.length ? `<div class="side-sub">In osu!lazer</div>` : "",
     ...lazer.map((c) => item(c.id, c.name, c.maps, false)),
+    stable.length ? `<div class="side-sub">In osu!stable</div>` : "",
+    ...stable.map((c) => item(c.id, c.name, c.maps, false)),
   ].join("");
   syncNav(current());
   applySidebar();
@@ -671,7 +674,7 @@ function renderLibraryState(): void {
     delete sub.dataset.tip;
   }
   const busy = isScanning() || isImporting();
-  refreshBtn.disabled = busy || !store.status?.install;
+  refreshBtn.disabled = busy || !(store.status?.install || store.status?.stable?.install);
   refreshBtn.classList.toggle("busy", busy);
   refreshBtn.dataset.tip = busy ? "Updating library…" : "Update library";
 }

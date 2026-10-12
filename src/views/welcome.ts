@@ -28,7 +28,15 @@ export class WelcomeView {
   private render(): void {
     const st = store.status;
     const inst = st?.install;
+    const stable = st?.stable?.install;
     const busy = isScanning();
+    const stableBlock = stable
+      ? `<div class="welcome-found">
+          <div class="label-caps">osu!stable</div>
+          <div class="welcome-path">${esc(stable.path)}</div>
+          <div class="welcome-meta">Its beatmaps come in too (Settings can switch that off). Ones lazer has as well show once.</div>
+        </div>`
+      : "";
     this.el.innerHTML = `
       <div class="welcome">
         <div class="welcome-mark">${icon("lanes-duo")}</div>
@@ -42,6 +50,7 @@ export class WelcomeView {
                   <div class="welcome-path">${esc(inst.storage)}</div>
                   <div class="welcome-meta">Database ${(inst.realmSize / 1048576).toFixed(0)} MB, last changed ${relativeTime(inst.realmModified)}</div>
                 </div>
+                ${stableBlock}
                 <div class="welcome-actions">
                   <button class="btn btn-primary btn-lg w-import" type="button"${busy ? " disabled" : ""}>Import library</button>
                   <button class="btn btn-ghost w-pick" type="button"${busy ? " disabled" : ""}>Use another folder</button>
@@ -51,8 +60,10 @@ export class WelcomeView {
                   <div class="welcome-path is-missing">Not found${st?.defaultPath ? ` in ${esc(st.defaultPath)}` : ""}</div>
                   <div class="welcome-meta">Pick the folder osu!lazer stores its files in. In lazer: Settings, Maintenance, "Open osu! folder".</div>
                 </div>
+                ${stableBlock}
                 <div class="welcome-actions">
-                  <button class="btn btn-primary btn-lg w-pick" type="button">Choose folder</button>
+                  ${stable ? `<button class="btn btn-primary btn-lg w-import" type="button"${busy ? " disabled" : ""}>Import osu!stable</button>` : ""}
+                  <button class="btn ${stable ? "btn-ghost" : "btn-primary btn-lg"} w-pick" type="button">Choose lazer's folder</button>
                 </div>`
           }
           <div class="welcome-progress" hidden>

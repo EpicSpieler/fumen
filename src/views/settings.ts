@@ -84,11 +84,12 @@ export class SettingsView {
         <section class="settings-section">
           <div class="label-caps settings-label">Library</div>
           <div class="setting-row" data-row="path"></div>
+          <div class="setting-row" data-row="stable"></div>
           <div class="setting-row" data-row="library"></div>
           <div class="setting-row">
             <div class="setting-text">
               <div class="setting-title">Keep up to date</div>
-              <div class="setting-desc">Re-import when osu!lazer's library changed since the last import.</div>
+              <div class="setting-desc">Re-import when osu!lazer's or osu!stable's library changed since the last import.</div>
             </div>
             <input type="checkbox" role="switch" data-setting="autoRescan" ${store.settings?.autoRescan !== false ? "checked" : ""} />
           </div>
@@ -277,7 +278,7 @@ export class SettingsView {
       const { label, fraction } = describeScan(store.scan);
       state = `${label}… ${Math.round(fraction * 100)}%`;
     } else if (st?.scannedAt && c) {
-      state = `${num(c.sets)} sets, ${num(c.maps)} difficulties, ${num(c.scores)} scores. Imported ${relativeTime(st.scannedAt)}${st.changed ? ". lazer has changed since then." : "."}`;
+      state = `${num(c.sets)} sets, ${num(c.maps)} difficulties, ${num(c.scores)} scores. Imported ${relativeTime(st.scannedAt)}${st.changed ? ". osu! has changed since then." : "."}`;
     } else {
       state = "Not imported yet.";
     }
@@ -295,7 +296,37 @@ export class SettingsView {
         <div class="setting-title">Library</div>
         <div class="setting-desc num">${esc(state)}</div>
       </div>
-      <button class="btn btn-sm s-rescan" type="button"${busy || !inst ? " disabled" : ""}>${icon("refresh")}Import now</button>`;
+      <button class="btn btn-sm s-rescan" type="button"${busy || !(inst || st?.stable?.install) ? " disabled" : ""}>${icon("refresh")}Import now</button>`;
+
+    const stableRow = this.el.querySelector<HTMLElement>('[data-row="stable"]');
+    if (!stableRow) return;
+    const sst = st?.stable;
+    const stableCustom = !!store.settings?.stablePath;
+    const on = store.settings?.useStable !== false;
+    const sc = sst?.counts;
+    const where = sst?.install
+      ? `<span class="setting-path">${esc(sst.install.path)}</span>${sc && sst.scannedAt ? `<br>${num(sc.sets)} sets, ${num(sc.maps)} difficulties. Ones lazer has too show once.` : on ? "<br>Its beatmaps come in with the next import." : ""}`
+      : on
+        ? `<span class="is-missing">Not found${stableCustom ? " in the chosen folder" : sst?.defaultPath ? ` in ${esc(sst.defaultPath)}` : ""}</span>`
+        : "Off: only osu!lazer's beatmaps are in the library.";
+    stableRow.innerHTML = `
+      <div class="setting-text">
+        <div class="setting-title">osu!stable</div>
+        <div class="setting-desc">${where}</div>
+      </div>
+      <div class="setting-actions">
+        ${stableCustom ? `<button class="btn btn-ghost btn-sm s-stable-reset" type="button">Use default</button>` : ""}
+        <button class="btn btn-sm s-stable-pick" type="button">${icon("folder")}Change</button>
+        <input type="checkbox" role="switch" data-setting="useStable" aria-label="Use osu!stable's beatmaps" ${on ? "checked" : ""} />
+      </div>`;
+  }
+
+  /** After stable's folder or switch changed: the library follows (when there is one). */
+  private async stableChanged(): Promise<void> {
+    await refreshStatus();
+    if (!store.status?.scannedAt || isScanning()) return;
+    const res = await runScan();
+    if (!res.ok) toast(res.error.message, { kind: "danger", timeout: 6000 });
   }
 
   private async onClick(e: Event): Promise<void> {
@@ -346,6 +377,20 @@ export class SettingsView {
       await refreshStatus();
       return;
     }
+    if (t.closest(".s-stable-pick")) {
+      const dir = await open({ directory: true, title: "osu!stable folder", defaultPath: store.status?.stable?.install?.path ?? store.status?.stable?.defaultPath ?? undefined });
+      if (typeof dir !== "string") return;
+      if (!(await api.inspectStablePath(dir))) {
+        toast("That folder doesn't hold osu!stable (an osu!.db and a Songs folder).", { kind: "danger" });
+        return;
+      }
+      store.settings = await api.updateSettings({ stablePath: dir, useStable: true });
+      return void this.stableChanged();
+    }
+    if (t.closest(".s-stable-reset")) {
+      store.settings = await api.updateSettings({ stablePath: null });
+      return void this.stableChanged();
+    }
     if (t.closest(".s-reset-path")) {
       store.settings = await api.updateSettings({ lazerPath: null });
       await refreshStatus();
@@ -359,6 +404,11 @@ export class SettingsView {
       applyAppearance();
     } else if (t.dataset.setting === "autoRescan") {
       api.updateSettings({ autoRescan: t.checked }).then((s) => (store.settings = s));
+    } else if (t.dataset.setting === "useStable") {
+      void api.updateSettings({ useStable: t.checked }).then((s) => {
+        store.settings = s;
+        return this.stableChanged();
+      });
     }
   }
 

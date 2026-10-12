@@ -8,7 +8,8 @@ const STAGES: Record<string, { label: string; from: number; to: number }> = {
   sets: { label: "Reading beatmaps", from: 0.06, to: 0.78 },
   scores: { label: "Reading scores", from: 0.78, to: 0.86 },
   collections: { label: "Reading collections", from: 0.86, to: 0.9 },
-  import: { label: "Saving", from: 0.9, to: 1 },
+  import: { label: "Saving", from: 0.9, to: 0.94 },
+  stable: { label: "Reading osu!stable", from: 0.94, to: 1 },
 };
 
 export function describeScan(p: ScanProgress | null): { label: string; fraction: number } {

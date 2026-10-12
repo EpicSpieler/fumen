@@ -146,7 +146,7 @@ export const outgoingCount = (c: FumenCollection): number => (isSmart(c) ? colle
 /** The lazer collection one of Fumen's goes into: the one it went into before, else lazer's of
  * the same name (as the importer decides it), else none (a new one). */
 export function lazerTarget(c: FumenCollection): CollectionRow | undefined {
-  const lazer = store.snap?.collections ?? [];
+  const lazer = (store.snap?.collections ?? []).filter((l) => !l.from);
   return lazer.find((l) => l.id === c.lazerId) ?? lazer.find((l) => l.name === c.name);
 }
 

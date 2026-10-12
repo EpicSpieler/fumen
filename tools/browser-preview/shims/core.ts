@@ -36,7 +36,16 @@ export async function invoke<T>(cmd: string, args: Record<string, unknown> = {})
         counts: scanned ? { sets: 4505, maps: 21756, scores: 1430, collections: 5 } : null,
         changed: false,
         scanning: false,
+        stable: {
+          install: { path: String.raw`C:\Users\Preview\AppData\Local\osu!`, songs: String.raw`C:\Users\Preview\AppData\Local\osu!\Songs`, dbSize: 130784, dbModified: Date.now() - 86_400_000 },
+          defaultPath: String.raw`C:\Users\Preview\AppData\Local\osu!`,
+          enabled: true,
+          scannedAt: scanned ? Date.now() - 120_000 : null,
+          counts: scanned ? { sets: 14, maps: 183, collections: 0 } : null,
+        },
       } as T;
+    case "inspect_stable_path":
+      return { path: String(args.path), songs: String(args.path) + String.raw`\Songs`, dbSize: 1, dbModified: Date.now() } as T;
     case "get_library": {
       const res = await fetch("/__fumen/snapshot");
       return (await res.arrayBuffer()) as T;

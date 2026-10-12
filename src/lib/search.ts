@@ -7,6 +7,7 @@
  *                       status=ranked  mode=mania  creator=Shoegazer  grade>=A  played=no  ln>30
  *                       pattern=jumpstream  peak>15  dt=5  ht<3   (from the chart analysis)
  *                       dan=gamma  dan>=13  dan>="reform 8"  category=jumpstream   (osu!mania dan / report)
+ *                       game=stable  game=lazer   (which osu! it's in)
  */
 import { danNumber } from "./dan";
 import type { MapRow, SetRow, Snapshot } from "./types";
@@ -19,7 +20,7 @@ type NumKey =
   | "sr" | "bpm" | "length" | "od" | "hp" | "ar" | "cs" | "keys" | "objects" | "ln" | "nps"
   | "plays" | "acc" | "added" | "played" | "year" | "setid" | "mapid" | "peak" | "srdt" | "srht";
 type StrKey = "creator" | "artist" | "title" | "source" | "tags" | "diff" | "category";
-type Key = NumKey | StrKey | "status" | "mode" | "grade" | "pattern" | "dan";
+type Key = NumKey | StrKey | "status" | "mode" | "grade" | "pattern" | "dan" | "game";
 
 const ALIASES: Record<string, Key> = {
   star: "sr", stars: "sr", sr: "sr",
@@ -47,6 +48,7 @@ const ALIASES: Record<string, Key> = {
   status: "status", s: "status",
   mode: "mode", m: "mode", ruleset: "mode",
   grade: "grade", rank: "grade",
+  game: "game", client: "game", from: "game",
 };
 
 const STATUS_NAMES: Record<string, number[]> = {
@@ -90,7 +92,9 @@ interface GradeCond { key: "grade"; op: Op; value: number }
 interface PatternCond { key: "pattern"; op: Op; value: string }
 /** a dan by number or name (on the rice scale: Reform N = N, Alpha = 11 …), else words of the label */
 interface DanCond { key: "dan"; op: Op; value: number | null; tier: boolean; text: string }
-type Cond = NumCond | StrCond | SetCond | GradeCond | PatternCond | DanCond;
+/** which osu! a set is in */
+interface GameCond { key: "game"; op: Op; value: "lazer" | "stable" }
+type Cond = NumCond | StrCond | SetCond | GradeCond | PatternCond | DanCond | GameCond;
 
 export interface ParsedQuery {
   terms: string[];
@@ -142,6 +146,10 @@ function parseCond(rawKey: string, rawOp: string, rawValue: string): Cond | null
     case "dan":
       // LN dans have their own scale: those match by name
       return lower ? { key, op, value: /\bln\b/.test(lower) ? null : danNumber(lower), tier: /\b(low|mid|high)\b/.test(lower), text: lower } : null;
+    case "game": {
+      const game = lower === "stable" || lower === "lazer" ? lower : null;
+      return game ? { key, op: op === "!=" ? "!=" : "=", value: game } : null;
+    }
     case "pattern": {
       const name = PATTERN_NAMES[lower];
       return name ? { key, op: op === "!=" ? "!=" : "=", value: name } : null;
@@ -356,6 +364,7 @@ function test(c: Cond, m: MapRow, s: SetRow, fields: LibIndex["setFields"][numbe
     case "artist": return cmpStr(fields.artist, c.op, c.value);
     case "title": return cmpStr(fields.title, c.op, c.value);
     case "source": return cmpStr(fields.source, c.op, c.value);
+    case "game": return ((s.from ?? "lazer") === c.value) === (c.op !== "!=");
     case "tags": return cmpStr(fields.tags, c.op, c.value);
     case "diff": return cmpStr(version, c.op, c.value);
     case "category": return cmpStr((m.category ?? "").toLowerCase(), c.op, c.value);
