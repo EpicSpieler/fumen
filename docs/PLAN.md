@@ -157,7 +157,10 @@ nothing), and Fumen trades the code (later the refresh token) for tokens at the 
       hidden) saved as JSON in `collections.query`; members computed in the UI with the library
       search (cached per snapshot), so they follow every import; can't take maps by hand; Edit
       search loads them into the library with Save search / Done
-- [ ] Export: into lazer (lazer closed, tested versions, backup first) and to `collection.db`
+- [x] Export: into lazer via `fumen-import collections` (lazer's RealmAccess.Write on its
+      BeatmapCollections; lazer closed, tested versions, schema guard, backup first; matched by the
+      remembered lazer id (migration 12, also set by "Copy into Fumen"), else by name, else new;
+      verify-lazer checks it) and to a stable `collection.db` (written in Rust, via a temp file)
 - [ ] stable as a source (`osu!.db` + Songs)
 
 ## v0.4 — you
