@@ -96,6 +96,14 @@ export interface FumenCollection {
   missing: number;
   /** a smart collection: its saved search (lib/search FilterState as JSON); `maps` is then empty */
   query?: string;
+  /** the lazer collection it went into (or was copied from) */
+  lazerId?: string;
+}
+
+/** A Fumen collection on its way out; a smart one with what it matches now (library ids). */
+export interface CollectionPick {
+  id: string;
+  maps?: string[];
 }
 
 export interface Snapshot {

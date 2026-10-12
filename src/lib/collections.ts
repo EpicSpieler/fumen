@@ -2,13 +2,14 @@
  * changed here). They hold difficulties; the backend keeps them by MD5 (src-tauri/src/collections.rs)
  * and hands back library ids, which this turns into snapshot indices. A smart collection holds a
  * saved search instead (the library's filters) and is whatever in the library matches it now. */
+import { save } from "@tauri-apps/plugin-dialog";
 import { api, asApiError } from "./api";
 import { mapIndexOf } from "./history";
 import { num } from "./format";
 import { DEFAULT_FILTER, filterLibrary, type FilterState, type LibIndex } from "./search";
-import { Emitter, events, store } from "./store";
-import type { FumenCollection } from "./types";
-import { toast } from "../ui/controls";
+import { Emitter, events, reloadLibrary, store } from "./store";
+import type { CollectionPick, CollectionRow, FumenCollection } from "./types";
+import { toast, uiConfirm } from "../ui/controls";
 
 /** what a drag from the library carries: the difficulties' library ids, as JSON */
 export const DRAG_TYPE = "application/x-fumen-maps";
@@ -130,6 +131,96 @@ export async function renameCollection(id: string, name: string): Promise<void> 
 
 export async function deleteCollection(id: string): Promise<void> {
   await change("delete the collection", () => api.deleteCollection(id));
+}
+
+// ── out of Fumen ────────────────────────────────────────────────────────
+
+/** What goes out: a smart collection with what it matches now. */
+function pick(c: FumenCollection): CollectionPick {
+  return isSmart(c) ? { id: c.id, maps: idsOf(collectionMaps(c)) } : { id: c.id };
+}
+
+/** How many difficulties a collection takes out of Fumen (a hand-made one's missing ones too). */
+export const outgoingCount = (c: FumenCollection): number => (isSmart(c) ? collectionMaps(c).size : c.maps.length + c.missing);
+
+/** The lazer collection one of Fumen's goes into: the one it went into before, else lazer's of
+ * the same name (as the importer decides it), else none (a new one). */
+export function lazerTarget(c: FumenCollection): CollectionRow | undefined {
+  const lazer = store.snap?.collections ?? [];
+  return lazer.find((l) => l.id === c.lazerId) ?? lazer.find((l) => l.name === c.name);
+}
+
+let writing = false;
+
+/** Puts collections into osu!lazer's after asking; lazer has to be closed. */
+export async function putIntoLazer(cols: FumenCollection[]): Promise<void> {
+  if (writing || !cols.length) return;
+  let st;
+  try {
+    st = await api.lazerImportStatus();
+  } catch (e) {
+    toast(asApiError(e).message, { kind: "danger", timeout: 6000 });
+    return;
+  }
+  if (!st.ready) {
+    const msg = st.reason === "running" ? "Close osu!lazer first: Fumen only writes to it while it's closed." : (st.message ?? "osu!lazer can't be written to right now.");
+    toast(msg, { kind: "danger", timeout: 6000 });
+    return;
+  }
+  const safety = "\n\nlazer's database is backed up first.";
+  let title: string;
+  let message: string;
+  if (cols.length === 1) {
+    const [c] = cols;
+    const target = lazerTarget(c);
+    const now = isSmart(c) ? " (what matches the search now; put it in again after changes)" : "";
+    title = target ? `Update "${target.name}" in osu!lazer?` : `Put "${c.name}" into osu!lazer?`;
+    message = target
+      ? `lazer's "${target.name}" will hold exactly this collection's ${diffs(outgoingCount(c))}${now}${target.name !== c.name ? ` and be renamed to "${c.name}"` : ""}.`
+      : `It becomes one of lazer's collections, with ${diffs(outgoingCount(c))}${now}.`;
+  } else {
+    const updating = cols.filter((c) => lazerTarget(c)).length;
+    title = `Put ${num(cols.length)} collections into osu!lazer?`;
+    message = updating
+      ? `${num(cols.length - updating)} become new lazer collections; ${num(updating)} replace what's in lazer's of the same name (or the one they went into before).`
+      : "Each becomes one of lazer's collections.";
+    if (cols.some(isSmart)) message += " Smart ones go in with what they match now.";
+  }
+  if (!(await uiConfirm(message + safety, { title, confirmLabel: "Put into lazer" }))) return;
+
+  writing = true;
+  events.emit("importing", true);
+  try {
+    const r = await api.putCollectionsIntoLazer(cols.map(pick));
+    const parts = [r.created && `${num(r.created)} new`, r.updated && `${num(r.updated)} updated`].filter(Boolean).join(", ");
+    toast(cols.length === 1 ? `"${cols[0].name}" is in osu!lazer` : `Collections in osu!lazer: ${parts}`, { kind: "success" });
+    await reloadLibrary().catch((e) => console.warn("[collections] reload failed", e));
+    await loadCollections();
+  } catch (e) {
+    toast(`Couldn't write lazer's collections: ${asApiError(e).message}`, { kind: "danger", timeout: 7000 });
+  } finally {
+    writing = false;
+    events.emit("importing", false);
+  }
+}
+
+/** Saves collections as a stable collection.db (for stable or Collection Manager). */
+export async function saveCollectionDb(cols: FumenCollection[]): Promise<void> {
+  if (!cols.length) return;
+  let path: string | null;
+  try {
+    path = await save({ title: "Save as collection.db", defaultPath: "collection.db", filters: [{ name: "osu! collections", extensions: ["db"] }] });
+  } catch (e) {
+    toast(asApiError(e).message, { kind: "danger", timeout: 6000 });
+    return;
+  }
+  if (!path) return;
+  try {
+    const n = await api.saveCollectionDb(path, cols.map(pick));
+    toast(n === 1 ? `Saved "${cols[0].name}" as collection.db` : `Saved ${num(n)} collections as collection.db`, { kind: "success" });
+  } catch (e) {
+    toast(`Couldn't save collection.db: ${asApiError(e).message}`, { kind: "danger", timeout: 6000 });
+  }
 }
 
 export function initCollections(): void {

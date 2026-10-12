@@ -135,6 +135,16 @@ export async function invoke<T>(cmd: string, args: Record<string, unknown> = {})
     case "set_collection_query":
       saveCols(cols().map((c) => (c.id === args.id && c.query !== undefined ? { ...c, query: String(args.query) } : c)));
       return null as T;
+    case "put_collections_into_lazer": {
+      // nothing is written here: the collections just remember a lazer id
+      const picks = args.picks as { id: string }[];
+      let created = 0;
+      saveCols(cols().map((c) => (picks.some((p) => p.id === c.id) ? (c.lazerId ? c : (created++, { ...c, lazerId: crypto.randomUUID() })) : c)));
+      await new Promise((r) => setTimeout(r, 600));
+      return { created, updated: picks.length - created } as T;
+    }
+    case "save_collection_db":
+      return (args.picks as unknown[]).length as T;
     case "rename_collection":
       saveCols(cols().map((c) => (c.id === args.id ? { ...c, name: String(args.name).trim() } : c)));
       return null as T;
@@ -230,7 +240,7 @@ export async function invoke<T>(cmd: string, args: Record<string, unknown> = {})
   }
 }
 
-type PreviewCollection = { id: string; name: string; created: number; maps: string[]; missing: number; query?: string };
+type PreviewCollection = { id: string; name: string; created: number; maps: string[]; missing: number; query?: string; lazerId?: string };
 const cols = (): PreviewCollection[] => JSON.parse(localStorage.getItem("fumen-preview-collections") ?? "[]");
 const saveCols = (c: PreviewCollection[]) => localStorage.setItem("fumen-preview-collections", JSON.stringify(c));
 /** a lazer collection's difficulties, by library id, from the snapshot */
