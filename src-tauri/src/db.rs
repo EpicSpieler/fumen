@@ -221,6 +221,11 @@ const MIGRATIONS: &[&str] = &[
         PRIMARY KEY (collection_id, md5)
     );
     "#,
+    // 12 — the lazer collection a Fumen collection went into (or was copied from), so putting it
+    //      into lazer again updates that one
+    r#"
+    ALTER TABLE collections ADD COLUMN lazer_id TEXT;
+    "#,
 ];
 
 pub fn open(path: &Path) -> Result<Connection> {

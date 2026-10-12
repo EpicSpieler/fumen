@@ -4,8 +4,14 @@
 //!
 //! A smart collection holds a saved search instead (the UI's filters as JSON, opaque here) and
 //! fills itself from the library; nothing is added to or taken out of it by hand.
+//!
+//! Out of Fumen they go into lazer (lazer_import.rs, which writes them with lazer's own code) or
+//! into a stable `collection.db` (written here; stable and Collection Manager read it).
+use std::io::Write;
+use std::path::Path;
+
 use rusqlite::{params, Connection, OptionalExtension};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
 
@@ -28,6 +34,9 @@ pub struct Collection {
     /// a smart collection's saved search (then `maps` is empty: the UI fills it)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub query: Option<String>,
+    /// the lazer collection it went into or came from
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lazer_id: Option<String>,
 }
 
 fn clean_query(query: &str) -> Result<String> {
@@ -73,23 +82,23 @@ fn exists(conn: &Connection, id: &str) -> Result<()> {
 
 /// All collections, in the order they were made, with their difficulties resolved.
 pub fn list(conn: &Connection) -> Result<Vec<Collection>> {
-    let mut st = conn.prepare("SELECT id, name, created, query FROM collections ORDER BY position, created")?;
-    let cols: Vec<(String, String, i64, Option<String>)> =
-        st.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?.collect::<Result<_, _>>()?;
+    let mut st = conn.prepare("SELECT id, name, created, query, lazer_id FROM collections ORDER BY position, created")?;
+    let cols: Vec<(String, String, i64, Option<String>, Option<String>)> =
+        st.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)))?.collect::<Result<_, _>>()?;
     // a difficulty can sit in two sets (the same .osu imported twice): any of them will do
     let mut items = conn.prepare(
         "SELECT (SELECT m.id FROM maps m WHERE m.md5 = ci.md5 LIMIT 1)
          FROM collection_items ci WHERE ci.collection_id = ?1 ORDER BY ci.added, ci.rowid",
     )?;
     let mut out = Vec::with_capacity(cols.len());
-    for (id, name, created, query) in cols {
+    for (id, name, created, query, lazer_id) in cols {
         if query.is_some() {
-            out.push(Collection { id, name, created, maps: Vec::new(), missing: 0, query });
+            out.push(Collection { id, name, created, maps: Vec::new(), missing: 0, query, lazer_id });
             continue;
         }
         let ids: Vec<Option<String>> = items.query_map([&id], |r| r.get(0))?.collect::<Result<_, _>>()?;
         let missing = ids.iter().filter(|m| m.is_none()).count();
-        out.push(Collection { id, name, created, maps: ids.into_iter().flatten().collect(), missing, query: None });
+        out.push(Collection { id, name, created, maps: ids.into_iter().flatten().collect(), missing, query: None, lazer_id });
     }
     Ok(out)
 }
@@ -160,7 +169,10 @@ pub fn copy_lazer(conn: &mut Connection, lazer_id: &str, name: &str) -> Result<S
     };
     let id = new_id();
     let position: i64 = tx.query_row("SELECT COALESCE(MAX(position), -1) + 1 FROM collections", [], |r| r.get(0))?;
-    tx.execute("INSERT INTO collections (id, name, created, position) VALUES (?1, ?2, ?3, ?4)", params![id, clean_name(name)?, now_ms(), position])?;
+    tx.execute(
+        "INSERT INTO collections (id, name, created, position, lazer_id) VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![id, clean_name(name)?, now_ms(), position, lazer_id],
+    )?;
     insert_md5s(&tx, &id, &md5s)?;
     tx.commit()?;
     Ok(id)
@@ -204,6 +216,104 @@ pub fn remove(conn: &mut Connection, id: &str, map_ids: &[String]) -> Result<usi
     Ok(removed)
 }
 
+// ── out of Fumen ────────────────────────────────────────────────────────
+
+/// A collection the UI wants out of Fumen; a smart one comes with its members (library ids).
+#[derive(Deserialize, Debug)]
+pub struct Pick {
+    pub id: String,
+    pub maps: Option<Vec<String>>,
+}
+
+/// A collection as it goes into a game: its name and difficulties by MD5.
+#[derive(Serialize, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Outgoing {
+    /// Fumen's id
+    pub key: String,
+    pub lazer_id: Option<String>,
+    pub name: String,
+    pub md5s: Vec<String>,
+}
+
+/// The picked collections with their difficulties: a hand-made one's as kept (ones not in the
+/// library included), a smart one's as it matches now.
+pub fn outgoing(conn: &Connection, picks: &[Pick]) -> Result<Vec<Outgoing>> {
+    let mut items = conn.prepare("SELECT md5 FROM collection_items WHERE collection_id = ?1 ORDER BY added, rowid")?;
+    let mut out = Vec::with_capacity(picks.len());
+    for p in picks {
+        let row: Option<(String, Option<String>, Option<String>)> = conn
+            .query_row("SELECT name, lazer_id, query FROM collections WHERE id = ?1", [&p.id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+            .optional()?;
+        let (name, lazer_id, query) = row.ok_or_else(|| Error::known("no-collection", "That collection doesn't exist any more."))?;
+        let md5s = if query.is_some() {
+            let mut v = md5s_of(conn, p.maps.as_deref().unwrap_or_default())?;
+            let mut seen = std::collections::HashSet::new();
+            v.retain(|h| seen.insert(h.clone()));
+            v
+        } else {
+            items.query_map([&p.id], |r| r.get(0))?.collect::<Result<_, _>>()?
+        };
+        out.push(Outgoing { key: p.id.clone(), lazer_id, name, md5s });
+    }
+    Ok(out)
+}
+
+/// Remembers which lazer collection a Fumen one went into.
+pub fn set_lazer_id(conn: &Connection, id: &str, lazer_id: &str) -> Result<()> {
+    conn.execute("UPDATE collections SET lazer_id = ?2 WHERE id = ?1", params![id, lazer_id])?;
+    Ok(())
+}
+
+/// what stable writes as its version; any recent one reads the same format
+const STABLE_DB_VERSION: i32 = 20240820;
+
+/// stable's string: 0x0b, the UTF-8 length as ULEB128, the bytes
+fn put_str(out: &mut Vec<u8>, s: &str) {
+    out.push(0x0b);
+    let mut n = s.len();
+    loop {
+        let b = (n & 0x7f) as u8;
+        n >>= 7;
+        if n == 0 {
+            out.push(b);
+            break;
+        }
+        out.push(b | 0x80);
+    }
+    out.extend_from_slice(s.as_bytes());
+}
+
+/// A stable `collection.db`: version, count, then per collection its name and MD5s.
+pub fn collection_db(cols: &[Outgoing]) -> Vec<u8> {
+    let mut out = Vec::new();
+    out.extend_from_slice(&STABLE_DB_VERSION.to_le_bytes());
+    out.extend_from_slice(&(cols.len() as i32).to_le_bytes());
+    for c in cols {
+        put_str(&mut out, &c.name);
+        out.extend_from_slice(&(c.md5s.len() as i32).to_le_bytes());
+        for h in &c.md5s {
+            put_str(&mut out, h);
+        }
+    }
+    out
+}
+
+/// Writes `collection.db` at `path` (via a temporary file next to it, so a failed write leaves
+/// whatever was there).
+pub fn save_collection_db(path: &Path, cols: &[Outgoing]) -> Result<()> {
+    let tmp = path.with_extension("db.fumen-tmp");
+    {
+        let mut f = std::fs::File::create(&tmp)?;
+        f.write_all(&collection_db(cols))?;
+        f.sync_all()?;
+    }
+    std::fs::rename(&tmp, path).inspect_err(|_| {
+        let _ = std::fs::remove_file(&tmp);
+    })?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -214,7 +324,7 @@ mod tests {
             "PRAGMA foreign_keys = ON;
              CREATE TABLE maps (id TEXT PRIMARY KEY, md5 TEXT);
              CREATE TABLE lazer_collection_items (collection_id TEXT, md5 TEXT, position INTEGER);
-             CREATE TABLE collections (id TEXT PRIMARY KEY, name TEXT NOT NULL, created INTEGER NOT NULL, position INTEGER NOT NULL, query TEXT);
+             CREATE TABLE collections (id TEXT PRIMARY KEY, name TEXT NOT NULL, created INTEGER NOT NULL, position INTEGER NOT NULL, query TEXT, lazer_id TEXT);
              CREATE TABLE collection_items (
                  collection_id TEXT NOT NULL REFERENCES collections(id) ON DELETE CASCADE,
                  md5 TEXT NOT NULL, added INTEGER NOT NULL, PRIMARY KEY (collection_id, md5));
@@ -279,5 +389,80 @@ mod tests {
         // the missing one comes back when the map does
         c.execute("INSERT INTO maps VALUES ('g', 'gone')", []).unwrap();
         assert_eq!(list(&c).unwrap()[0].maps, ["b", "g", "a"]);
+        // …and it remembers where it came from, to go back there
+        assert_eq!(list(&c).unwrap()[0].lazer_id.as_deref(), Some("L"));
+    }
+
+    #[test]
+    fn goes_out_as_it_is() {
+        let mut c = conn();
+        let s = |v: &[&str]| v.iter().map(|x| x.to_string()).collect::<Vec<_>>();
+        let plain = copy_lazer(&mut c, "L", "fav").unwrap();
+        let smart = create_smart(&c, "smart", "{}").unwrap();
+        let picks = [Pick { id: plain.clone(), maps: None }, Pick { id: smart.clone(), maps: Some(s(&["c", "a", "c", "nohash"])) }];
+        let out = outgoing(&c, &picks).unwrap();
+        // a copy keeps what's not in the library; a smart one is what matches, once each
+        assert_eq!(out[0], Outgoing { key: plain.clone(), lazer_id: Some("L".into()), name: "fav".into(), md5s: s(&["hb", "gone", "ha"]) });
+        assert_eq!(out[1].md5s, s(&["hc", "ha"]));
+        assert_eq!(out[1].lazer_id, None);
+        set_lazer_id(&c, &smart, "L2").unwrap();
+        assert_eq!(outgoing(&c, &picks).unwrap()[1].lazer_id.as_deref(), Some("L2"));
+        assert!(outgoing(&c, &[Pick { id: "nope".into(), maps: None }]).is_err());
+    }
+
+    /// Reads a collection.db back the way stable does.
+    fn read_db(b: &[u8]) -> (i32, Vec<(String, Vec<String>)>) {
+        let int = |at: &mut usize| {
+            let v = i32::from_le_bytes(b[*at..*at + 4].try_into().unwrap());
+            *at += 4;
+            v
+        };
+        let string = |at: &mut usize| {
+            assert_eq!(b[*at], 0x0b);
+            *at += 1;
+            let (mut len, mut shift) = (0usize, 0);
+            loop {
+                let x = b[*at];
+                *at += 1;
+                len |= ((x & 0x7f) as usize) << shift;
+                shift += 7;
+                if x & 0x80 == 0 {
+                    break;
+                }
+            }
+            let s = String::from_utf8(b[*at..*at + len].to_vec()).unwrap();
+            *at += len;
+            s
+        };
+        let mut at = 0;
+        let (version, n) = (int(&mut at), int(&mut at));
+        let mut cols = Vec::new();
+        for _ in 0..n {
+            let name = string(&mut at);
+            let count = int(&mut at);
+            cols.push((name, (0..count).map(|_| string(&mut at)).collect()));
+        }
+        assert_eq!(at, b.len());
+        (version, cols)
+    }
+
+    #[test]
+    fn writes_stables_collection_db() {
+        let long = "ä".repeat(100); // 200 bytes: a two-byte length
+        let cols = [
+            Outgoing { key: "1".into(), lazer_id: None, name: "Jacks ★".into(), md5s: vec!["a".repeat(32), "b".repeat(32)] },
+            Outgoing { key: "2".into(), lazer_id: None, name: long.clone(), md5s: vec![] },
+        ];
+        let (version, read) = read_db(&collection_db(&cols));
+        assert_eq!(version, STABLE_DB_VERSION);
+        assert_eq!(read, vec![("Jacks ★".to_string(), vec!["a".repeat(32), "b".repeat(32)]), (long, vec![])]);
+        let dir = std::env::temp_dir().join(format!("fumen-coldb-{}", new_id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("collection.db");
+        std::fs::write(&path, b"old").unwrap();
+        save_collection_db(&path, &cols).unwrap();
+        assert_eq!(read_db(&std::fs::read(&path).unwrap()).1.len(), 2);
+        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 1, "the temporary file is gone");
+        let _ = std::fs::remove_dir_all(dir);
     }
 }
