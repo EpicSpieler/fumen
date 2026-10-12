@@ -19,6 +19,8 @@ export interface SetRow {
   audio?: string;
   preview?: number;
   protected?: boolean;
+  /** "stable": from osu!stable (lazer's have none) */
+  from?: "stable";
   /** indices into Snapshot.maps */
   maps: number[];
 }
@@ -83,6 +85,8 @@ export interface CollectionRow {
   name: string;
   maps: number[];
   missing: number;
+  /** "stable": osu!stable's collection.db (lazer's have none) */
+  from?: "stable";
 }
 
 /** One of Fumen's own collections: difficulties by the library's ids (it keeps their MD5s, so
@@ -243,13 +247,29 @@ export interface LazerInstall {
   realmModified: number;
 }
 
+export interface StableInstall {
+  path: string;
+  songs: string;
+  dbSize: number;
+  dbModified: number;
+}
+
 export interface LibraryStatus {
   install: LazerInstall | null;
   defaultPath: string | null;
   scannedAt: number | null;
+  /** lazer's and stable's together */
   counts: { sets: number; maps: number; scores: number; collections: number } | null;
   changed: boolean;
   scanning: boolean;
+  stable: {
+    /** found (and switched on) */
+    install: StableInstall | null;
+    defaultPath: string | null;
+    enabled: boolean;
+    scannedAt: number | null;
+    counts: { sets: number; maps: number; collections: number } | null;
+  };
 }
 
 export interface ScanProgress {
@@ -261,6 +281,8 @@ export interface ScanProgress {
 export interface Settings {
   lazerPath: string | null;
   autoRescan: boolean;
+  stablePath: string | null;
+  useStable: boolean;
   ui: Partial<UiPrefs>;
 }
 

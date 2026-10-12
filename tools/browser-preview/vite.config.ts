@@ -10,7 +10,8 @@
  * lazer's built-in textures and hit sounds in .cache/lazer-skins/<skin>/ (`fumen-realm skin-resources`).
  * Plays: .cache/history.json (the `real_library` test in src-tauri/src/osu_scores.rs with
  * FUMEN_HISTORY_OUT); without it the preview has none.
- * Files are read straight from osu!lazer's store. Thumbnails are the full images (no resizing).
+ * Files are read straight from osu!lazer's store, and stable's by .cache/stable-files.json (key → file,
+ * from the `preview_library` test in src-tauri/src/stable.rs). Thumbnails are the full images.
  */
 import { createReadStream, existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -86,7 +87,9 @@ function fumenFiles(): Plugin {
         const m = /^\/__fumen\/(?:file|thumb\/\d+)\/([0-9a-f]{64})$/.exec(url);
         if (!m) return next();
         const hash = m[1];
-        const path = join(lazer, "files", hash[0], hash.slice(0, 2), hash);
+        const stableFiles = join(here, ".cache", "stable-files.json");
+        const stable: Record<string, string> = existsSync(stableFiles) ? JSON.parse(readFileSync(stableFiles, "utf8")) : {};
+        const path = stable[hash] ?? join(lazer, "files", hash[0], hash.slice(0, 2), hash);
         if (!existsSync(path)) {
           res.statusCode = 404;
           return res.end();

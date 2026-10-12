@@ -13,7 +13,7 @@ function snapshot(): Snapshot {
   const sets: SetRow[] = [
     { id: "a", status: 1, title: "Galaxy Collapse", artist: "Kurokotei", creator: "Mismagius", tags: "dnb speedcore", added: 3_000, maps: [] },
     { id: "b", status: 4, title: "Koala", titleUnicode: "コアラ", artist: "Will Stetson", creator: "popy", added: 2_000, ranked: Date.UTC(2024, 7, 1), maps: [] },
-    { id: "c", status: -3, title: "Local Song", artist: "Nobody", creator: "me", added: 1_000, maps: [] },
+    { id: "c", status: -3, title: "Local Song", artist: "Nobody", creator: "me", added: 1_000, from: "stable", maps: [] },
   ];
   const maps: MapRow[] = [
     map(0, { version: "Extreme", sr: 7.2, bpm: 230, cs: 4, length: 300_000, best: { rank: 3, acc: 0.95, score: 900_000, plays: 3 }, peak: 18.5, patterns: "jumpstream chordjack stamina", srHt: 5.4, srDt: 10.1, dan: "Gamma high", danValue: 13.38, category: "Jumpstream" }),
@@ -83,6 +83,14 @@ describe("filterLibrary", () => {
     expect(versions({ text: "played=no" })).toEqual(["Extreme", "Hard", "Easy", "Taiko Oni"]);
     expect(versions({ text: "played<7" })).toEqual(["LN Insane"]);
     expect(versions({ text: "year=2024" })).toEqual(["Easy", "LN Insane"]);
+  });
+
+  it("filters by which osu! a set is in", () => {
+    expect(versions({ text: "game=stable" })).toEqual(["Taiko Oni"]);
+    expect(versions({ text: "game=lazer" })).toEqual(["Extreme", "Hard", "Easy", "LN Insane"]);
+    expect(versions({ text: "from!=stable" })).toEqual(["Extreme", "Hard", "Easy", "LN Insane"]);
+    // not a game: plain text, which matches nothing here
+    expect(versions({ text: "game=cuttingedge" })).toEqual([]);
   });
 
   it("filters by chart analysis", () => {

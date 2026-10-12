@@ -12,7 +12,7 @@ import type {
   ImportProgress,
   ImportSummary,
   LazerImportStatus,
-  LazerInstall,
+  LazerInstall, StableInstall,
   LibraryStatus,
   OsuAccount,
   ScanProgress,
@@ -28,6 +28,7 @@ export const api = {
   getSettings: () => invoke<Settings>("get_settings"),
   updateSettings: (patch: Partial<Settings> | Record<string, unknown>) => invoke<Settings>("update_settings", { patch }),
   inspectLazerPath: (path: string) => invoke<LazerInstall | null>("inspect_lazer_path", { path }),
+  inspectStablePath: (path: string) => invoke<StableInstall | null>("inspect_stable_path", { path }),
   libraryStatus: () => invoke<LibraryStatus>("library_status"),
   scanLibrary: () => invoke<{ sets: number; maps: number; scores: number; collections: number }>("scan_library"),
   async getLibrary(): Promise<Snapshot> {

@@ -68,6 +68,7 @@ export class SetView {
     ];
     if (set.ranked && [1, 2, 4].includes(set.status)) meta.push(`<span>${statusLabel(set.status)} ${date(set.ranked)}</span>`);
     if (set.added) meta.push(`<span>added ${relativeTime(set.added)}</span>`);
+    if (set.from === "stable") meta.push(`<span>in osu!stable</span>`);
 
     this.el.innerHTML = `
       <div class="set-hero">

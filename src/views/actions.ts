@@ -154,7 +154,7 @@ export function collectionMenu(
       icon: "copy",
       hint: "to change it",
       action: () => void (async () => {
-        const name = await uiPrompt("A Fumen collection you can add to and take from. lazer's stays as it is.", {
+        const name = await uiPrompt(`A Fumen collection you can add to and take from. ${lazer.from === "stable" ? "stable's" : "lazer's"} stays as it is.`, {
           title: "Copy into Fumen",
           value: lazer.name,
           confirmLabel: "Copy",
