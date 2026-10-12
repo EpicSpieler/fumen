@@ -6,10 +6,10 @@ Fumen is a desktop beatmap library for osu!. It reads your osu!lazer library and
 search, filter and preview all of it quickly, and shows what each osu!mania chart asks of you.
 Later versions add collections and tournament pool building (see [docs/PLAN.md](docs/PLAN.md)).
 
-Fumen reads osu!'s data from a private copy of lazer's database. The one thing it puts into lazer
-is beatmap sets you add through it, and that is done by lazer's own import code, only while lazer
-is closed, only on lazer versions tested with Fumen, and with a backup of lazer's database first
-(see [Adding beatmaps](#adding-beatmaps)).
+Fumen reads osu!'s data from a private copy of lazer's database. What it puts into lazer is beatmap
+sets you add through it and collections you send there, and that is done by lazer's own code, only
+while lazer is closed, only on lazer versions tested with Fumen, and with a backup of lazer's
+database first (see [Adding beatmaps](#adding-beatmaps)).
 
 ## Features
 
@@ -21,6 +21,10 @@ is closed, only on lazer versions tested with Fumen, and with a backup of lazer'
 - Smart collections: any search or filter in the library can be saved as one (Save as smart
   collection); it fills itself with whatever matches, after every import too. Edit search puts it
   back in the library to change and save
+- Collections out of Fumen: right-click one › Put into osu!lazer (it updates the lazer collection it
+  went into before, or lazer's of the same name, else becomes a new one; same safety as adding
+  beatmaps), or Save as collection.db… for osu!stable and Collection Manager (close stable before
+  replacing its own, it writes the file when it exits). Settings › Collections does all at once
 - Cover grid and a list of beatmap sets that open to show their difficulties, both virtualised
   (stays smooth at 20k+ difficulties)
 - osu!-style search: `keys=7 sr>4.5 status=ranked creator=… length<2:30 grade>=A played=no`
@@ -97,7 +101,9 @@ lazer's runtime), so sets land in lazer exactly as if lazer had imported them. B
 
 Testing a new lazer version (lazer closed): `npm run verify-lazer -- --push`. It checks the schema
 guard, imports a test set into a fresh library and into a copy of yours (exactly one set more,
-nothing else changed, every file intact), and on success lists the version and pushes the file.
+nothing else changed, every file intact), writes collections into that copy (one new, one of
+yours changed, nothing else touched, no copy on writing again), and on success lists the version
+and pushes the file.
 
 ## osu! login and the site
 
