@@ -312,6 +312,44 @@ pub fn download_set(set: u32, dir: &Path, mirrors: &Mirrors, mut progress: impl 
     Err(Error::known("download-failed", format!("No download mirror could deliver this set ({})", reasons(&why))))
 }
 
+/// Mirrors that serve a single difficulty's `.osu` file by osu!'s difficulty ID.
+const CHART_MIRRORS: [(&str, fn(i64) -> String); 3] = [
+    ("osu.direct", |id| format!("https://osu.direct/api/osu/{id}")),
+    ("nekoha.moe", |id| format!("https://mirror.nekoha.moe/api4/osu/{id}")),
+    ("catboy.best", |id| format!("https://catboy.best/osu/{id}")),
+];
+
+/// A difficulty's `.osu` file from the mirrors (never osu!'s servers), starting with mirror
+/// `first` so parallel callers spread over them. Ok(None): no mirror has it.
+pub fn download_chart(agent: &ureq::Agent, beatmap: i64, first: usize) -> Result<Option<String>> {
+    let mut failures = Vec::new();
+    let mut missing = 0;
+    for k in 0..CHART_MIRRORS.len() {
+        let (name, url) = CHART_MIRRORS[(first + k) % CHART_MIRRORS.len()];
+        match agent.get(&url(beatmap)).call() {
+            Ok(mut res) if res.status() == 200 => {
+                let text = res.body_mut().with_config().limit(32 * 1024 * 1024).read_to_string().unwrap_or_default();
+                if text.trim_start_matches('\u{feff}').trim_start().starts_with("osu file format") {
+                    return Ok(Some(text));
+                }
+                missing += 1;
+            }
+            Ok(res) if matches!(res.status().as_u16(), 404 | 410) => missing += 1,
+            Ok(res) => failures.push(format!("{name} {}", res.status().as_u16())),
+            Err(e) => failures.push(format!("{name}: {e}")),
+        }
+    }
+    if missing == CHART_MIRRORS.len() || failures.is_empty() {
+        return Ok(None);
+    }
+    Err(Error::known("download-failed", format!("Couldn't get difficulty {beatmap} ({})", failures.join(", "))))
+}
+
+/// An agent for many small requests to the mirrors.
+pub fn chart_agent() -> ureq::Agent {
+    agent(Duration::from_secs(30))
+}
+
 fn reasons(why: &[String]) -> String {
     MIRRORS
         .iter()

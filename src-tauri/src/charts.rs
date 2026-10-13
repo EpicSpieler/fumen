@@ -18,7 +18,7 @@ use crate::paths;
 use crate::stars;
 
 /// A difficulty's `.osu` file as text.
-fn read(files: &paths::Files, hash: &str) -> Result<String> {
+pub fn read(files: &paths::Files, hash: &str) -> Result<String> {
     let path = files.path(hash).ok_or_else(|| Error::known("chart-missing", "This difficulty has no chart file."))?;
     let bytes = std::fs::read(&path).map_err(|e| match e.kind() {
         std::io::ErrorKind::NotFound => Error::known("chart-missing", "This difficulty's .osu file is missing."),

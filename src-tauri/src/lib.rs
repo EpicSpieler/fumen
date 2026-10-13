@@ -15,6 +15,7 @@ mod osu_auth;
 mod osu_scores;
 mod library;
 mod paths;
+mod player;
 mod protocol;
 mod settings;
 mod skins;
@@ -62,6 +63,9 @@ pub struct AppState {
     syncing: AtomicBool,
     /// the running import of beatmaps should stop
     import_cancel: AtomicBool,
+    /// comparisons with other players: the one running, and whether it should stop
+    comparing: AtomicBool,
+    compare_cancel: AtomicBool,
     /// when each difficulty's scores were last asked of osu! (osu!'s difficulty id)
     map_synced: Mutex<std::collections::HashMap<i64, std::time::Instant>>,
 }
@@ -792,6 +796,45 @@ const DOWNLOADERS: usize = 3;
 /// Downloaded sets waiting for the importer, at most (they take disk space).
 const MAX_WAITING: usize = IMPORT_BATCH * 2;
 
+/// Another player's osu!mania plays and the charts behind them, for comparing skills (see
+/// `player.rs`), as raw JSON. Emits `compare-progress` along the way. A comparison already
+/// running is stopped first.
+#[tauri::command]
+async fn compare_player(app: AppHandle, name: String) -> Result<tauri::ipc::Response> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        // the one before gives way
+        state.compare_cancel.store(true, Ordering::SeqCst);
+        let started = std::time::Instant::now();
+        while state.comparing.swap(true, Ordering::SeqCst) {
+            if started.elapsed() > std::time::Duration::from_secs(10) {
+                return Err(Error::known("busy", "Another comparison is still stopping; try again in a moment."));
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        state.compare_cancel.store(false, Ordering::SeqCst);
+        let result = (|| {
+            let ep = osu_auth::Endpoints::default();
+            let emit = |p: player::Progress| {
+                let _ = app.emit("compare-progress", p);
+            };
+            let fetched = osu_auth::with_token(&state.data_dir, &ep, |token| player::fetch(&ep, token, &name, &state.compare_cancel, emit))?;
+            let conn = state.db();
+            player::build(&conn, &state.files(), &state.cache_dir.join("osu-charts"), fetched, &state.compare_cancel, emit).map(tauri::ipc::Response::new)
+        })();
+        state.comparing.store(false, Ordering::SeqCst);
+        result
+    })
+    .await
+    .map_err(|e| Error::known("internal", e.to_string()))?
+}
+
+/// Stops the running comparison.
+#[tauri::command]
+fn cancel_compare(state: State<'_, AppState>) {
+    state.compare_cancel.store(true, Ordering::SeqCst);
+}
+
 /// Stops the running import after what's being imported right now.
 #[tauri::command]
 fn cancel_import(state: State<'_, AppState>) {
@@ -1175,6 +1218,8 @@ pub fn run() {
                 login_cancel: AtomicBool::new(false),
                 syncing: AtomicBool::new(false),
                 import_cancel: AtomicBool::new(false),
+                comparing: AtomicBool::new(false),
+                compare_cancel: AtomicBool::new(false),
                 map_synced: Mutex::new(std::collections::HashMap::new()),
             };
             state.refresh_storage();
@@ -1200,6 +1245,8 @@ pub fn run() {
             get_skin_files,
             lazer_import_status,
             repair_lazer_sets,
+            compare_player,
+            cancel_compare,
             import_beatmaps,
             cancel_import,
             find_played_sets,
