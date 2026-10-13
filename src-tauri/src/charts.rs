@@ -24,7 +24,12 @@ pub fn load(files: &paths::Files, hash: &str) -> Result<Chart> {
         _ => e.into(),
     })?;
     // very old files can be in a legacy code page; the parts we read are ASCII anyway
-    Ok(chart::parse(&String::from_utf8_lossy(&bytes)))
+    let text = String::from_utf8_lossy(&bytes);
+    let mut chart = chart::parse(&text);
+    if chart.mode == 1 {
+        chart.taiko = crate::taiko::parse(&text);
+    }
+    Ok(chart)
 }
 
 #[derive(Serialize)]
@@ -49,6 +54,48 @@ struct ChartOut<'a> {
     /// osu!mania: the dan at 1×
     #[serde(skip_serializing_if = "Option::is_none")]
     dan: Option<dan::Dan>,
+    /// osu!taiko: the chart as lazer plays it
+    #[serde(skip_serializing_if = "Option::is_none")]
+    taiko: Option<TaikoOut>,
+}
+
+/// osu!taiko for the playfield (see `taiko.rs`), flat like the notes.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct TaikoOut {
+    /// `[time, kind, end, flags, extra]` per object: kind 0 centre, 1 rim, 2 drum roll, 3 swell;
+    /// flags 1 strong, 2 kiai; extra: a roll's first tick index into `ticks`, a swell's hits
+    objects: Vec<f64>,
+    /// every drum roll's ticks, roll after roll
+    ticks: Vec<f64>,
+    /// `[time, multiplier]` scroll speed changes
+    scroll: Vec<f64>,
+    /// `[time, major]` bar lines
+    bars: Vec<f64>,
+    /// `[time, keys, object]` autoplay: keys 1 left centre, 2 right centre, 4 left rim, 8 right rim
+    presses: Vec<f64>,
+}
+
+fn taiko_out(t: &crate::taiko::Chart) -> TaikoOut {
+    let mut objects = Vec::with_capacity(t.objects.len() * 5);
+    let mut ticks = Vec::new();
+    for o in &t.objects {
+        let flags = o.strong as u8 | (o.kiai as u8) << 1;
+        let extra = match o.kind {
+            crate::taiko::Kind::Roll => ticks.len() as f64,
+            crate::taiko::Kind::Swell => o.hits as f64,
+            _ => 0.0,
+        };
+        ticks.extend(&o.ticks);
+        objects.extend([o.time, o.kind.code() as f64, o.end, flags as f64, extra]);
+    }
+    TaikoOut {
+        objects,
+        ticks,
+        scroll: t.scroll.iter().flat_map(|&(a, b)| [a, b]).collect(),
+        bars: t.bars.iter().flat_map(|&(a, b)| [a, b as u8 as f64]).collect(),
+        presses: t.presses.iter().flat_map(|p| [p.time, p.keys as f64, p.object as f64]).collect(),
+    }
 }
 
 pub fn chart_json(chart: &Chart) -> Result<Vec<u8>> {
@@ -70,6 +117,7 @@ pub fn chart_json(chart: &Chart) -> Result<Vec<u8>> {
         analysis: &analysis,
         report: patterns::report(chart),
         dan: dan::rate(chart, 1.0),
+        taiko: chart.taiko.as_ref().map(taiko_out),
     };
     Ok(serde_json::to_vec(&out)?)
 }
@@ -284,17 +332,19 @@ mod tests {
                 }
                 let Ok(chart) = load(&paths::Files::lazer(&storage), hash) else { continue };
                 let mut v: serde_json::Value = serde_json::from_slice(&chart_json(&chart).unwrap()).unwrap();
+                if chart.mode == 1 || chart.mode == 3 {
+                    let read = |h: &str| paths::lazer_file(&storage, h).and_then(|p| std::fs::read(p).ok()).map(|b| String::from_utf8_lossy(&b).into_owned());
+                    if let Some(osu) = read(hash) {
+                        let osb = files.storyboard().and_then(read);
+                        v["hitsounds"] = serde_json::to_value(crate::hitsounds::resolve(&osu, osb.as_deref(), &files)).unwrap();
+                    }
+                }
                 if chart.mode == 3 {
                     let dans: serde_json::Map<String, serde_json::Value> = stars::RATES
                         .map(|r| r as f64 * stars::RATE_STEP)
                         .map(|r| (format!("{r:.2}"), serde_json::to_value(dan::rate(&chart, r)).unwrap()))
                         .collect();
                     v["dans"] = dans.into();
-                    let read = |h: &str| paths::lazer_file(&storage, h).and_then(|p| std::fs::read(p).ok()).map(|b| String::from_utf8_lossy(&b).into_owned());
-                    if let Some(osu) = read(hash) {
-                        let osb = files.storyboard().and_then(read);
-                        v["hitsounds"] = serde_json::to_value(crate::hitsounds::resolve(&osu, osb.as_deref(), &files)).unwrap();
-                    }
                 }
                 std::fs::write(file, serde_json::to_vec(&v).unwrap()).unwrap();
                 written += 1;

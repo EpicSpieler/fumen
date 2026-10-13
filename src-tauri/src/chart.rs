@@ -47,6 +47,8 @@ pub struct Chart {
     /// sorted by time
     pub objects: Vec<HitObject>,
     pub breaks: Vec<(i32, i32)>,
+    /// osu!taiko: the chart as lazer plays it (set by `charts::load`)
+    pub taiko: Option<crate::taiko::Chart>,
 }
 
 #[derive(PartialEq)]
@@ -139,7 +141,7 @@ pub fn parse(text: &str) -> Chart {
     objects.sort_by_key(|o| (o.time, o.lane));
     breaks.sort_unstable();
 
-    Chart { mode, keys, od, timing, objects, breaks }
+    Chart { mode, keys, od, timing, objects, breaks, taiko: None }
 }
 
 fn num(v: Option<&str>) -> Option<f64> {
