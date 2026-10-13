@@ -13,6 +13,7 @@ import type {
   ImportSummary,
   PlayedFound,
   LazerImportStatus,
+  RepairSummary,
   LazerInstall, StableInstall,
   LibraryStatus,
   OsuAccount,
@@ -60,6 +61,7 @@ export const api = {
   importBeatmaps: (links: string[]) => invoke<ImportSummary>("import_beatmaps", { links }),
   /** stops the running import after the sets being imported right now */
   cancelImport: () => invoke<void>("cancel_import"),
+  repairLazerSets: () => invoke<RepairSummary>("repair_lazer_sets"),
   /** every set the player has played that osu!lazer doesn't have (progress: onPlayedProgress) */
   findPlayedSets: () => invoke<PlayedFound>("find_played_sets"),
   /** the osu! account as last seen (no network) */

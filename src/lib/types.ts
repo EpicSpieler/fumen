@@ -450,10 +450,19 @@ export interface LazerImportStatus {
   tested: boolean;
   running: boolean;
   testedVersions: string[];
+  /** sets in lazer without their details (an older Fumen imported them so) */
+  unfinished: number;
 }
 
-/** `ready`: downloaded, waiting for its turn in osu!lazer's importer */
-export type ImportStage = "resolving" | "downloading" | "ready" | "importing" | "done" | "skipped" | "error";
+export interface RepairSummary {
+  finished: number;
+  /** left for lazer to finish on its next start */
+  failed: number;
+}
+
+/** `held`: the mirrors are busy or resting after a rate limit (`total`: about how many seconds
+ * to go); `ready`: downloaded, waiting for its turn in osu!lazer's importer */
+export type ImportStage = "resolving" | "downloading" | "held" | "ready" | "importing" | "done" | "skipped" | "error";
 
 /** `import-progress`: one pasted line moving along */
 export interface ImportProgress {

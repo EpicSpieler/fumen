@@ -207,7 +207,15 @@ export async function invoke<T>(cmd: string, args: Record<string, unknown> = {})
         untested: ["untested", "osu!lazer 2026.1012.0 isn't tested with Fumen's import yet; importing stays off until it is."],
       };
       const [reason, message] = reasons[mode] ?? [null, null];
-      return { ready: !reason, reason, message, version, tested: mode !== "untested", running: mode === "running", testedVersions: [version] } as T;
+      // localStorage "fumen-preview-unfinished": sets an older Fumen left without details
+      const unfinished = Number(localStorage.getItem("fumen-preview-unfinished") ?? "0");
+      return { ready: !reason, reason, message, version, tested: mode !== "untested", running: mode === "running", testedVersions: [version], unfinished } as T;
+    }
+    case "repair_lazer_sets": {
+      const finished = Number(localStorage.getItem("fumen-preview-unfinished") ?? "0");
+      await new Promise((r) => setTimeout(r, 1800));
+      localStorage.setItem("fumen-preview-unfinished", "0");
+      return { finished, failed: 0 } as T;
     }
     case "cancel_import":
       previewImportCancel = true;
@@ -265,6 +273,13 @@ export async function invoke<T>(cmd: string, args: Record<string, unknown> = {})
             summary.skipped++;
             continue;
           }
+          // every 5th set waits for a rate-limited mirror for a few seconds first
+          if (index % 5 === 3) {
+            for (let s = 4; s > 0 && !previewImportCancel; s--) {
+              idle(index, set, "held", { total: s });
+              await wait(1000);
+            }
+          }
           const total = 4_000_000 + (set % 7) * 1_300_000;
           for (let done = 0; done <= total && !previewImportCancel; done += total / 10) {
             idle(index, set, "downloading", { done: Math.round(done), total });
@@ -274,7 +289,7 @@ export async function invoke<T>(cmd: string, args: Record<string, unknown> = {})
             idle(index, set, "skipped", { message: "Cancelled" });
             summary.cancelled++;
           } else if (link.includes("fail") || index % 9 === 8) {
-            idle(index, set, "error", { message: "No download mirror has this set (osu.direct 404, catboy.best 403, nerinyan.moe 404)" });
+            idle(index, set, "error", { message: "No download mirror has this set (osu.direct 404, nekoha.moe 404, catboy.best 404, beatconnect.io 404, sayobot.cn 403, nerinyan.moe 404)" });
             summary.failed++;
           } else {
             idle(index, set, "ready");
