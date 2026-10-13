@@ -14,6 +14,7 @@ function settings(): Record<string, unknown> {
 const install = { path: "C:\\Users\\you\\AppData\\Roaming\\osu", storage: "C:\\Users\\you\\AppData\\Roaming\\osu", realmSize: 31457280, realmModified: Date.now() - 86_400_000 };
 let scanned = localStorage.getItem("fumen-preview-scanned") !== "0";
 let previewLoginCancelled = false;
+let previewImportCancel = false;
 
 export async function invoke<T>(cmd: string, args: Record<string, unknown> = {}): Promise<T> {
   switch (cmd) {
@@ -208,40 +209,101 @@ export async function invoke<T>(cmd: string, args: Record<string, unknown> = {})
       const [reason, message] = reasons[mode] ?? [null, null];
       return { ready: !reason, reason, message, version, tested: mode !== "untested", running: mode === "running", testedVersions: [version] } as T;
     }
+    case "cancel_import":
+      previewImportCancel = true;
+      return null as T;
+    case "find_played_sets": {
+      // localStorage "fumen-preview-osu" decides the login; real set ids, so covers load
+      const ids = [1, 39804, 41823, 320118, 352570, 372245, 413674, 431271, 539697, 553734, 580215, 627629, 654936, 703008, 774965, 853167, 920979, 1010865, 1068436, 1159279];
+      const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+      for (let read = 100; read <= 1240; read += 100) {
+        emit("played-progress", read);
+        await wait(140);
+      }
+      const missing = Array.from({ length: 214 }, (_, i) => {
+        const id = i < ids.length ? ids[i] : 1_200_000 + i * 977;
+        return {
+          id,
+          title: `Preview Song ${i + 1}`,
+          artist: ["Camellia", "xi", "LeaF", "Sakuzyo", "nora2r"][i % 5],
+          creator: ["Lasse", "Evening", "Shoegazer"][i % 3],
+          plays: Math.max(0, 180 - i),
+          maps: 1 + (i % 4),
+          status: i % 6 ? "ranked" : "loved",
+          top: i % 7 === 0,
+          inStable: i % 5 === 0,
+        };
+      });
+      return { missing, played: 1031, read: 1240 } as T;
+    }
     case "import_beatmaps": {
-      // pretend: lines with "fail" fail, set 1 is in the library, everything else downloads
+      // pretend: lines with "fail" (and every 9th set) fail, set 1 is in the library; three
+      // downloads at once, lazer imports in batches of 20
+      previewImportCancel = false;
       const links = args.links as string[];
       const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
-      const summary = { imported: 0, skipped: 0, failed: 0 };
-      const ok: [number, number][] = [];
-      for (const [index, link] of links.entries()) {
-        const set = Number(/(\d+)/.exec(link)?.[1] ?? 0);
-        const base = { index, set, title: null, done: 0, total: 0, message: null };
-        if (/\/b(eatmaps)?\//.test(link)) {
-          emit("import-progress", { ...base, set: null, stage: "resolving" });
-          await wait(300);
+      const summary = { imported: 0, skipped: 0, failed: 0, cancelled: 0, stopped: null };
+      const queue: [number, string][] = [...links.entries()];
+      const ready: [number, number][] = [];
+      const idle = (index: number, set: number | null, stage: string, extra: Record<string, unknown> = {}) =>
+        emit("import-progress", { index, set, stage, title: null, done: 0, total: 0, message: null, ...extra });
+      const downloader = async () => {
+        for (let next = queue.shift(); next; next = queue.shift()) {
+          const [index, link] = next;
+          const set = Number(/(\d+)/.exec(link)?.[1] ?? 0);
+          if (previewImportCancel) {
+            idle(index, set, "skipped", { message: "Cancelled" });
+            summary.cancelled++;
+            continue;
+          }
+          if (/\/b(eatmaps)?\//.test(link)) {
+            idle(index, null, "resolving");
+            await wait(300);
+          }
+          if (set === 1) {
+            idle(index, set, "skipped", { title: "Camellia - Ghost", message: "Already in your library" });
+            summary.skipped++;
+            continue;
+          }
+          const total = 4_000_000 + (set % 7) * 1_300_000;
+          for (let done = 0; done <= total && !previewImportCancel; done += total / 10) {
+            idle(index, set, "downloading", { done: Math.round(done), total });
+            await wait(90);
+          }
+          if (previewImportCancel) {
+            idle(index, set, "skipped", { message: "Cancelled" });
+            summary.cancelled++;
+          } else if (link.includes("fail") || index % 9 === 8) {
+            idle(index, set, "error", { message: "No download mirror has this set (osu.direct 404, catboy.best 403, nerinyan.moe 404)" });
+            summary.failed++;
+          } else {
+            idle(index, set, "ready");
+            ready.push([index, set]);
+          }
         }
-        if (set === 1) {
-          emit("import-progress", { ...base, stage: "skipped", title: "Camellia - Ghost", message: "Already in your library" });
-          summary.skipped++;
+      };
+      let downloading = true;
+      const downloads = Promise.all([downloader(), downloader(), downloader()]).then(() => (downloading = false));
+      while (downloading || ready.length) {
+        if (previewImportCancel) {
+          for (const [index, set] of ready.splice(0)) {
+            idle(index, set, "skipped", { message: "Cancelled" });
+            summary.cancelled++;
+          }
+          await wait(100);
           continue;
         }
-        const total = 4_000_000 + (set % 7) * 1_300_000;
-        for (let done = 0; done <= total; done += total / 12) {
-          emit("import-progress", { ...base, stage: "downloading", done: Math.round(done), total });
-          await wait(70);
-        }
-        if (link.includes("fail")) {
-          emit("import-progress", { ...base, stage: "error", message: "No download mirror has this set (osu.direct 404, catboy.best 403, nerinyan.moe 404)" });
-          summary.failed++;
-        } else ok.push([index, set]);
+        if (ready.length >= 20 || (!downloading && ready.length)) {
+          const batch = ready.splice(0, 20);
+          for (const [index, set] of batch) idle(index, set, "importing");
+          await wait(1400);
+          for (const [index, set] of batch) {
+            idle(index, set, "done");
+            summary.imported++;
+          }
+        } else await wait(100);
       }
-      for (const [index, set] of ok) emit("import-progress", { index, set, stage: "importing", title: null, done: 0, total: 0, message: null });
-      await wait(900);
-      for (const [index, set] of ok) {
-        emit("import-progress", { index, set, stage: "done", title: `Preview Artist - Song ${set}`, done: 0, total: 0, message: null });
-        summary.imported++;
-      }
+      await downloads;
       return summary as T;
     }
     default:

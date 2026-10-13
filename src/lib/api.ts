@@ -11,6 +11,7 @@ import type {
   History,
   ImportProgress,
   ImportSummary,
+  PlayedFound,
   LazerImportStatus,
   LazerInstall, StableInstall,
   LibraryStatus,
@@ -57,6 +58,10 @@ export const api = {
   lazerImportStatus: () => invoke<LazerImportStatus>("lazer_import_status"),
   /** downloads the sets behind osu! links and imports them into lazer (progress: onImportProgress) */
   importBeatmaps: (links: string[]) => invoke<ImportSummary>("import_beatmaps", { links }),
+  /** stops the running import after the sets being imported right now */
+  cancelImport: () => invoke<void>("cancel_import"),
+  /** every set the player has played that osu!lazer doesn't have (progress: onPlayedProgress) */
+  findPlayedSets: () => invoke<PlayedFound>("find_played_sets"),
   /** the osu! account as last seen (no network) */
   osuAccount: () => invoke<OsuAccount | null>("osu_account"),
   /** logs in through the browser; resolves once it's back */
@@ -109,6 +114,11 @@ export function onHistoryChanged(cb: (library: boolean) => void): Promise<Unlist
 
 export function onImportProgress(cb: (p: ImportProgress) => void): Promise<UnlistenFn> {
   return listen<ImportProgress>("import-progress", (e) => cb(e.payload));
+}
+
+/** finding played sets: play counts and scores read from osu! so far */
+export function onPlayedProgress(cb: (read: number) => void): Promise<UnlistenFn> {
+  return listen<number>("played-progress", (e) => cb(e.payload));
 }
 
 /** Background chart analysis of the whole library (after imports and on start). */
