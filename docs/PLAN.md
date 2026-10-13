@@ -276,10 +276,16 @@ sections below is the order of the work.
       their own) and Flashlight (`src/ui/flashlight.ts`: sizes by combo and break time at
       osu!stable's speed, the circular / rectangular shaders). Mods are the player's, like the rate
       (session only); the fullscreen player has a toggle per mod
-- [ ] Similar maps: a chart's fingerprint (pattern shares, SR, BPM, length, LN %, key mode) and
-      the nearest ones in the library; on the set page and for the compared player's charts
-      ("what they play that hits your weak patterns"); later "replace this slot with something
-      like it" in the pool builder (1.1)
+- [x] Similar maps — 0.4.13. `src/lib/similar.ts`: a fingerprint per difficulty (SR, notes per
+      second, length, BPM, hold share; osu!mania's pattern shares, osu! / osu!catch AR and CS,
+      OD where it counts), each part a difference in noticeable units weighted per ruleset, alike
+      = 1 / (1 + weighted mean square); same ruleset and key count, never the chart's own set, a
+      chart uploaded twice (osu!'s id, or song title + difficulty name) once; ~7 ms over 22k
+      difficulties. The chart panel lists the closest (`src/views/similar.ts`, "Similar maps" in
+      every difficulty's menu jumps there), each with what sets it apart. Comparing, "Practice
+      next" adds the compared player's charts at your aim (`suggest` over their charts, your
+      bests mapped through the library) and, for ones you don't have, what's like them in yours.
+      Later: "replace this slot with something like it" in the pool builder (1.1)
 - [ ] Beatmap search on the mirrors: osu.direct / nerinyan / catboy search APIs (never osu!'s
       servers), filters (ruleset, keys, SR, BPM, status, mapper), results marked "in library",
       import through the existing pipeline; "packs": a search's results as one queued import

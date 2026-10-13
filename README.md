@@ -56,6 +56,11 @@ database first (see [Adding beatmaps](#adding-beatmaps)).
   flips osu!, pushes osu!catch's fruits apart and speeds osu!taiko up; Hidden and Flashlight follow
   the combo and breaks; the difficulty line shows CS / AR / OD / HP with them (and AR / OD at the
   rate)
+- Similar maps under every chart: the difficulties in your library most like it, closest first,
+  each with how alike it is and what sets it apart ("harder", "more jacks", "lower AR"). Alike
+  means the same ruleset (and key count), star rating, density, length and speed, plus the pattern
+  mix and long notes in osu!mania or approach rate and circle size in osu! / osu!catch. Right-click
+  any difficulty › Similar maps
 - Rates: HT, DT or anything from 0.5× to 2× — the song plays at it and the panel shows star rating,
   length, BPM and density at that rate. osu!mania star ratings come from Fumen's own port of lazer's
   calculator (matches lazer's own value within 0.005★ on 99.8 % of a 5.7k-chart library)
@@ -109,7 +114,9 @@ database first (see [Adding beatmaps](#adding-beatmaps)).
   top plays, first places, recent passes and their best on their most played charts from osu!,
   reads the charts behind them (your library's, or single `.osu` files from the mirrors) and puts
   their skills next to yours: their polygon on the radar, their value per pattern and the charts
-  behind it, ones you don't have one click from Add beatmaps
+  behind it, ones you don't have one click from Add beatmaps. "Practice next" adds what they play
+  that hits your weak patterns at your aim, and for a chart of theirs you don't have, what's like it
+  in your library
 - Goals: a pattern skill to reach (shown on the radar), an accuracy on a chart at a rate, or your
   osu! pp or rank. Each shows how far along it is, and Fumen ticks it off (with a note) once your
   plays or the next sync get there
