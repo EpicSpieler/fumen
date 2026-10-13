@@ -580,7 +580,7 @@ mod tests {
         let before = export(&realm, &work.join("before.json"));
         let owned: Vec<u64> = before["sets"].as_array().unwrap().iter().filter_map(|s| s["onlineId"].as_u64()).collect();
         let set = TEST_SETS.into_iter().find(|s| !owned.contains(&u64::from(*s))).expect("all test sets are in the library");
-        let (archive, mirror) = crate::downloads::download_set(set, &work.join("dl"), |_, _| {}).unwrap();
+        let (archive, mirror) = crate::downloads::download_set(set, &work.join("dl"), |_, _| true).unwrap();
         let entries = zip_entries(&archive);
         let charts: Vec<&String> = entries.iter().filter(|(n, _)| n.to_lowercase().ends_with(".osu")).map(|(_, h)| h).collect();
         assert!(!charts.is_empty(), "set {set} has no charts");

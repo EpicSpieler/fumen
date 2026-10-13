@@ -87,8 +87,9 @@ fn set_from_location(location: &str) -> Option<u32> {
 }
 
 /// Downloads a set into `dir` as `<id>.osz`, trying the mirrors in turn. `progress` gets
-/// (bytes so far, total if known). Returns the file and the mirror that delivered it.
-pub fn download_set(set: u32, dir: &Path, mut progress: impl FnMut(u64, Option<u64>)) -> Result<(PathBuf, &'static str)> {
+/// (bytes so far, total if known) and says whether to go on (false: the download stops with a
+/// "cancelled" error). Returns the file and the mirror that delivered it.
+pub fn download_set(set: u32, dir: &Path, mut progress: impl FnMut(u64, Option<u64>) -> bool) -> Result<(PathBuf, &'static str)> {
     std::fs::create_dir_all(dir)?;
     let target = dir.join(format!("{set}.osz"));
     let part = dir.join(format!("{set}.osz.part"));
@@ -102,6 +103,9 @@ pub fn download_set(set: u32, dir: &Path, mut progress: impl FnMut(u64, Option<u
             }
             Err(e) => {
                 let _ = std::fs::remove_file(&part);
+                if e == CANCELLED {
+                    return Err(Error::known("cancelled", "Cancelled"));
+                }
                 failures.push(format!("{name} {}", e.trim_start_matches("HTTP ")));
             }
         }
@@ -109,7 +113,9 @@ pub fn download_set(set: u32, dir: &Path, mut progress: impl FnMut(u64, Option<u
     Err(Error::known("download-failed", format!("No download mirror has this set ({})", failures.join(", "))))
 }
 
-fn fetch(agent: &ureq::Agent, url: &str, out: &Path, progress: &mut impl FnMut(u64, Option<u64>)) -> std::result::Result<(), String> {
+const CANCELLED: &str = "cancelled";
+
+fn fetch(agent: &ureq::Agent, url: &str, out: &Path, progress: &mut impl FnMut(u64, Option<u64>) -> bool) -> std::result::Result<(), String> {
     let mut res = agent.get(url).call().map_err(|e| e.to_string())?;
     let status = res.status().as_u16();
     if status != 200 {
@@ -132,7 +138,9 @@ fn fetch(agent: &ureq::Agent, url: &str, out: &Path, progress: &mut impl FnMut(u
         }
         file.write_all(&buf[..n]).map_err(|e| e.to_string())?;
         done += n as u64;
-        progress(done, total);
+        if !progress(done, total) {
+            return Err(CANCELLED.into());
+        }
     }
     file.flush().map_err(|e| e.to_string())?;
     // mirrors answer "not found" with JSON or HTML now and then, even with 200

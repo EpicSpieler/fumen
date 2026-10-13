@@ -58,6 +58,8 @@ pub struct AppState {
     login_cancel: AtomicBool,
     /// a sync with osu! is running
     syncing: AtomicBool,
+    /// the running import of beatmaps should stop
+    import_cancel: AtomicBool,
     /// when each difficulty's scores were last asked of osu! (osu!'s difficulty id)
     map_synced: Mutex<std::collections::HashMap<i64, std::time::Instant>>,
 }
@@ -693,7 +695,7 @@ async fn lazer_import_status(app: AppHandle) -> Result<lazer_import::Status> {
 struct ImportProgress {
     /// which of the pasted lines
     index: usize,
-    /// resolving | downloading | importing | done | skipped | error
+    /// resolving | downloading | ready (downloaded, waiting for lazer) | importing | done | skipped | error
     stage: &'static str,
     set: Option<u32>,
     title: Option<String>,
@@ -708,6 +710,79 @@ struct ImportSummary {
     imported: usize,
     skipped: usize,
     failed: usize,
+    /// sets left out because the import was cancelled or stopped
+    cancelled: usize,
+    /// why the import stopped before the end (lazer was opened, …)
+    stopped: Option<String>,
+}
+
+/// Sets per run of lazer's importer (each run: one backup of client.realm, one importer start).
+const IMPORT_BATCH: usize = 20;
+/// Downloads at once.
+const DOWNLOADERS: usize = 3;
+/// Downloaded sets waiting for the importer, at most (they take disk space).
+const MAX_WAITING: usize = IMPORT_BATCH * 2;
+
+/// Stops the running import after what's being imported right now.
+#[tauri::command]
+fn cancel_import(state: State<'_, AppState>) {
+    state.import_cancel.store(true, Ordering::SeqCst);
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PlayedSetOut {
+    #[serde(flatten)]
+    set: osu_scores::PlayedSet,
+    /// osu!stable has it (but lazer doesn't)
+    in_stable: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PlayedFound {
+    /// sets played that osu!lazer doesn't have, most played first
+    missing: Vec<PlayedSetOut>,
+    /// sets played in all
+    played: usize,
+    /// play counts and top plays read from osu!
+    read: usize,
+}
+
+/// Every set the player has played that isn't in osu!lazer: from osu!'s play counts and top
+/// plays (every ruleset) and the scores synced for the Performance view. Emits
+/// `played-progress` with the play counts and scores read so far.
+#[tauri::command]
+async fn find_played_sets(app: AppHandle) -> Result<PlayedFound> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let account = osu_auth::account(&state.data_dir).ok_or_else(|| Error::known("osu-logged-out", "Log in to osu! in Settings first."))?;
+        let ep = osu_auth::Endpoints::default();
+        let mut all = osu_scores::PlayedSets::default();
+        let mut read = 0;
+        osu_auth::with_token(&state.data_dir, &ep, |token| {
+            osu_scores::played_sets(&ep, token, account.id, &mut all, |n| {
+                read = n;
+                let _ = app.emit("played-progress", n);
+            })
+        })?;
+        let conn = state.db();
+        osu_scores::synced_sets(&conn, account.id as i64, &mut all)?;
+        let sets = all.into_sorted();
+        let mut have = conn.prepare("SELECT source FROM sets WHERE online_id = ?1")?;
+        let played = sets.len();
+        let mut missing = Vec::new();
+        for set in sets {
+            let sources: Vec<String> = have.query_map([set.id], |r| r.get(0))?.collect::<rusqlite::Result<_>>()?;
+            if sources.iter().any(|s| s == "lazer") {
+                continue;
+            }
+            missing.push(PlayedSetOut { in_stable: !sources.is_empty(), set });
+        }
+        Ok(PlayedFound { missing, played, read })
+    })
+    .await
+    .map_err(|e| Error::known("internal", e.to_string()))?
 }
 
 /// Downloads the sets behind pasted osu! links and imports them into lazer (see
@@ -720,6 +795,7 @@ async fn import_beatmaps(app: AppHandle, links: Vec<String>) -> Result<ImportSum
         if state.scanning.swap(true, Ordering::SeqCst) {
             return Err(Error::known("busy", "The library is being updated; try again in a moment."));
         }
+        state.import_cancel.store(false, Ordering::SeqCst);
         let result = run_import(&app, &state, &links);
         state.scanning.store(false, Ordering::SeqCst);
         result
@@ -797,67 +873,143 @@ fn run_import(app: &AppHandle, state: &AppState, links: &[String]) -> Result<Imp
         None => true,
     });
 
-    // downloads
+    // downloads (a few at once) and imports (a batch at a time) run side by side; downloads wait
+    // while enough sets are waiting for lazer
     let dl_dir = state.cache_dir.join("downloads");
-    let mut files: Vec<(usize, u32, PathBuf)> = Vec::new();
-    for &(i, set) in &sets {
-        let mut last: Option<std::time::Instant> = None;
-        let result = downloads::download_set(set, &dl_dir, |done, total| {
-            if last.map_or(true, |t| t.elapsed() >= std::time::Duration::from_millis(120)) || Some(done) == total {
-                last = Some(std::time::Instant::now());
-                let p = ImportProgress { index: i, stage: "downloading", set: Some(set), title: None, done, total: total.unwrap_or(0), message: None };
-                let _ = app.emit("import-progress", p);
+    let cancel = &state.import_cancel;
+    let queue = Mutex::new(std::collections::VecDeque::from(sets.clone()));
+    let waiting = std::sync::atomic::AtomicUsize::new(0);
+    let (tx, rx) = std::sync::mpsc::channel::<(usize, u32, Result<PathBuf>)>();
+    let mut imported: Vec<(usize, u32)> = Vec::new();
+    std::thread::scope(|scope| {
+        for _ in 0..DOWNLOADERS.min(sets.len()) {
+            let tx = tx.clone();
+            let (queue, waiting, dl_dir) = (&queue, &waiting, &dl_dir);
+            scope.spawn(move || loop {
+                if cancel.load(Ordering::SeqCst) {
+                    break;
+                }
+                if waiting.load(Ordering::SeqCst) >= MAX_WAITING {
+                    std::thread::sleep(std::time::Duration::from_millis(200));
+                    continue;
+                }
+                let Some((i, set)) = queue.lock().unwrap_or_else(|e| e.into_inner()).pop_front() else { break };
+                let mut last: Option<std::time::Instant> = None;
+                let result = downloads::download_set(set, dl_dir, |done, total| {
+                    if last.map_or(true, |t| t.elapsed() >= std::time::Duration::from_millis(120)) || Some(done) == total {
+                        last = Some(std::time::Instant::now());
+                        let p = ImportProgress { index: i, stage: "downloading", set: Some(set), title: None, done, total: total.unwrap_or(0), message: None };
+                        let _ = app.emit("import-progress", p);
+                    }
+                    !cancel.load(Ordering::SeqCst)
+                });
+                match result {
+                    Ok((path, _mirror)) => {
+                        waiting.fetch_add(1, Ordering::SeqCst);
+                        let _ = tx.send((i, set, Ok(path)));
+                    }
+                    Err(e) => {
+                        let _ = tx.send((i, set, Err(e)));
+                    }
+                }
+            });
+        }
+        drop(tx);
+
+        let mut ready: Vec<(usize, u32, PathBuf)> = Vec::new();
+        let mut downloading = true;
+        loop {
+            match rx.recv_timeout(std::time::Duration::from_millis(100)) {
+                Ok((i, set, Ok(path))) => {
+                    emit(i, "ready", Some(set), None, None);
+                    ready.push((i, set, path));
+                }
+                Ok((i, set, Err(e))) if e.code() == "cancelled" => {
+                    emit(i, "skipped", Some(set), None, Some("Cancelled".into()));
+                    summary.cancelled += 1;
+                }
+                Ok((i, set, Err(e))) => {
+                    emit(i, "error", Some(set), None, Some(e.to_string()));
+                    summary.failed += 1;
+                }
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => downloading = false,
             }
-        });
-        match result {
-            Ok((path, _mirror)) => files.push((i, set, path)),
-            Err(e) => {
-                emit(i, "error", Some(set), None, Some(e.to_string()));
-                summary.failed += 1;
+            if cancel.load(Ordering::SeqCst) {
+                if !downloading {
+                    break;
+                }
+                continue;
+            }
+            if ready.len() >= IMPORT_BATCH || (!downloading && !ready.is_empty()) {
+                let batch: Vec<(usize, u32, PathBuf)> = ready.drain(..ready.len().min(IMPORT_BATCH)).collect();
+                // into lazer, the batch at once (one backup, one start of the importer)
+                for &(i, set, _) in &batch {
+                    emit(i, "importing", Some(set), None, None);
+                }
+                let paths: Vec<PathBuf> = batch.iter().map(|(_, _, p)| p.clone()).collect();
+                let results = lazer_import::import(&storage, &state.cache_dir, &state.data_dir.join("lazer-backups"), &paths, &compat);
+                for p in &paths {
+                    let _ = std::fs::remove_file(p);
+                }
+                waiting.fetch_sub(batch.len(), Ordering::SeqCst);
+                match results {
+                    Ok(results) => {
+                        for (i, set, path) in &batch {
+                            match results.iter().find(|r| r.file.file_name() == path.file_name()) {
+                                Some(r) if r.ok && !r.sets.is_empty() => {
+                                    emit(*i, "done", Some(*set), None, None);
+                                    imported.push((*i, *set));
+                                    summary.imported += 1;
+                                }
+                                Some(r) => {
+                                    let why = r.message.clone().unwrap_or_else(|| "lazer found no beatmaps in the download".into());
+                                    emit(*i, "error", Some(*set), None, Some(why));
+                                    summary.failed += 1;
+                                }
+                                None => {
+                                    emit(*i, "error", Some(*set), None, Some("The importer didn't report on this set".into()));
+                                    summary.failed += 1;
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        // lazer was opened, …: nothing more goes in
+                        for &(i, set, _) in &batch {
+                            emit(i, "error", Some(set), None, Some(e.to_string()));
+                        }
+                        summary.failed += batch.len();
+                        summary.stopped = Some(e.to_string());
+                        cancel.store(true, Ordering::SeqCst);
+                    }
+                }
+            }
+            if !downloading && ready.is_empty() {
+                break;
             }
         }
-    }
-    if files.is_empty() {
-        return Ok(summary);
-    }
-
-    // into lazer, all at once (one backup, one start of the importer)
-    for &(i, set, _) in &files {
-        emit(i, "importing", Some(set), None, None);
-    }
-    let paths: Vec<PathBuf> = files.iter().map(|(_, _, p)| p.clone()).collect();
-    let results = lazer_import::import(&storage, &state.cache_dir, &state.data_dir.join("lazer-backups"), &paths, &compat);
-    for p in &paths {
-        let _ = std::fs::remove_file(p);
-    }
-    let results = match results {
-        Ok(r) => r,
-        Err(e) => {
-            for &(i, set, _) in &files {
-                emit(i, "error", Some(set), None, Some(e.to_string()));
-            }
-            return Err(e);
+        // downloaded but not imported (cancelled or stopped)
+        for (i, set, path) in ready.drain(..) {
+            let _ = std::fs::remove_file(&path);
+            emit(i, "skipped", Some(set), None, Some("Cancelled".into()));
+            summary.cancelled += 1;
         }
-    };
-
-    // Fumen's library catches up, then every line gets its title
-    if let Err(e) = run_scan(app, state) {
-        eprintln!("[import] library update after import: {e}");
+    });
+    // never started
+    for (i, set) in queue.into_inner().unwrap_or_else(|e| e.into_inner()) {
+        emit(i, "skipped", Some(set), None, Some("Cancelled".into()));
+        summary.cancelled += 1;
     }
-    for (i, set, path) in &files {
-        match results.iter().find(|r| r.file.file_name() == path.file_name()) {
-            Some(r) if r.ok && !r.sets.is_empty() => {
-                emit(*i, "done", Some(*set), title_of(*set), None);
-                summary.imported += 1;
-            }
-            Some(r) => {
-                let why = r.message.clone().unwrap_or_else(|| "lazer found no beatmaps in the download".into());
-                emit(*i, "error", Some(*set), None, Some(why));
-                summary.failed += 1;
-            }
-            None => {
-                emit(*i, "error", Some(*set), None, Some("The importer didn't report on this set".into()));
-                summary.failed += 1;
+
+    // Fumen's library catches up, then every set imported gets its title
+    if !imported.is_empty() {
+        if let Err(e) = run_scan(app, state) {
+            eprintln!("[import] library update after import: {e}");
+        }
+        for (i, set) in imported {
+            if let Some(title) = title_of(set) {
+                emit(i, "done", Some(set), Some(title), None);
             }
         }
     }
@@ -936,6 +1088,7 @@ pub fn run() {
                 logging_in: AtomicBool::new(false),
                 login_cancel: AtomicBool::new(false),
                 syncing: AtomicBool::new(false),
+                import_cancel: AtomicBool::new(false),
                 map_synced: Mutex::new(std::collections::HashMap::new()),
             };
             state.refresh_storage();
@@ -960,6 +1113,8 @@ pub fn run() {
             get_skin_files,
             lazer_import_status,
             import_beatmaps,
+            cancel_import,
+            find_played_sets,
             osu_account,
             osu_login,
             osu_login_cancel,
