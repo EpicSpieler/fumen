@@ -466,11 +466,12 @@ export class TrianglesRenderer implements TaikoRenderer {
 }
 
 /** osu!framework's Triangles over a CirclePiece: white, faint, drifting upwards. */
-function triangles(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, t: number, seed: number): void {
+export function triangles(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, t: number, seed: number): void {
   const rand = seeded(seed * 7919 + 17);
   const n = Math.max(4, Math.round((w * h) / 900));
   const left = x - w / 2;
   const top = y - h / 2;
+  const base = ctx.globalAlpha;
   for (let i = 0; i < n; i++) {
     const size = h * (0.25 + rand() * 0.45);
     const tx = left + rand() * w;
@@ -479,7 +480,7 @@ function triangles(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
     const ty = top + h - ((rand() * span + t * speed) % span);
     const shade = 1 - rand() * 0.1;
     ctx.fillStyle = css([shade, shade, shade, 1]);
-    ctx.globalAlpha = 0.12;
+    ctx.globalAlpha = base * 0.12;
     ctx.beginPath();
     ctx.moveTo(tx, ty - (size * Math.sqrt(3)) / 2);
     ctx.lineTo(tx - size / 2, ty);
@@ -487,7 +488,7 @@ function triangles(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
     ctx.closePath();
     ctx.fill();
   }
-  ctx.globalAlpha = 1;
+  ctx.globalAlpha = base;
 }
 
 /** FontAwesome's solid asterisk, roughly: three rounded bars crossing, `size` across. */

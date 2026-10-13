@@ -1,7 +1,7 @@
 /* fullscreen.ts — the player in fullscreen, with two views you switch at the top:
  *
  *  - Visualizer: the song's art, big, with frequency bars from the audio itself.
- *  - Playfield: the playing difficulty's osu!mania or osu!taiko playfield, in your lazer skin
+ *  - Playfield: the playing difficulty's playfield (any ruleset), in your lazer skin
  *    (or any other you pick here), scrolling like lazer does for you (mania: your lazer scroll
  *    speed and direction; rate mods included), played by lazer's autoplay with the beatmap's hitsounds
  *    (its own samples first, then the skin's; only here, at their own volume), next to what
@@ -28,6 +28,10 @@ import { createRenderer, ManiaPlayfield } from "../ui/mania/playfield";
 import type { Renderer } from "../ui/mania/stage";
 import { TaikoPlayfield, type TaikoRenderer } from "../ui/taiko/playfield";
 import { createTaikoRenderer } from "../ui/taiko/renderers";
+import { OsuPlayfield, type OsuRenderer } from "../ui/osu/playfield";
+import { createOsuRenderer } from "../ui/osu/renderers";
+import { CatchPlayfield, type CatchRenderer } from "../ui/catch/playfield";
+import { createCatchRenderer } from "../ui/catch/renderers";
 import { AccentColors, drawDensity, fitCanvas } from "../ui/playfield";
 import { rateClick, rateControlHtml, starsAtRate, syncRateControl } from "../ui/rate";
 
@@ -35,9 +39,12 @@ export type FullscreenMode = "visual" | "field";
 
 const BARS = 72;
 
-/** the rulesets the playfield shows: osu!taiko, osu!mania */
-const PLAYABLE = new Set([1, 3]);
+/** the rulesets the playfield shows: all of them */
+const PLAYABLE = new Set([0, 1, 2, 3]);
+const PLAYABLE_NAMES = "osu!, osu!taiko, osu!catch and osu!mania";
 const taikoChart = (d: ChartData): boolean => d.mode === 1 && !!d.taiko;
+const osuChart = (d: ChartData): boolean => d.mode === 0 && !!d.osu;
+const catchChart = (d: ChartData): boolean => d.mode === 2 && !!d.catch;
 
 const NO_SKINS: SkinList = { skins: [], selected: null, classic: [], retro: [], triangles: [], argon: [], argonPro: [] };
 
@@ -60,7 +67,7 @@ class Fullscreen {
   // playfield
   private mapId = "";
   private data: ChartData | null = null;
-  private field: ManiaPlayfield | TaikoPlayfield | null = null;
+  private field: ManiaPlayfield | TaikoPlayfield | OsuPlayfield | CatchPlayfield | null = null;
   /** lazer's skins (loaded once per import) */
   private skins: SkinList | null = null;
   /** bumped on every skin / chart change, so late renderers are dropped */
@@ -327,9 +334,13 @@ class Fullscreen {
         if (this.mapId !== map.id || job !== this.skinJob) return;
         this.data = d;
         const canvas = this.el!.querySelector<HTMLCanvasElement>(".fs-pf")!;
-        this.field = taikoChart(d)
-          ? new TaikoPlayfield(canvas, d, renderer as TaikoRenderer)
-          : new ManiaPlayfield(canvas, d, renderer as Renderer);
+        this.field = osuChart(d)
+          ? new OsuPlayfield(canvas, d, renderer as OsuRenderer)
+          : catchChart(d)
+            ? new CatchPlayfield(canvas, d, renderer as CatchRenderer)
+            : taikoChart(d)
+            ? new TaikoPlayfield(canvas, d, renderer as TaikoRenderer)
+            : new ManiaPlayfield(canvas, d, renderer as Renderer);
         this.renderSpeed();
         this.showEmpty(null);
         this.syncSounds();
@@ -344,7 +355,7 @@ class Fullscreen {
   // ── skins ─────────────────────────────────────────────────────────────
 
   /** The renderer for the current skin and the chart's ruleset; mania: argon if the skin can't be read. */
-  private async rendererFor(d: ChartData): Promise<Renderer | TaikoRenderer> {
+  private async rendererFor(d: ChartData): Promise<Renderer | TaikoRenderer | OsuRenderer | CatchRenderer> {
     // cached until the next import
     this.skins = await loadSkinList().catch(() => this.skins);
     this.renderSkin();
@@ -352,9 +363,13 @@ class Fullscreen {
     const list = this.skins ?? NO_SKINS;
     try {
       const skin = await loadSkin(entry, list);
+      if (osuChart(d)) return await createOsuRenderer(skin, list, d);
+      if (catchChart(d)) return await createCatchRenderer(skin, list);
       return taikoChart(d) ? await createTaikoRenderer(skin, list) : await createRenderer(skin, d.keys);
     } catch (e) {
       console.warn("[skin]", entry.name, e);
+      if (osuChart(d)) return createOsuRenderer({ entry, chain: [], own: null }, list, d);
+      if (catchChart(d)) return createCatchRenderer({ entry, chain: [], own: null }, list);
       if (!taikoChart(d)) return new ArgonRenderer(d.keys);
       return createTaikoRenderer({ entry, chain: [], own: null }, list);
     }
@@ -380,7 +395,9 @@ class Fullscreen {
     const job = ++this.skinJob;
     const renderer = await this.rendererFor(field.data);
     if (job !== this.skinJob || this.field !== field) return;
-    if (field instanceof TaikoPlayfield) field.setRenderer(renderer as TaikoRenderer);
+    if (field instanceof OsuPlayfield) field.setRenderer(renderer as OsuRenderer);
+    else if (field instanceof CatchPlayfield) field.setRenderer(renderer as CatchRenderer);
+    else if (field instanceof TaikoPlayfield) field.setRenderer(renderer as TaikoRenderer);
     else field.setRenderer(renderer as Renderer);
     this.kick();
     void this.loadSounds();
@@ -445,7 +462,7 @@ class Fullscreen {
     openMenu(anchor, entries, { minWidth: 320 });
   }
 
-  /** Message in place of the playfield: not mania or taiko (with a way to pick a difficulty that is), loading, errors. */
+  /** Message in place of the playfield: a ruleset it doesn't show (with a way to pick a difficulty it does), loading, errors. */
   private showEmpty(mode: number | null, text?: string): void {
     const el = this.el!;
     const box = el.querySelector<HTMLElement>(".fs-empty")!;
@@ -466,8 +483,8 @@ class Fullscreen {
     const maps = this.playableMaps();
     box.innerHTML = `
       ${icon("lanes-duo")}
-      <div class="fs-empty-title">The playfield is for osu!mania and osu!taiko</div>
-      <p>${maps.length ? "This difficulty isn't either. Pick one of the set's difficulties that is:" : "This set has no osu!mania or osu!taiko difficulty."}</p>
+      <div class="fs-empty-title">The playfield shows ${PLAYABLE_NAMES}</div>
+      <p>${maps.length ? "This difficulty is for another ruleset. Pick one of the set's difficulties it shows:" : "This set has no difficulty it shows."}</p>
       ${maps.length ? `<div class="fs-empty-list">${maps.map((mi) => this.diffButton(mi)).join("")}</div>` : ""}`;
   }
 
@@ -497,10 +514,11 @@ class Fullscreen {
   private renderSpeed(): void {
     const el = this.el;
     if (!el) return;
-    // osu!taiko scrolls at the speed the chart sets; there's nothing to pick
-    const taiko = this.field instanceof TaikoPlayfield;
-    el.querySelector<HTMLElement>(".fs-setting-speed")!.hidden = taiko;
-    if (taiko) return;
+    // osu!taiko scrolls at the speed the chart sets, osu!catch at its AR, osu! doesn't scroll;
+    // there's nothing to pick
+    const fixed = !(this.field instanceof ManiaPlayfield);
+    el.querySelector<HTMLElement>(".fs-setting-speed")!.hidden = fixed;
+    if (fixed) return;
     const s = scrollSpeed();
     el.querySelector(".fs-speed-val")!.textContent = fmtSpeed(s.speed);
     el.querySelector<HTMLButtonElement>("[data-speed='-1']")!.disabled = s.speed <= SCROLL_SPEED_MIN;
@@ -615,7 +633,7 @@ class Fullscreen {
     const r = player.rate;
     const t = player.audio.currentTime * 1000;
 
-    if (field instanceof TaikoPlayfield) field.draw(t, r);
+    if (!(field instanceof ManiaPlayfield)) field.draw(t, r);
     else field.draw(t, scrollTime(scrollSpeed().speed) * r, scrollUp(), r);
 
     // live numbers
@@ -746,7 +764,7 @@ class Fullscreen {
           case "F3":
           case "F4":
             e.preventDefault();
-            if (this.mode === "field" && !(this.field instanceof TaikoPlayfield)) this.changeSpeed(e.key === "F3" ? -1 : 1);
+            if (this.mode === "field" && this.field instanceof ManiaPlayfield) this.changeSpeed(e.key === "F3" ? -1 : 1);
             break;
           case "ArrowLeft":
           case "ArrowRight": {

@@ -275,9 +275,19 @@ export class SoundChain {
    *    flourish is; after a beatmap's own sound everything goes the usual way;
    *  - legacy skins (LegacyTaikoSampleInfo): "taiko-<bank>-<name>", "taiko-<name>", then the bare
    *    name, skin by skin; lazer's defaults after them without the prefix. No flourishes.
+   *
+   * or an osu!catch banana "catch:banana:<number>" (BananaHitSampleInfo): "metronomelow", then
+   * "catch-banana", skin by skin.
    */
   find(name: string): string | undefined {
     if (name.startsWith("taiko:")) return this.drum(name);
+    if (name.startsWith("catch:banana")) {
+      for (const s of this.sources) {
+        const url = s.sound("metronomelow") ?? s.sound("catch-banana");
+        if (url) return url;
+      }
+      return undefined;
+    }
     return this.lookup(name, this.sources);
   }
 

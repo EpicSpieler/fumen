@@ -169,6 +169,10 @@ export interface ChartData {
   dan?: DanRating;
   /** osu!taiko: the chart as lazer plays it (src-tauri/src/taiko.rs) */
   taiko?: TaikoChartData;
+  /** osu!: the chart as lazer plays it (src-tauri/src/osu.rs) */
+  osu?: OsuChartData;
+  /** osu!catch: the chart as lazer plays it (src-tauri/src/catch.rs) */
+  catch?: CatchChartData;
 }
 
 /** osu!taiko for the playfield, flat (see `TaikoOut` in src-tauri/src/charts.rs). */
@@ -184,6 +188,52 @@ export interface TaikoChartData {
   bars: number[];
   /** [time, keys, object] autoplay: keys 1 left centre, 2 right centre, 4 left rim, 8 right rim */
   presses: number[];
+}
+
+/** osu! for the playfield (see `OsuOut` in src-tauri/src/charts.rs); positions in osu!pixels
+ * (512 × 384), stacking applied. */
+export interface OsuChartData {
+  /** circles are 128 × this across */
+  scale: number;
+  /** approach time and fade-in, ms */
+  preempt: number;
+  fadeIn: number;
+  /** [time, kind, end, x, y, colour, number, flags, a, b] per object: kind 0 circle, 1 slider,
+   * 2 spinner; colour the combo colour index; number the one on the circle; flags 1 new combo;
+   * a, b: a slider's index into `sliders`, a spinner's spins needed and bonus spins */
+  objects: number[];
+  sliders: OsuSliderData[];
+  /** [time, x, y, buttons] per autoplay frame: buttons 1 left, 2 right */
+  frames: number[];
+  /** the beatmap's own combo colours, [r, g, b] 0–255 */
+  colours: [number, number, number][];
+  sliderBorder?: [number, number, number];
+  sliderTrack?: [number, number, number];
+}
+
+export interface OsuSliderData {
+  /** [x, y] per point of the path, as straight pieces */
+  path: number[];
+  spans: number;
+  spanDuration: number;
+  /** [time, path progress] per tick */
+  ticks: number[];
+}
+
+/** osu!catch for the playfield (see `CatchOut` in src-tauri/src/charts.rs); x in osu!pixels (0–512). */
+export interface CatchChartData {
+  /** CatchHitObject.Scale from CS: the catcher is twice that */
+  scale: number;
+  /** how long objects fall, ms */
+  preempt: number;
+  /** [time, kind, x, flags, index, banana] per object: kind 0 fruit, 1 droplet, 2 tiny droplet,
+   * 3 banana; flags 1 hyperdash, 2 last in combo; index the object it came from (its colour and
+   * look); banana its number in the shower */
+  objects: number[];
+  /** [time, x, dash] per autoplay frame */
+  frames: number[];
+  /** the beatmap's own combo colours, [r, g, b] 0–255 */
+  colours: [number, number, number][];
 }
 
 export type CorePattern = "Stream" | "Chordstream" | "Jacks" | "Coordination" | "Density" | "Wildcard";
@@ -232,6 +282,9 @@ export interface ChartSounds {
   samples: HitSample[];
   /** [time, sample index, volume 0–100] per sound, by time */
   events: number[];
+  /** osu!: [start, end, sample index, volume 0–100, rate at the start, rate at the ramp's end,
+   * ramp end] per looping sound (slider slides, spinner spins), by start */
+  loops?: number[];
 }
 
 export type SkinKind = "legacy" | "classic" | "retro" | "triangles" | "argon" | "argon-pro";

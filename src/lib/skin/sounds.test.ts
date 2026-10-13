@@ -37,3 +37,11 @@ describe("skin samples for osu!taiko's drum", () => {
     expect(chain.find("taiko:S:normal-hitfinish:normal")).toBe("url:normal-hitfinish.wav");
   });
 });
+
+describe("skin samples for osu!catch's bananas", () => {
+  it("metronomelow, then catch-banana, skin by skin", () => {
+    const triangles = source("catch-banana.wav", "normal-hitnormal.wav");
+    expect(new SoundChain([source("hitclap.wav"), triangles], 1).find("catch:banana:3")).toBe("url:catch-banana.wav");
+    expect(new SoundChain([source("metronomelow.ogg"), triangles], 1).find("catch:banana:0")).toBe("url:metronomelow.ogg");
+  });
+});

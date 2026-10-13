@@ -32,6 +32,8 @@ export const ease = {
   outSine: (t: number) => Math.sin((t * Math.PI) / 2),
   inSine: (t: number) => 1 - Math.cos((t * Math.PI) / 2),
   outElastic: (t: number) => (t <= 0 ? 0 : t >= 1 ? 1 : 2 ** (-10 * t) * Math.sin(((t - 0.075) * (2 * Math.PI)) / 0.3) + 1),
+  outElasticHalf: (t: number) => (t <= 0 ? 0 : t >= 1 ? 1 : 2 ** (-10 * t) * Math.sin(((0.5 * t - 0.075) * (2 * Math.PI)) / 0.3) + 1),
+  outExpo: (t: number) => (t >= 1 ? 1 : 1 - 2 ** (-10 * t)),
 };
 
 /** A tween's value at `t` ms after its start, clamped to its ends. */

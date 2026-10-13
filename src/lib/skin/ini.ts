@@ -53,6 +53,10 @@ export interface SkinIni {
   /** every key/value outside [Colours] (lazer's ConfigDictionary) */
   config: Map<string, string>;
   mania: Map<number, ManiaConfig>;
+  /** [Colours] Combo1… in the order written, 0–255 */
+  combo: Rgba[];
+  /** the other colours of [Colours] and [CatchTheBeat] (SliderBorder, HyperDash …), 0–255 */
+  colours: Map<string, Rgba>;
 }
 
 export function maniaDefaults(keys: number): ManiaConfig {
@@ -212,7 +216,7 @@ function applyManiaLine(c: ManiaConfig, line: string): void {
 }
 
 export function parseSkinIni(text: string): SkinIni {
-  const ini: SkinIni = { version: 1.0, config: new Map(), mania: new Map() };
+  const ini: SkinIni = { version: 1.0, config: new Map(), mania: new Map(), combo: [], colours: new Map() };
   let section = "General";
   // LegacyManiaSkinDecoder state
   let pending: string[] = [];
@@ -253,6 +257,21 @@ export function parseSkinIni(text: string): SkinIni {
       }
     } catch {
       /* the general decoder never throws for these */
+    }
+
+    // LegacyDecoder.handleColours
+    if (section === "Colours" || section === "CatchTheBeat") {
+      try {
+        const [key, value] = splitKeyVal(line);
+        const split = value.split(",");
+        if (split.length === 3 || split.length === 4) {
+          const c: Rgba = [parseByte(split[0]), parseByte(split[1]), parseByte(split[2]), split.length === 4 ? parseByte(split[3]) : 255];
+          if (key.startsWith("Combo")) ini.combo.push(c);
+          else ini.colours.set(key, c);
+        }
+      } catch {
+        /* lazer logs the line and moves on */
+      }
     }
 
     // LegacyManiaSkinDecoder
