@@ -96,7 +96,7 @@ nothing), and Fumen trades the code (later the refresh token) for tokens at the 
 | 1.5 | Mapping lens | Difficulty spikes along a chart, a pattern heatmap per section, spread check across a set; the analyser's leftovers |
 
 The public roadmap at https://fumen.dertesti.dev/roadmap (`site/public/roadmap.js`) shows this
-table; keep the two in step. Before 1.0 is what serves the vision directly (understand a chart, organise, practise with intent,
+table; keep the two in step (and raise the `?v=` on roadmap.js / .css in roadmap.html, Cloudflare caches them). Before 1.0 is what serves the vision directly (understand a chart, organise, practise with intent,
 build pools); after 1.0 is what's nice to have around it. Within a version, the order of the
 sections below is the order of the work.
 
