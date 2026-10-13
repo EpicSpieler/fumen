@@ -59,7 +59,7 @@ export class TrianglesRenderer implements Renderer {
 
     drawDefaultBarLines(f);
 
-    // ── per column: hit target, notes, key area ──
+    // ── hit targets, notes, key areas ──
     const n = f.data.notes;
     const len = S - geo.hitPosition;
     const tFar = t + ((S + 30 - hitD) / Math.max(1, len)) * f.timeRange;
@@ -76,13 +76,15 @@ export class TrianglesRenderer implements Renderer {
       ctx.fillStyle = "#fff";
       v.rect(x, box.w, hitD, hitD + 2);
       v.glow(null, 0);
-
-      for (let j = to - 3; j >= from; j -= 3) {
-        if (n[j + 1] !== i) continue;
-        this.drawObject(f, i, n[j], n[j + 2]);
-      }
-      this.drawKeyArea(f, i);
     }
+    f.notes(() => {
+      for (let j = to - 3; j >= from; j -= 3) {
+        const col = n[j + 1];
+        if (col < 0 || col >= keys) continue;
+        this.drawObject(f, col, n[j], n[j + 2]);
+      }
+    });
+    for (let i = 0; i < keys; i++) this.drawKeyArea(f, i);
 
     // ── judgement, then explosions (top level) ──
     drawTextJudgement(f, hitD + 180, "triangles");

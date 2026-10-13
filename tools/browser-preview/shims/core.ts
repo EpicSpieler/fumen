@@ -53,7 +53,10 @@ export async function invoke<T>(cmd: string, args: Record<string, unknown> = {})
       return (await res.arrayBuffer()) as T;
     }
     case "get_chart": {
-      const res = await fetch(`/__fumen/chart/${args.id as string}`);
+      // the mods that change the chart come as files of their own (see preview_charts)
+      const m = args.mods as { easy?: boolean; hardRock?: boolean; mirror?: boolean } | null | undefined;
+      const mods = m ? (m.easy ? "EZ" : "") + (m.hardRock ? "HR" : "") + (m.mirror ? "MR" : "") : "";
+      const res = await fetch(`/__fumen/chart/${args.id as string}${mods ? `+${mods}` : ""}`);
       if (!res.ok) throw { code: "chart-missing", message: "This chart wasn't exported for the browser preview (see preview_charts)." };
       return (await res.arrayBuffer()) as T;
     }

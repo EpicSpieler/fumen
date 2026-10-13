@@ -223,6 +223,10 @@
 .fs-skin > .ic { flex: none; width: 16px; height: 16px; color: var(--t3); }
 .fs-skin-sub { font-size: var(--fs-12); color: var(--t3); min-width: 0; }
 .fs-rate-ctl { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; }
+.fs-mods { display: flex; flex-wrap: wrap; gap: 6px; }
+.fs-mod { min-width: 42px; justify-content: center; letter-spacing: .03em; }
+.fs-mods-sub { font-size: var(--fs-12); color: var(--t3); }
+.fs-mods-sub:empty { display: none; }
 .fs .seg-pill { background: rgba(255, 255, 255, .08); }
 
 /* ---------- Transport ---------- */

@@ -404,7 +404,7 @@ export class LegacyOsuRenderer implements OsuRenderer {
       }
     }
     // the approach circle, shrinking to a tenth over the spinner
-    if (this.spinnerApproach && t >= s.start - s.fadeIn && t <= s.end) {
+    if (this.spinnerApproach && !s.hidden && t >= s.start - s.fadeIn && t <= s.end) {
       const k = t <= s.start ? 1 : 1 - (0.9 * (t - s.start)) / Math.max(1, s.end - s.start);
       sprite(ctx, this.t["spinner-approachcircle"], 0, centre, { scale: SPRITE_SCALE * 1.86 * k });
     }

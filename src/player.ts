@@ -5,12 +5,14 @@
  * Whoever starts playback can hand over the list it came from (a library page, a carousel), so
  * next/previous and the end of a track continue through what the user was looking at.
  * The playback rate works like lazer's rate mods: it applies to whatever plays until it's reset,
- * and times shown in the bar are at that rate.
+ * and times shown in the bar are at that rate. The other mods (lib/mods) work the same way: picked
+ * once, they stay on for whatever plays.
  */
 import { fileUrl, thumbUrl } from "./lib/api";
 import { displayArtist, displayTitle, duration, esc } from "./lib/format";
 import { go } from "./lib/router";
 import { Emitter, events, setPrefs, store } from "./lib/store";
+import type { Mod } from "./lib/mods";
 import type { RepeatMode } from "./lib/types";
 import { toast } from "./ui/controls";
 import { icon } from "./ui/icons";
@@ -32,11 +34,13 @@ export const RATE_MAX = 2;
 export const RATE_STEP = 0.05;
 
 class Player {
-  readonly bus = new Emitter<{ track: NowPlaying | null; state: boolean; queue: null; rate: number }>();
+  readonly bus = new Emitter<{ track: NowPlaying | null; state: boolean; queue: null; rate: number; mods: readonly Mod[] }>();
   readonly audio = new Audio();
   now: NowPlaying | null = null;
   /** playback speed, HT 0.75 / DT 1.5 or anything from 0.5 to 2 in steps of 0.05 (session only) */
   rate = 1;
+  /** the other mods the playfield plays with, in lazer's order (session only) */
+  mods: readonly Mod[] = [];
   /** set indices in the order of the list playback started from */
   private queue: number[] = [];
   private qpos = -1;
@@ -262,6 +266,12 @@ class Player {
     this.audio.defaultPlaybackRate = rate;
     this.audio.playbackRate = rate;
     this.bus.emit("rate", rate);
+  }
+
+  setMods(mods: readonly Mod[]): void {
+    if (mods.length === this.mods.length && mods.every((m, i) => m === this.mods[i])) return;
+    this.mods = mods;
+    this.bus.emit("mods", mods);
   }
 
   toggleShuffle(): void {

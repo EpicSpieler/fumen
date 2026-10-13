@@ -11,12 +11,19 @@
  *    rest two spans early) and the ball that follows the path; all fading out 240 ms after the end;
  *  - DrawableSpinner: in the middle, turning as the autoplay cursor circles it;
  *  - FollowPointConnection: points every 32 osu!pixels between objects of one combo;
- *  - the cursor and its trail on top.
+ *  - the cursor and its trail on top;
+ *  - OsuModHidden: no approach circles (but the first object's), circles fading in over 0.4 of
+ *    the preempt and out over the next 0.3, slider bodies fading over their whole length;
+ *  - OsuModFlashlight: black but for a circle around the cursor (following it over 120 ms),
+ *    125 osu!pixels across at first, smaller at 100 and 200 combo, bigger in breaks, and the rest
+ *    darker while a slider is held. (Easy, Hard Rock and Mirror come built into the chart.)
  *
  * Later objects are drawn under earlier ones, approach circles above them all. The skin renderers
  * (argon.ts, triangles.ts, legacy.ts) draw the pieces; this decides where and when.
  */
+import type { Mod } from "../../lib/mods";
 import type { ChartData } from "../../lib/types";
+import { breakPeriods, Combo, comboScale, drawCircleLight, FlashlightSize, type FlashlightSpec } from "../flashlight";
 import { ease, multiply, tween, type Colour } from "../mania/draw";
 import { BASE_HEIGHT, BASE_WIDTH, bound, CIRCLE, MISS_WINDOW, OBJECT_RADIUS, OsuChart, SLIDER, SPINNER, SPINNER_X, SPINNER_Y, upper, type Slider } from "./chart";
 
@@ -42,6 +49,14 @@ const TICK_ANIM = 150;
 const SPM_WINDOW = 595;
 /** DrawableSliderBall.FOLLOW_AREA */
 export const FOLLOW_AREA = 2.4;
+/** OsuModHidden: fade-in and fade-out as shares of the preempt */
+const HD_FADE_IN = 0.4;
+const HD_FADE_OUT = 0.3;
+/** OsuModFlashlight */
+const FLASHLIGHT: FlashlightSpec = { size: 125, breakScale: 2.5, comboScale, speed: 1.875 / 1000 };
+const FL_SMOOTHNESS = 1.4;
+const FL_FOLLOW = 120;
+const FL_SLIDER_DIM = 0.8;
 
 export interface OsuFrame {
   ctx: CanvasRenderingContext2D;
@@ -135,6 +150,8 @@ export interface SpinnerPiece {
   fadeIn: number;
   /** degrees, signed */
   rotation: number;
+  /** Hidden: no approach circle */
+  hidden: boolean;
   /** 0–1 */
   progress: number;
   /** when it got all its spins (Infinity if never) */
@@ -205,6 +222,10 @@ const clamp01 = (v: number): number => (v < 0 ? 0 : v > 1 ? 1 : v);
 export class OsuPlayfield {
   readonly chart: OsuChart;
   private readonly bodies = new BodyCache();
+  private hidden = false;
+  /** Hidden leaves the first object its approach circle (lazer's "increase first object visibility") */
+  private readonly first: number;
+  private light: { size: FlashlightSize; sliders: number[] } | null = null;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -212,11 +233,45 @@ export class OsuPlayfield {
     private renderer: OsuRenderer,
   ) {
     this.chart = new OsuChart(data);
+    let first = -1;
+    for (let i = 0; i < this.chart.n && first < 0; i++) if (this.chart.kind[i] !== SPINNER) first = i;
+    this.first = first;
   }
 
   setRenderer(r: OsuRenderer): void {
     this.renderer = r;
     this.bodies.clear();
+  }
+
+  /** The mods it draws (Hidden, Flashlight). */
+  setMods(mods: readonly Mod[]): void {
+    this.hidden = mods.includes("HD");
+    if (!mods.includes("FL")) this.light = null;
+    else if (!this.light) {
+      // every judgement adds to the combo: circles, a slider's head, ticks, repeats and tail, spinners
+      const ch = this.chart;
+      const times: number[] = [];
+      const sliders: number[] = [];
+      for (let i = 0; i < ch.n; i++) {
+        if (ch.kind[i] === CIRCLE) times.push(ch.time[i]);
+        else if (ch.kind[i] === SPINNER) times.push(ch.end[i]);
+        else {
+          const s = ch.slider(i);
+          times.push(ch.time[i], ...s.tickTime, ch.end[i]);
+          for (let k = 1; k < s.spans; k++) times.push(ch.time[i] + k * s.spanDuration);
+          sliders.push(ch.time[i], ch.end[i]);
+        }
+      }
+      const combo = new Combo(times);
+      this.light = { size: new FlashlightSize(FLASHLIGHT, combo, breakPeriods(this.data, combo)), sliders };
+    }
+  }
+
+  /** OsuModHidden's fade-out of a circle (and the slider pieces that go with its head). */
+  private hiddenFade(start: number, t: number): number {
+    if (!this.hidden) return 1;
+    const preempt = this.chart.preempt;
+    return 1 - clamp01((t - (start - preempt + preempt * HD_FADE_IN)) / (preempt * HD_FADE_OUT));
   }
 
   private accent(i: number): Colour {
@@ -280,12 +335,14 @@ export class OsuPlayfield {
         start,
         end,
         preempt,
-        fadeIn: ch.fadeIn,
+        fadeIn: this.hidden ? preempt * HD_FADE_IN : ch.fadeIn,
         rotation: spin.rotation,
+        hidden: this.hidden,
         progress: ch.spinProgress(i, t),
         completed: ch.spinCompleted(i),
         spm,
-        alpha: t > end ? 1 - (t - end) / SPINNER_FADE_OUT : 1,
+        // Hidden: out over 0.3 of the preempt from the end
+        alpha: Math.min(t > end ? 1 - (t - end) / SPINNER_FADE_OUT : 1, this.hidden ? 1 - clamp01((t - end) / (preempt * HD_FADE_OUT)) : 1),
       });
       ctx.restore();
     }
@@ -312,6 +369,35 @@ export class OsuPlayfield {
 
     this.cursor(f);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
+    if (this.light) this.flashlight(t, dpr, s, ox, oy, bw, bh);
+  }
+
+  /** OsuModFlashlight, over everything, in canvas pixels. */
+  private flashlight(t: number, dpr: number, s: number, ox: number, oy: number, bw: number, bh: number): void {
+    const light = this.light!;
+    const ch = this.chart;
+    // OsuFlashlight.OnMouseMove: towards the cursor, eased out over the follow delay, every frame
+    const step = 1000 / 60;
+    const k = 1 - (1 - step / FL_FOLLOW) ** 2;
+    const grid = Math.floor(t / step);
+    let [x, y] = ch.cursorAt((grid - 30) * step);
+    for (let g = grid - 29; g <= grid; g++) {
+      const [cx, cy] = ch.cursorAt(g * step);
+      x += (cx - x) * k;
+      y += (cy - y) * k;
+    }
+    const [cx, cy] = ch.cursorAt(t);
+    const rest = 1 - (1 - (t - grid * step) / FL_FOLLOW) ** 2;
+    x += (cx - x) * rest;
+    y += (cy - y) * rest;
+    // darker all over while a slider is held
+    let dim = 0;
+    for (let j = 0; j < light.sliders.length; j += 2) {
+      if (light.sliders[j] > t) break;
+      if (t < light.sliders[j + 1]) dim = FL_SLIDER_DIM;
+    }
+    const ctx = this.canvas.getContext("2d")!;
+    drawCircleLight(ctx, bw, bh, dpr * (ox + x * s), dpr * (oy + y * s), light.size.at(t) * dpr * s, FL_SMOOTHNESS, dim);
   }
 
   /** DrawableHitCircle (and a slider's head): the circle, and its approach circle for later. */
@@ -326,13 +412,15 @@ export class OsuPlayfield {
     if (hit >= HIT_LIFE) return;
     const accent = this.accent(i);
     const dim = t < start - MISS_WINDOW ? DIM : tween(t - (start - MISS_WINDOW), DIM, 1, 100);
-    const alpha = clamp01((t - appear) / ch.fadeIn) * parentAlpha;
+    const fadeIn = this.hidden ? preempt * HD_FADE_IN : ch.fadeIn;
+    const alpha = clamp01((t - appear) / fadeIn) * parentAlpha * this.hiddenFade(start, t);
     f.ctx.save();
-    this.renderer.circle(f, { i, x, y, accent, number: ch.number[i], part, alpha, dim, hit });
+    if (alpha > 0) this.renderer.circle(f, { i, x, y, accent, number: ch.number[i], part, alpha, dim, hit });
     f.ctx.restore();
-    // the approach circle: 4× → 1× over the preempt, to 0.9 over two fade-ins; out 50 ms from the start
-    if (t < start + 50) {
-      let a = 0.9 * clamp01((t - appear) / Math.min(ch.fadeIn * 2, preempt));
+    // the approach circle: 4× → 1× over the preempt, to 0.9 over two fade-ins; out 50 ms from the
+    // start; Hidden has none but the first object's
+    if (t < start + 50 && (!this.hidden || i === this.first)) {
+      let a = 0.9 * clamp01((t - appear) / Math.min(fadeIn * 2, preempt));
       if (t >= start) a *= 1 - (t - start) / 50;
       approaches.push({ x, y, accent, scale: tween(t - appear, 4, 1, preempt), alpha: a * parentAlpha });
     }
@@ -375,6 +463,13 @@ export class OsuPlayfield {
     // the body: fades in with the head; gone 40 ms after the end once snaked out
     let bodyAlpha = clamp01((t - (start - preempt)) / ch.fadeIn) * alpha;
     if (t > end) bodyAlpha *= clamp01(1 - (t - end) / 40);
+    // Hidden: the body fades out over the whole slider, from its own fade-in (sliders keep theirs)
+    if (this.hidden) {
+      const from = start - preempt + ch.fadeIn;
+      bodyAlpha *= 1 - ease.out(clamp01((t - from) / Math.max(1, end - from)));
+    }
+    // Hidden: the tail and repeat circles go with the head
+    const headFade = this.hiddenFade(start, t);
     if (bodyAlpha > 0 && p1 > p0) {
       const style = r.body(accent);
       this.bodies.draw(f, ch, s, ch.a[i], p0, p1, style, bodyAlpha);
@@ -387,7 +482,7 @@ export class OsuPlayfield {
     if (t >= tailAppear) {
       const delay = repeats === 0 ? preempt / 3 : 0;
       const fadeIn = repeats > 0 ? 0 : ch.fadeIn;
-      const tailAlpha = (fadeIn > 0 ? clamp01((t - tailAppear - delay) / fadeIn) : t >= tailAppear + delay ? 1 : 0) * alpha;
+      const tailAlpha = (fadeIn > 0 ? clamp01((t - tailAppear - delay) / fadeIn) : t >= tailAppear + delay ? 1 : 0) * alpha * headFade;
       const [tx, ty] = repeats % 2 === 0 ? snakeEnd : ch.positionAt(s, 0);
       if (tailAlpha > 0) {
         ctx.save();
@@ -405,6 +500,11 @@ export class OsuPlayfield {
       const appear = time - tickPreempt;
       if (t < appear) continue;
       let a = clamp01((t - appear) / TICK_ANIM);
+      // Hidden: out by the time it's hit
+      if (this.hidden) {
+        const d = Math.max(1, Math.min(tickPreempt - TICK_ANIM, 1000));
+        a *= 1 - clamp01((t - (time - d)) / d);
+      }
       let scale = tween(t - appear, 0.5, 1, TICK_ANIM * 4, ease.outElasticHalf);
       if (t >= time) {
         const e = t - time;
@@ -436,6 +536,11 @@ export class OsuPlayfield {
         const out = 1 - ease.out(Math.min(1, hit / animDuration));
         arrowAlpha *= out;
         circleAlpha *= out;
+      }
+      // Hidden: the circle goes with the head; the arrow stays until it's hit, then it's gone
+      if (this.hidden) {
+        circleAlpha *= headFade;
+        if (hit >= 0) arrowAlpha = 0;
       }
       // at the end the path goes back from (even repeats), or at the start
       const atEnd = k % 2 === 0;

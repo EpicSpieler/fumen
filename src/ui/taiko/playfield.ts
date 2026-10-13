@@ -9,12 +9,19 @@
  *    over everything), bar lines behind them;
  *  - OverlappingScrollAlgorithm: everything moves at the multiplier of its own time;
  *  - DrawableHit: a hit note jumps up and falls away, shrinking and fading; drum roll ticks send
- *    up small notes of their own (DrawableFlyingHit); swells stop at the hit target.
+ *    up small notes of their own (DrawableFlyingHit); swells stop at the hit target;
+ *  - TaikoModHidden: notes and drum roll ticks fade out over the first 0.375 of their way in (hit,
+ *    they stay gone);
+ *  - TaikoModFlashlight: black but for a circle a little past the hit target, 200 units across at
+ *    first, smaller at 100 and 200 combo, bigger in breaks. (Easy and Hard Rock come built into
+ *    the chart.)
  *
  * The skin renderers (triangles.ts, argon.ts, legacy.ts) draw the pieces; this decides where and
  * when, from autoplay's timeline (chart.ts).
  */
+import type { Mod } from "../../lib/mods";
 import type { ChartData } from "../../lib/types";
+import { breakPeriods, Combo, comboScale, drawCircleLight, FlashlightSize, type FlashlightSpec } from "../flashlight";
 import { BASE_HEIGHT, bound, CENTRE, DEFAULT_SIZE, HIT_X, INPUT_DRUM_WIDTH, RIM, ROLL, STRONG_SCALE, SWELL, TaikoChart, upper } from "./chart";
 
 /** stable's game field is 480 tall */
@@ -130,11 +137,19 @@ const EVENT_LIFE = 1200;
 const GRAVITY_TIME = 300;
 const GRAVITY_HEIGHT = 200;
 const HIT_FADE = 800;
+/** TaikoModHidden: fading from the moment it comes in, over this share of its way */
+const HD_FADE = 0.375;
+/** TaikoModFlashlight: where it sits (osu!stable's 208 × 1.6, both ways, in units) */
+const FLASHLIGHT: FlashlightSpec = { size: 200, breakScale: 2.5, comboScale, speed: 1.875 / 1000 };
+const FL_POSITION = 208 * 1.6;
+const FL_SMOOTHNESS = 1.4;
 
 export class TaikoPlayfield {
   readonly chart: TaikoChart;
   /** the longest any object lasts, so ones that started long ago are still looked at */
   private readonly maxSpan: number;
+  private hidden = false;
+  private light: FlashlightSize | null = null;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -149,6 +164,20 @@ export class TaikoPlayfield {
 
   setRenderer(r: TaikoRenderer): void {
     this.renderer = r;
+  }
+
+  /** The mods it draws (Hidden, Flashlight). */
+  setMods(mods: readonly Mod[]): void {
+    this.hidden = mods.includes("HD");
+    if (!mods.includes("FL")) this.light = null;
+    else if (!this.light) {
+      // hits add to the combo (a strong one once); drum roll ticks and swells don't
+      const ch = this.chart;
+      const times: number[] = [];
+      for (let i = 0; i < ch.n; i++) if (ch.kind[i] === CENTRE || ch.kind[i] === RIM) times.push(ch.time[i]);
+      const combo = new Combo(times);
+      this.light = new FlashlightSize(FLASHLIGHT, combo, breakPeriods(this.data, combo));
+    }
   }
 
   draw(t: number, rate: number): void {
@@ -186,6 +215,12 @@ export class TaikoPlayfield {
     const ch = this.chart;
     const pos = (time: number, origin = time) => HIT_X + ((time - t) / timeRange) * ch.multiplier(origin) * length;
     const span = (from: number, to: number) => ((to - from) / timeRange) * ch.multiplier(from) * length;
+    // Hidden: from when it comes in, over a share of the time it takes to cross
+    const hiddenFade = (time: number) => {
+      if (!this.hidden) return 1;
+      const preempt = timeRange / ch.multiplier(time);
+      return 1 - Math.min(1, Math.max(0, (t - (time - preempt)) / (preempt * HD_FADE)));
+    };
 
     ctx.save();
     r.scroller?.(f);
@@ -242,9 +277,16 @@ export class TaikoPlayfield {
         const size = BASE_HEIGHT * DEFAULT_SIZE * (strong ? STRONG_SCALE : 1);
         const x = pos(time);
         const hit = t >= time;
+        const fade = hiddenFade(time);
+        if (fade <= 0) continue;
         if (!hit) {
           if (x - size / 2 > width) continue;
-          masked.push(() => r.hit(f, { i, x, y: BASE_HEIGHT / 2, size, rim: k === RIM, strong, hitAt: NaN }));
+          masked.push(() => {
+            f.ctx.save();
+            f.ctx.globalAlpha *= fade;
+            r.hit(f, { i, x, y: BASE_HEIGHT / 2, size, rim: k === RIM, strong, hitAt: NaN });
+            f.ctx.restore();
+          });
         } else {
           const e = t - time;
           if (e >= HIT_FADE) continue;
@@ -280,7 +322,12 @@ export class TaikoPlayfield {
               const tickHit = t >= tickTime;
               // DrawableDrumRollTick: a hit tick grows and fades out in 200 ms
               if (tickHit && t - tickTime >= 200) continue;
+              const tickFade = hiddenFade(tickTime);
+              if (tickFade <= 0) continue;
+              f.ctx.save();
+              f.ctx.globalAlpha *= tickFade;
               r.tick(f, { x: tx, y: BASE_HEIGHT / 2, size: tickSize, first: j === from, strong, hitAt: tickHit ? tickTime : NaN });
+              f.ctx.restore();
             }
             f.ctx.restore();
           });
@@ -337,6 +384,8 @@ export class TaikoPlayfield {
     for (const p of proxied) p();
     for (const p of flying) p();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
+    // TaikoFlashlight, over everything (its place is in units from the canvas's top left)
+    if (this.light) drawCircleLight(ctx, bw, bh, dpr * scale * FL_POSITION, dpr * scale * FL_POSITION, this.light.at(t) * dpr * scale, FL_SMOOTHNESS);
   }
 }
 

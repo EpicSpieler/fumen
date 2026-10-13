@@ -102,6 +102,11 @@ export interface Frame {
   posD(time: number): number;
   /** longest hold, so holds that started out of view are still drawn */
   maxHold: number;
+  /**
+   * Draws the notes: renderers draw every column's notes inside this, with `f.v` (the mods'
+   * covers hide parts of them, as lazer's cover a column's hit objects but not the rest).
+   */
+  notes(draw: () => void): void;
 }
 
 /**

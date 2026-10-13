@@ -9,12 +9,19 @@
  *    and bananas pile on its plate (half size) until the combo ends and they fly off; droplets fly
  *    off right away; a hit explosion for every catch (hit lighting);
  *  - CatcherTrailDisplay: dashing leaves fading copies of the catcher every 16 ms (in the hyperdash
- *    colour while hyperdashing), a hyperdash an after-image that rises and grows.
+ *    colour while hyperdashing), a hyperdash an after-image that rises and grows;
+ *  - CatchModHidden: objects fade out from 0.6 of their fall time before the catch over the next
+ *    0.16, and nothing piles on the plate;
+ *  - CatchModFlashlight: black but for a circle around the catcher, 203 osu!pixels across at first,
+ *    smaller at 100 and 200 combo, bigger in breaks. (Easy, Hard Rock and Mirror come built into
+ *    the chart.)
  *
  * Objects are drawn under the catcher, earlier ones over later ones. The skin renderers
  * (triangles.ts, argon.ts, legacy.ts) draw the pieces; this decides where and when.
  */
+import type { Mod } from "../../lib/mods";
 import type { ChartData } from "../../lib/types";
+import { breakPeriods, Combo, drawCircleLight, FlashlightSize, type FlashlightSpec } from "../flashlight";
 import { ease, tween, type Colour } from "../mania/draw";
 import { BANANA, CAUGHT_SCALE, CATCHER_Y, CatchChart, catchWidth, DROPLET, FALL_HEIGHT, FRUIT, HEIGHT, OBJECT_RADIUS, PLATE_Y, TINY, upper, WIDTH } from "./chart";
 
@@ -31,6 +38,17 @@ const EXPLODE_FADE = 750;
 const EXPLODE_MOVE = 1000;
 /** how long hit explosions can last (LegacyHitExplosion: 700 ms, then fading) */
 const EXPLOSION_LIFE = 1400;
+/** CatchModHidden: shares of the fall time */
+const HD_OFFSET = 0.6;
+const HD_DURATION = 0.44;
+/** CatchModFlashlight (osu!stable's sizes for osu!catch) */
+const FLASHLIGHT: FlashlightSpec = {
+  size: 203.125,
+  breakScale: 1.538,
+  comboScale: (combo) => (combo >= 200 ? 0.77 : combo >= 100 ? 0.885 : 1),
+  speed: 1.154 / 1000,
+};
+const FL_SMOOTHNESS = 1.4;
 /** Banana colours (Banana.getBananaColour) */
 const BANANA_COLOURS: Colour[] = [
   [1, 240 / 255, 0, 1],
@@ -106,6 +124,8 @@ export interface CatchRenderer {
 
 export class CatchPlayfield {
   readonly chart: CatchChart;
+  private hidden = false;
+  private light: FlashlightSize | null = null;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -117,6 +137,20 @@ export class CatchPlayfield {
 
   setRenderer(r: CatchRenderer): void {
     this.renderer = r;
+  }
+
+  /** The mods it draws (Hidden, Flashlight). */
+  setMods(mods: readonly Mod[]): void {
+    this.hidden = mods.includes("HD");
+    if (!mods.includes("FL")) this.light = null;
+    else if (!this.light) {
+      // fruits and droplets add to the combo; tiny droplets and bananas don't
+      const ch = this.chart;
+      const times: number[] = [];
+      for (let i = 0; i < ch.n; i++) if (ch.kind[i] === FRUIT || ch.kind[i] === DROPLET) times.push(ch.time[i]);
+      const combo = new Combo(times);
+      this.light = new FlashlightSize(FLASHLIGHT, combo, breakPeriods(this.data, combo));
+    }
   }
 
   /** PalpableCatchHitObject.GetComboColour (IndexInBeatmap + 1); bananas have their own. */
@@ -164,10 +198,11 @@ export class CatchPlayfield {
     const cx = ch.catcherX(t);
     const plateY = CATCHER_Y + PLATE_Y * cs;
 
-    // flying off the plate (Catcher.Explode): up and back down, outwards, fading
+    // flying off the plate (Catcher.Explode): up and back down, outwards, fading; Hidden puts
+    // nothing on the plate
     const from = upper(ch.time, t - EXPLODE_MOVE - 2000);
     const caught = upper(ch.time, t);
-    for (let i = from; i < caught; i++) {
+    for (let i = this.hidden ? caught : from; i < caught; i++) {
       const at = ch.clearAt[i];
       if (!(at <= t) || t - at >= EXPLODE_FADE) continue;
       const e = t - at;
@@ -179,12 +214,12 @@ export class CatchPlayfield {
     }
 
     // on the plate: everything caught since the plate was last cleared (fruits and bananas)
-    for (let i = from; i < caught; i++) {
+    for (let i = this.hidden ? caught : from; i < caught; i++) {
       if (ch.clearAt[i] <= t || ch.kind[i] === DROPLET || ch.kind[i] === TINY) continue;
       this.caughtPiece(f, i, cx + ch.plateX[i], plateY + ch.plateY[i], 1);
     }
     // a plate can hold more than the window above; older ones are still there
-    for (let i = from - 1; i >= 0; i--) {
+    for (let i = this.hidden ? -1 : from - 1; i >= 0; i--) {
       if (ch.clearAt[i] <= t) {
         if (ch.lastInCombo[i]) break;
         continue;
@@ -199,7 +234,10 @@ export class CatchPlayfield {
       const time = ch.time[i];
       const y = CATCHER_Y - ((time - t) / preempt) * FALL_HEIGHT;
       const size = ch.scale * ch.pieceScale(i, t);
+      const fade = this.hidden ? 1 - Math.min(1, Math.max(0, (t - (time - preempt * HD_OFFSET)) / (preempt * (HD_OFFSET - HD_DURATION)))) : 1;
+      if (fade <= 0) continue;
       ctx.save();
+      ctx.globalAlpha *= fade;
       ctx.translate(ch.x[i], y);
       ctx.rotate((ch.rotation(i, t) * Math.PI) / 180);
       ctx.scale(size, size);
@@ -209,6 +247,8 @@ export class CatchPlayfield {
 
     this.catcher(f, cx);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
+    // CatchFlashlight: on the catcher, over everything
+    if (this.light) drawCircleLight(ctx, bw, bh, dpr * (ox + cx * s), dpr * (oy + CATCHER_Y * s), this.light.at(t) * dpr * s, FL_SMOOTHNESS);
   }
 
   private state(i: number, t: number, size: number): CatchPiece {

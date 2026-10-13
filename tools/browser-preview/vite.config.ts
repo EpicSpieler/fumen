@@ -74,7 +74,8 @@ function fumenFiles(): Plugin {
           res.setHeader("Content-Type", sniff(p));
           return createReadStream(p).pipe(res);
         }
-        const chart = /^\/__fumen\/chart\/([0-9a-f-]{36})$/.exec(url);
+        // a chart, or (+EZ, +HRMR …) the chart with the mods that change it
+        const chart = /^\/__fumen\/chart\/([0-9a-f-]{36}(?:\+[A-Z]+)?)$/.exec(url);
         if (chart) {
           const p = join(here, ".cache", "charts", `${chart[1]}.json`);
           if (!existsSync(p)) {

@@ -1,17 +1,21 @@
 /* charts.ts — chart data shared by the chart panel and the fullscreen playfield: small caches (charts, dans at rates),
  * pattern names, lookups over the flat note/timing arrays, and lazer's scroll speed. */
 import { api } from "./api";
+import { chartModsKey, type ChartMods } from "./mods";
 import { store } from "./store";
 import type { ChartData, DanRating, PatternName } from "./types";
 
 const cache = new Map<string, Promise<ChartData>>();
 
-export function loadChart(id: string): Promise<ChartData> {
-  let p = cache.get(id);
+/** A difficulty's chart, with the mods that change it (Easy, Hard Rock, Mirror) if any. */
+export function loadChart(id: string, mods?: ChartMods): Promise<ChartData> {
+  const modKey = mods ? chartModsKey(mods) : "";
+  const key = modKey ? `${id}+${modKey}` : id;
+  let p = cache.get(key);
   if (!p) {
-    p = api.getChart(id);
-    p.catch(() => cache.delete(id));
-    cache.set(id, p);
+    p = api.getChart(id, modKey ? mods : undefined);
+    p.catch(() => cache.delete(key));
+    cache.set(key, p);
     if (cache.size > 24) cache.delete(cache.keys().next().value!);
   }
   return p;

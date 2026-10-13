@@ -3,7 +3,8 @@
  *  - Visualizer: the song's art, big, with frequency bars from the audio itself.
  *  - Playfield: the playing difficulty's playfield (any ruleset), in your lazer skin
  *    (or any other you pick here), scrolling like lazer does for you (mania: your lazer scroll
- *    speed and direction; rate mods included), played by lazer's autoplay with the beatmap's hitsounds
+ *    speed and direction; rate mods included), with the mods you pick (Easy, Hard Rock, Hidden,
+ *    Fade In, Flashlight, Mirror: lib/mods), played by lazer's autoplay with the beatmap's hitsounds
  *    (its own samples first, then the skin's; only here, at their own volume), next to what
  *    matters while you watch it: notes per second right now, the pattern of this second, BPM,
  *    notes so far, and the density graph. The numbers about the whole chart stay in the set
@@ -18,6 +19,7 @@ import { readBars, startAnalyser } from "../lib/eq";
 import { hitsounds } from "../lib/hitsounds";
 import { bpm, displayArtist, displayTitle, duration, esc, keysOrMode, num, srChip } from "../lib/format";
 import { currentSkin, loadSkin, loadSkinList, loadSkinSounds } from "../lib/skin/skins";
+import { activeMods, adjustDifficulty, chartMods, chartModsKey, MOD_NAMES, modEffect, modsFor, starsKnown, toggleMod, type Mod } from "../lib/mods";
 import { setPrefs, store } from "../lib/store";
 import type { ChartData, SkinList } from "../lib/types";
 import { dragSlider, player } from "../player";
@@ -66,6 +68,8 @@ class Fullscreen {
 
   // playfield
   private mapId = "";
+  /** the mods the chart was built with (lib/mods chartModsKey) */
+  private chartKey = "";
   private data: ChartData | null = null;
   private field: ManiaPlayfield | TaikoPlayfield | OsuPlayfield | CatchPlayfield | null = null;
   /** lazer's skins (loaded once per import) */
@@ -191,6 +195,11 @@ class Fullscreen {
               <span class="fs-hs-sub"></span>
             </div>
             <div class="fs-setting">
+              <span class="fs-k">Mods</span>
+              <div class="fs-mods" role="group" aria-label="Mods"></div>
+              <span class="fs-mods-sub"></span>
+            </div>
+            <div class="fs-setting">
               <span class="fs-k">Rate</span>
               <div class="fs-rate-ctl">${rateControlHtml()}</div>
             </div>
@@ -253,6 +262,7 @@ class Fullscreen {
       player.bus.on("track", () => this.onTrack()),
       player.bus.on("state", () => this.kick()),
       player.bus.on("rate", () => this.onRate()),
+      player.bus.on("mods", () => this.onMods()),
     );
   }
 
@@ -292,12 +302,63 @@ class Fullscreen {
   private onRate(): void {
     if (!this.el) return;
     syncRateControl(this.el);
+    this.renderMods();
     this.renderDiff();
     this.renderSpeed();
     this.renderSkin();
     this.renderHitsounds();
     this.live.clear();
     this.kick();
+  }
+
+  // ── mods ──────────────────────────────────────────────────────────────
+
+  private onMods(): void {
+    if (!this.el) return;
+    this.renderMods();
+    this.renderDiff();
+    const np = player.now;
+    const snap = store.snap;
+    if (np && snap && this.mode === "field") {
+      const map = snap.maps[np.map];
+      // the ones that change the chart need it built again; the playfield draws the rest
+      if (PLAYABLE.has(map.mode) && chartModsKey(chartMods(player.mods, map.mode)) !== this.chartKey) this.loadField();
+      else this.field?.setMods(activeMods(player.mods, map.mode));
+    }
+    this.kick();
+  }
+
+  /** The ruleset's mods as toggles, the ones on lit. */
+  private renderMods(): void {
+    const el = this.el;
+    const np = player.now;
+    if (!el || !np || !store.snap) return;
+    const mode = store.snap.maps[np.map].mode;
+    const on = activeMods(player.mods, mode);
+    const box = el.querySelector<HTMLElement>(".fs-mods")!;
+    const list = modsFor(mode);
+    const key = `${mode}:${list.join()}`;
+    if (box.dataset.list !== key) {
+      box.dataset.list = key;
+      box.innerHTML = list
+        .map((m) => `<button class="chip-toggle fs-mod" type="button" data-mod="${m}" aria-pressed="false" aria-label="${esc(MOD_NAMES[m])}" data-tip="${esc(MOD_NAMES[m])} · ${esc(modEffect(m, mode))}">${m}</button>`)
+        .join("");
+    }
+    box.querySelectorAll<HTMLElement>("[data-mod]").forEach((b) => {
+      const active = on.includes(b.dataset.mod as Mod);
+      b.classList.toggle("active", active);
+      b.setAttribute("aria-pressed", String(active));
+    });
+    const sub = el.querySelector(".fs-mods-sub")!;
+    sub.innerHTML = on.length
+      ? `<button class="fs-speed-reset fs-mods-reset" type="button">no mods</button>${starsKnown(on, mode) ? "" : " · no star rating with them"}`
+      : "";
+  }
+
+  private clickMod(m: Mod): void {
+    const np = player.now;
+    if (!np || !store.snap) return;
+    player.setMods(toggleMod(player.mods, m, store.snap.maps[np.map].mode));
   }
 
   // ── playfield data ────────────────────────────────────────────────────
@@ -319,19 +380,26 @@ class Fullscreen {
       this.showEmpty(map.mode);
       return;
     }
-    if (this.mapId === map.id && this.data) return;
+    const mods = chartMods(player.mods, map.mode);
+    const key = chartModsKey(mods);
+    if (this.mapId === map.id && this.chartKey === key && this.data) return;
+    // only the mods changed: the chart stays up until the new one is in
+    const same = this.mapId === map.id && !!this.field;
     this.mapId = map.id;
-    this.data = null;
-    this.field = null;
-    hitsounds.clear();
-    this.syncSounds();
-    this.renderHitsounds();
-    this.showEmpty(null, "Loading the chart…");
+    this.chartKey = key;
+    if (!same) {
+      this.data = null;
+      this.field = null;
+      hitsounds.clear();
+      this.syncSounds();
+      this.renderHitsounds();
+      this.showEmpty(null, "Loading the chart…");
+    }
     const job = ++this.skinJob;
-    loadChart(map.id)
+    loadChart(map.id, mods)
       .then(async (d) => {
         const renderer = await this.rendererFor(d);
-        if (this.mapId !== map.id || job !== this.skinJob) return;
+        if (this.mapId !== map.id || this.chartKey !== key || job !== this.skinJob) return;
         this.data = d;
         const canvas = this.el!.querySelector<HTMLCanvasElement>(".fs-pf")!;
         this.field = osuChart(d)
@@ -341,10 +409,12 @@ class Fullscreen {
             : taikoChart(d)
             ? new TaikoPlayfield(canvas, d, renderer as TaikoRenderer)
             : new ManiaPlayfield(canvas, d, renderer as Renderer);
+        this.field.setMods(activeMods(player.mods, map.mode));
         this.renderSpeed();
         this.showEmpty(null);
         this.syncSounds();
-        void this.loadSounds();
+        // the same beatmap's hitsounds are already in
+        if (!same) void this.loadSounds();
         this.graphDrawn = "";
         this.live.clear();
         this.kick();
@@ -412,14 +482,14 @@ class Fullscreen {
 
   /** The playing chart's hitsounds, with the playfield skin's samples. */
   private async loadSounds(): Promise<void> {
-    const field = this.field;
-    if (!field) return;
+    if (!this.field) return;
+    const id = this.mapId;
     const entry = currentSkin(this.skins);
     const chain = await loadSkinSounds(entry, this.skins ?? NO_SKINS).catch((e) => {
       console.warn("[hitsounds] skin", entry.name, e);
       return null;
     });
-    if (!chain || this.field !== field) return;
+    if (!chain || !this.field || this.mapId !== id) return;
     await hitsounds.load(this.mapId, chain, entry.id);
     this.renderHitsounds();
   }
@@ -504,10 +574,15 @@ class Fullscreen {
     const np = player.now;
     if (!el || !np || !store.snap) return;
     const m = store.snap.maps[np.map];
-    const sr = this.data && this.mapId === m.id ? starsAtRate(m.sr, this.data.stars) : player.rate === 1 ? m.sr : undefined;
+    const known = starsKnown(player.mods, m.mode);
+    const sr = !known ? undefined : this.data && this.mapId === m.id ? starsAtRate(m.sr, this.data.stars) : player.rate === 1 ? m.sr : undefined;
+    // as lazer's song select shows them: with the mods, AR and OD at the rate
+    const d = adjustDifficulty({ cs: m.cs, ar: m.ar, od: m.od, hp: m.hp }, player.mods, m.mode, player.rate);
+    const r1 = (v: number) => Math.round(v * 10) / 10;
+    const parts = [keysOrMode(m), ...(m.mode === 0 || m.mode === 2 ? [`CS ${r1(d.cs)}`, `AR ${r1(d.ar)}`] : []), `OD ${r1(d.od)}`, `HP ${r1(d.hp)}`];
     el.querySelector(".fs-diff")!.innerHTML = `
       ${sr !== undefined ? srChip(sr, "lg", icon("star-fill")) : ""}
-      <span class="fs-diff-name"><b>${esc(m.version)}</b><span>${esc(keysOrMode(m))} · OD ${Math.round(m.od * 10) / 10} · HP ${Math.round(m.hp * 10) / 10}</span></span>
+      <span class="fs-diff-name"><b>${esc(m.version)}</b><span>${esc(parts.join(" · "))}</span></span>
       ${this.playableMaps().length > 1 ? icon("chevron-down") : ""}`;
   }
 
@@ -679,6 +754,9 @@ class Fullscreen {
       if (t.closest(".fs-prev")) return player.prev();
       if (t.closest(".fs-next")) return player.next();
       if (rateClick(t)) return;
+      const mod = t.closest<HTMLElement>(".fs-mod[data-mod]");
+      if (mod) return this.clickMod(mod.dataset.mod as Mod);
+      if (t.closest(".fs-mods-reset")) return player.setMods([]);
       const speed = t.closest<HTMLElement>("[data-speed]");
       if (speed) return this.changeSpeed(+speed.dataset.speed!);
       if (t.closest(".fs-skin-reset")) return void this.setSkin(null);
