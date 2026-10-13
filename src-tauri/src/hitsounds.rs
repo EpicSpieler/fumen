@@ -21,6 +21,11 @@
 //!     "hitwhistle" when two keys come within 30 ms (a strong hit), with the bank, index and
 //!     volume of the note hit; samples are looked up as "taiko-<bank>-<name>" in the beatmap and in
 //!     legacy skins, and argon has its own drums;
+//!   - osu! plays every note's sounds (layered ones too) at its time: circles, a slider's head,
+//!     repeats and tail with their own sounds and sample points, its ticks ("slidertick" in the
+//!     slider's normal bank), "sliderslide" (and "sliderwhistle" with a whistle) looping while
+//!     it's followed; spinners "spinnerspin" looping, higher the further it's spun, a
+//!     "spinnerbonus" for every bonus spin (then "spinnerbonus-max") and their sounds at the end;
 //!   - storyboard samples (the .osu's and the set's .osb) play too, except on the Fail layer
 //!     (autoplay never fails).
 //!
@@ -34,6 +39,7 @@ use rusqlite::{Connection, OptionalExtension};
 use serde::Serialize;
 
 use crate::error::{Error, Result};
+use crate::osu;
 use crate::paths;
 use crate::taiko;
 
@@ -60,6 +66,20 @@ pub struct Sounds {
     pub samples: Vec<Sample>,
     /// `[time, sample index, volume 0–100]` per sound, by time
     pub events: Vec<i32>,
+    /// `[start, end, sample index, volume, rate at the start, rate at the ramp's end, ramp end]`
+    /// per looping sound (osu!'s slider slides and spinner spins), by start
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub loops: Vec<f64>,
+}
+
+/// A looping sound: plays from `start` to `end`, its rate going from `rate.0` to `rate.1` by
+/// `rate.2` (and staying there).
+struct Loop {
+    start: f64,
+    end: f64,
+    sample: Sample,
+    volume: i64,
+    rate: (f64, f64, f64),
 }
 
 /// A set's files by lowercased name (forward slashes), for lookups that ignore case like lazer's.
@@ -162,13 +182,22 @@ struct Out {
 }
 
 impl Out {
-    fn push(&mut self, time: i32, sample: Sample, volume: i64) {
+    fn sample(&mut self, sample: Sample) -> i32 {
         let next = self.sounds.samples.len() as i32;
-        let i = *self.index.entry(sample.clone()).or_insert_with(|| {
+        *self.index.entry(sample.clone()).or_insert_with(|| {
             self.sounds.samples.push(sample);
             next
-        });
+        })
+    }
+
+    fn push(&mut self, time: i32, sample: Sample, volume: i64) {
+        let i = self.sample(sample);
         self.sounds.events.extend([time, i, volume.clamp(0, 100) as i32]);
+    }
+
+    fn push_loop(&mut self, l: Loop) {
+        let i = self.sample(l.sample) as f64;
+        self.sounds.loops.extend([l.start, l.end, i, l.volume.clamp(0, 100) as f64, l.rate.0, l.rate.1, l.rate.2]);
     }
 }
 
@@ -193,9 +222,16 @@ pub fn for_map(conn: &Connection, files: &paths::Files, id: &str) -> Result<Soun
     Ok(resolve(&osu, osb.as_deref(), &files))
 }
 
-/// The hitsounds of an osu!mania or osu!taiko chart (`osu`), with its set's files and storyboard
-/// (`osb`). Other modes get none: the playfield doesn't show them.
+/// The hitsounds of an osu!, osu!taiko or osu!mania chart (`osu`), with its set's files and
+/// storyboard (`osb`). osu!catch gets none: the playfield doesn't show it.
 pub fn resolve(osu: &str, osb: Option<&str>, files: &SetFiles) -> Sounds {
+    let version = osu
+        .trim_start_matches('\u{feff}')
+        .lines()
+        .next()
+        .and_then(|l| l.trim().strip_prefix("osu file format v"))
+        .and_then(|v| v.trim().parse::<i32>().ok())
+        .unwrap_or(14);
     let mut mode = 0i64;
     let mut default_bank = Bank::Normal;
     let mut default_volume = 100i64;
@@ -260,17 +296,26 @@ pub fn resolve(osu: &str, osb: Option<&str>, files: &SetFiles) -> Sounds {
             Section::Other => {}
         }
     }
-    if mode != 3 && mode != 1 {
+    if mode == 2 {
         return Sounds::default();
     }
     // later lines win at the same time (a green line over a red one)
     points.sort_by(|a, b| a.time.total_cmp(&b.time));
+    // osu! v4 and older: everything 24 ms later (as osu.rs times it)
+    if mode == 0 && version < 5 {
+        points.iter_mut().for_each(|p| p.time += 24.0);
+    }
 
     let mut out = Out { index: HashMap::new(), sounds: Sounds::default() };
     let mut events: Vec<(i32, Sample, i64)> = Vec::new();
+    let mut loops: Vec<Loop> = Vec::new();
     if mode == 1 {
         if let Some(chart) = taiko::parse(osu) {
             drum(&chart, &points, files, &mut events);
+        }
+    } else if mode == 0 {
+        if let Some(chart) = osu::parse(osu) {
+            standard(&chart, &points, files, &mut events, &mut loops);
         }
     } else {
         for line in objects {
@@ -286,6 +331,10 @@ pub fn resolve(osu: &str, osb: Option<&str>, files: &SetFiles) -> Sounds {
     events.sort_by_key(|e| e.0);
     for (time, sample, volume) in events {
         out.push(time, sample, volume);
+    }
+    loops.sort_by(|a, b| a.start.total_cmp(&b.start));
+    for l in loops {
+        out.push_loop(l);
     }
     out.sounds
 }
@@ -325,33 +374,157 @@ fn note(line: &str, points: &[SamplePoint], files: &SetFiles, out: &mut Vec<(i32
         Some(v) if ty & 128 != 0 => v.split(':').next().and_then(|e| e.trim().parse::<f64>().ok()).filter(|e| e.is_finite()).unwrap_or(time),
         _ => time,
     };
-    let normal_set = extras.first().and_then(|v| Bank::from_legacy(int(v)));
-    let addition_set = extras.get(1).and_then(|v| Bank::from_legacy(int(v))).or(normal_set);
-    let own_index = extras.get(2).map_or(0, |v| int(v));
-    let own_volume = extras.get(3).map_or(0, |v| int(v).max(0));
-    let filename = extras.get(4).map(|v| v.trim()).filter(|v| !v.is_empty());
+    let hit = HitSounds {
+        time,
+        sound,
+        normal_set: extras.first().map_or(0, |v| int(v)),
+        addition_set: extras.get(1).map_or(0, |v| int(v)),
+        index: extras.get(2).map_or(0, |v| int(v)),
+        volume: extras.get(3).map_or(0, |v| int(v).max(0)),
+        file: extras.get(4).map(|v| v.trim()).filter(|v| !v.is_empty()),
+        point_time: end.max(time) + CONTROL_POINT_LENIENCY,
+    };
+    // the normal sound of a note with additions but no Normal flag is layered: not in mania
+    hit.play(points, files, false, out);
+}
 
-    let p = point_at(points, end.max(time) + CONTROL_POINT_LENIENCY);
-    let normal_bank = normal_set.unwrap_or(p.bank);
-    let addition_bank = addition_set.unwrap_or(p.bank);
-    let index = if own_index > 0 { own_index } else { p.index };
-    let volume = (if own_volume > 0 { own_volume } else { p.volume }).max(MINIMUM_SAMPLE_VOLUME);
-    let t = time as i32;
+/// A note's sounds, as the hit object line has them.
+struct HitSounds<'a> {
+    time: f64,
+    /// 1 normal, 2 whistle, 4 finish, 8 clap
+    sound: i64,
+    normal_set: i64,
+    addition_set: i64,
+    index: i64,
+    volume: i64,
+    file: Option<&'a str>,
+    /// the sample point that counts
+    point_time: f64,
+}
 
-    match filename {
-        Some(name) => {
-            if let Some(hash) = files.named(name) {
-                out.push((t, Sample::File(hash.to_string()), volume));
+impl HitSounds<'_> {
+    fn of(s: &osu::Sounds) -> HitSounds<'_> {
+        HitSounds {
+            time: s.time,
+            sound: s.sound,
+            normal_set: s.normal_set,
+            addition_set: s.addition_set,
+            index: s.index,
+            volume: s.volume,
+            file: s.file.as_deref(),
+            point_time: s.point_time,
+        }
+    }
+
+    /// The banks, index and volume, from the note or else its sample point.
+    fn resolve(&self, points: &[SamplePoint]) -> (Bank, Bank, i64, i64) {
+        let normal_set = Bank::from_legacy(self.normal_set);
+        let addition_set = Bank::from_legacy(self.addition_set).or(normal_set);
+        let p = point_at(points, self.point_time);
+        let index = if self.index > 0 { self.index } else { p.index };
+        let volume = (if self.volume > 0 { self.volume } else { p.volume }).max(MINIMUM_SAMPLE_VOLUME);
+        (normal_set.unwrap_or(p.bank), addition_set.unwrap_or(p.bank), index, volume)
+    }
+
+    /// "hitnormal" (or the note's sample file) and the additions; `layered`: whether the normal
+    /// sound of a note with additions but no Normal flag plays.
+    fn play(&self, points: &[SamplePoint], files: &SetFiles, layered: bool, out: &mut Vec<(i32, Sample, i64)>) {
+        let (normal_bank, addition_bank, index, volume) = self.resolve(points);
+        let t = self.time as i32;
+        match self.file {
+            Some(name) => {
+                if let Some(hash) = files.named(name) {
+                    out.push((t, Sample::File(hash.to_string()), volume));
+                }
+            }
+            None if layered || self.sound == 0 || self.sound & 1 != 0 => out.push((t, hit_sample(normal_bank, "hitnormal", index, files), volume)),
+            None => {}
+        }
+        for (bit, name) in [(4, "hitfinish"), (2, "hitwhistle"), (8, "hitclap")] {
+            if self.sound & bit != 0 {
+                out.push((t, hit_sample(addition_bank, name, index, files), volume));
             }
         }
-        // the normal sound of a note with additions but no Normal flag is layered: not in mania
-        None if sound == 0 || sound & 1 != 0 => out.push((t, hit_sample(normal_bank, "hitnormal", index, files), volume)),
-        None => {}
     }
-    for (bit, name) in [(4, "hitfinish"), (2, "hitwhistle"), (8, "hitclap")] {
-        if sound & bit != 0 {
-            out.push((t, hit_sample(addition_bank, name, index, files), volume));
+}
+
+// ── osu! ──────────────────────────────────────────────────────────────────
+
+/// `OsuAutoGenerator` spins at 0.05 rad/ms: a whole spin every 2π / 0.05 ms.
+const SPIN_MS: f64 = 2.0 * std::f64::consts::PI / 0.05;
+/// `DrawableSpinner`'s spinning sound: its rate from 20000 / 44100, rising 40000 / 44100 per share
+/// of the spins needed, up to 100000 / 44100
+const SPIN_RATE_BASE: f64 = 20_000.0 / 44_100.0;
+const SPIN_RATE_RATIO: f64 = 40_000.0 / 44_100.0;
+const SPIN_RATE_MAX: f64 = 100_000.0 / 44_100.0;
+/// `Spinner`: spins after the required ones before bonus spins count
+const BONUS_SPINS_GAP: u32 = 2;
+
+/// What osu! plays under autoplay (`DrawableHitCircle`, `DrawableSlider` and its nested objects,
+/// `DrawableSpinner`).
+fn standard(chart: &osu::Chart, points: &[SamplePoint], files: &SetFiles, out: &mut Vec<(i32, Sample, i64)>, loops: &mut Vec<Loop>) {
+    for o in &chart.objects {
+        if o.kind != osu::Kind::Spinner {
+            for s in &o.sounds {
+                HitSounds::of(s).play(points, files, true, out);
+            }
         }
+        if let Some(slider) = &o.slider {
+            let (normal_bank, addition_bank, index, volume) = HitSounds::of(&slider.main).resolve(points);
+            // ticks: the slider's normal sound as "slidertick"
+            for &(t, _) in &slider.ticks {
+                out.push((t as i32, hit_sample(normal_bank, "slidertick", index, files), volume));
+            }
+            if o.end > o.time {
+                let slide = |bank, name| Loop { start: o.time, end: o.end, sample: hit_sample(bank, name, index, files), volume, rate: (1.0, 1.0, o.time) };
+                loops.push(slide(normal_bank, "sliderslide"));
+                if slider.main.sound & 2 != 0 {
+                    loops.push(slide(addition_bank, "sliderwhistle"));
+                }
+            }
+        }
+        if o.kind == osu::Kind::Spinner {
+            let Some(end) = o.sounds.first() else { continue };
+            HitSounds::of(end).play(points, files, true, out);
+            // autoplay skips spinners that need no spins (they finish themselves)
+            if o.spins == 0 || o.end <= o.time {
+                continue;
+            }
+            let (normal_bank, addition_bank, index, volume) = HitSounds::of(end).resolve(points);
+            // spinning: the rate by the share of the needed spins done, from the start
+            let full = o.time + (SPIN_RATE_MAX - SPIN_RATE_BASE) / SPIN_RATE_RATIO * o.spins as f64 * SPIN_MS;
+            let ramp_end = full.min(o.end);
+            let rate_end = SPIN_RATE_BASE + (ramp_end - o.time) / SPIN_MS / o.spins as f64 * SPIN_RATE_RATIO;
+            loops.push(Loop {
+                start: o.time,
+                end: o.end,
+                sample: hit_sample(normal_bank, "spinnerspin", index, files),
+                volume,
+                rate: (SPIN_RATE_BASE, rate_end.min(SPIN_RATE_MAX), ramp_end),
+            });
+            // a bonus sound for every whole spin past the needed ones (and the gap), then the
+            // "max" one; in the additions' bank if the spinner has additions
+            let bank = if end.sound & (2 | 4 | 8) != 0 { addition_bank } else { normal_bank };
+            let first_bonus = o.spins + BONUS_SPINS_GAP;
+            let mut spin = first_bonus + 1;
+            loop {
+                let t = o.time + spin as f64 * SPIN_MS;
+                if t > o.end {
+                    break;
+                }
+                let sample = if spin - first_bonus <= o.bonus_spins { hit_sample(bank, "spinnerbonus", index, files) } else { spinner_max(bank, index, files) };
+                out.push((t as i32, sample, volume));
+                spin += 1;
+            }
+        }
+    }
+}
+
+/// "spinnerbonus-max", looked up as itself and then as "spinnerbonus" (`SpinnerBonusMaxSampleInfo`).
+fn spinner_max(bank: Bank, index: i64, files: &SetFiles) -> Sample {
+    match beatmap_sample("", bank, "spinnerbonus-max", index, files).or_else(|| beatmap_sample("", bank, "spinnerbonus", index, files)) {
+        Some(hash) => Sample::File(hash.to_string()),
+        None => Sample::Skin(format!("{}-spinnerbonus-max", bank.name())),
     }
 }
 
@@ -677,6 +850,65 @@ mod tests {
         );
     }
 
+    const OSU: &str = "osu file format v14\n[General]\nMode: 0\n[Difficulty]\nOverallDifficulty:5\nSliderMultiplier:1.4\nSliderTickRate:1\n";
+
+    #[test]
+    fn osu_circles_sliders_spinners() {
+        let text = format!(
+            "{OSU}[TimingPoints]\n0,500,4,2,0,60,1,0\n1990,-100,4,1,0,80,0,0\n[HitObjects]\n\
+             100,100,100,1,10,0:0:0:0:\n\
+             100,100,1000,2,2,L|380:100,2,280,2|0|8,0:0|0:3|1:0\n\
+             256,192,5000,12,4,7000,0:0:0:0:\n"
+        );
+        let s = resolve(&text, None, &files(&[]));
+        let ev = events(&s);
+        let before: Vec<_> = ev.iter().filter(|e| e.0 < 5000).cloned().collect();
+        assert_eq!(
+            before,
+            vec![
+                // whistle + clap without the Normal flag: the layered normal plays in osu!
+                (100, "skin:soft-hitnormal".into(), 60),
+                (100, "skin:soft-hitwhistle".into(), 60),
+                (100, "skin:soft-hitclap".into(), 60),
+                // the head, with its own edge sound
+                (1000, "skin:soft-hitnormal".into(), 60),
+                (1000, "skin:soft-hitwhistle".into(), 60),
+                // ticks in the slider's own bank and volume
+                (1500, "skin:soft-slidertick".into(), 60),
+                // the repeat after the green line, at its own sample point
+                (2000, "skin:normal-hitnormal".into(), 80),
+                (2500, "skin:soft-slidertick".into(), 60),
+                // the tail: normal set 1, a clap
+                (3000, "skin:normal-hitnormal".into(), 80),
+                (3000, "skin:normal-hitclap".into(), 80),
+            ]
+        );
+        // the spinner: OD 5 needs 5 spins; bonus spins from the 8th (one every 125.7 ms), 5 of
+        // them, then "max"; its own sounds at the end
+        let bonus: Vec<_> = ev.iter().filter(|e| e.1.contains("spinnerbonus")).map(|e| (e.0, e.1.as_str())).collect();
+        assert_eq!(bonus.len(), 8);
+        assert_eq!(bonus[0], (6005, "skin:normal-spinnerbonus"));
+        assert_eq!(bonus[5], (6633, "skin:normal-spinnerbonus-max"));
+        assert_eq!(&ev[ev.len() - 2..], &[(7000, "skin:normal-hitnormal".into(), 80), (7000, "skin:normal-hitfinish".into(), 80)]);
+        // loops: the slide (and the whistle's), the spin rising to its top rate by 10 spins in
+        let loops: Vec<(f64, f64, String, f64)> = s
+            .loops
+            .chunks(7)
+            .map(|l| (l[0], l[1], match &s.samples[l[2] as usize] { Sample::Skin(n) => n.clone(), Sample::File(f) => f.clone() }, l[3]))
+            .collect();
+        assert_eq!(
+            loops,
+            vec![
+                (1000.0, 3000.0, "soft-sliderslide".into(), 60.0),
+                (1000.0, 3000.0, "soft-sliderwhistle".into(), 60.0),
+                (5000.0, 7000.0, "normal-spinnerspin".into(), 80.0),
+            ]
+        );
+        let spin = &s.loops[14..];
+        assert!((spin[4] - 20_000.0 / 44_100.0).abs() < 1e-9 && (spin[5] - 100_000.0 / 44_100.0).abs() < 1e-9);
+        assert!((spin[6] - (5000.0 + 10.0 * SPIN_MS)).abs() < 1e-6);
+    }
+
     #[test]
     fn storyboard_samples() {
         let text = format!(
@@ -698,7 +930,7 @@ mod tests {
         assert_eq!(events(&s), vec![(100, "skin:soft-hitnormal".into(), 100)]);
         let s = resolve(&format!("{HEAD}[HitObjects]\n64,192,100,1,0\n"), None, &files(&[]));
         assert_eq!(events(&s), vec![(100, "skin:normal-hitnormal".into(), 100)]);
-        let s = resolve("[General]\nMode: 0\n[HitObjects]\n64,192,100,1,0\n", None, &files(&[]));
+        let s = resolve("[General]\nMode: 2\n[HitObjects]\n64,192,100,1,0\n", None, &files(&[]));
         assert!(s.events.is_empty());
     }
 
