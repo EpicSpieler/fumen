@@ -18,6 +18,8 @@
 
 use std::ops::{Add, Div, Mul, Sub};
 
+use crate::mods::Mods;
+
 /// `OsuBeatmapProcessor.STACK_DISTANCE`
 const STACK_DISTANCE: f32 = 3.0;
 /// `LegacyBeatmapEncoder.FIRST_LAZER_VERSION`: from here on positions keep their fractions
@@ -28,6 +30,8 @@ const EARLY_VERSION_TIMING_OFFSET: f64 = 24.0;
 const MAX_COORDINATE: f64 = 131_072.0;
 /// `OsuPlayfield.BASE_SIZE / 2`, `OsuAutoGeneratorBase.SPIN_RADIUS`
 const SPINNER_CENTRE: Vec2 = Vec2 { x: 256.0, y: 192.0 };
+/// `OsuPlayfield.BASE_SIZE`
+const PLAYFIELD: Vec2 = Vec2 { x: 512.0, y: 384.0 };
 const SPIN_RADIUS: f32 = 50.0;
 /// `AutoGenerator.KEY_UP_DELAY`
 const KEY_UP_DELAY: f64 = 50.0;
@@ -486,6 +490,8 @@ pub struct Slider {
     pub ticks: Vec<(f64, f64)>,
     /// the slider's own sounds (ticks and the sliding sound come from these)
     pub main: Sounds,
+    /// the last control point, relative (osu!catch's Hard Rock offsets go by it)
+    pub last_control: Vec2,
 }
 
 #[derive(Debug, Clone)]
@@ -640,7 +646,14 @@ pub(crate) struct Raw {
 
 /// An osu! difficulty for the playfield, `None` for other rulesets.
 pub fn parse(text: &str) -> Option<Chart> {
+    parse_with(text, Mods::NONE)
+}
+
+/// An osu! difficulty with the mods that change it: Easy and Hard Rock on CS, AR and OD, Hard
+/// Rock's vertical flip, Mirror's horizontal one (lazer's default axis).
+pub fn parse_with(text: &str, mods: Mods) -> Option<Chart> {
     let Raw { version, cs, od, ar, stack_leniency, mut objects, colours, slider_border, slider_track } = read(text, 0)?;
+    let (cs, od, ar) = (mods.cs(cs), mods.ar_od(od), mods.ar_od(ar));
     let scale = ((1.0f32 - 0.7f32 * ((cs as f64 - 5.0) / 5.0) as f32) / 2.0) * 1.00041;
     let preempt = difficulty_range(ar as f64, 1800.0, 1200.0, 450.0) as i32 as f64;
     let fade_in = 400.0 * (preempt / 450.0).min(1.0);
@@ -652,6 +665,14 @@ pub fn parse(text: &str) -> Option<Chart> {
         let seconds = (o.end - o.time) / 1000.0;
         o.spins = (min_rps * seconds + 0.0001) as u32;
         o.bonus_spins = (((max_rps * seconds + 0.0001) as i64) - o.spins as i64 - BONUS_SPINS_GAP as i64).max(0) as u32;
+    }
+
+    // OsuModHardRock / OsuModMirror: after the defaults, before stacking (positions only; a
+    // flip keeps every distance, so the rest is as before)
+    if mods.hard_rock || mods.mirror {
+        for o in &mut objects {
+            reflect(o, !mods.hard_rock);
+        }
     }
 
     combos(&mut objects);
@@ -897,6 +918,7 @@ fn object(
         }
         let control = path_points(f.get(5)?, pos, version)?;
         let path = Path::new(&control, length);
+        let last_control = control.last().map_or(Vec2::default(), |c| c.pos);
 
         // per-node sounds: edgeSounds and edgeSets, else the slider's own
         let mut nodes = (repeats + 2) as usize;
@@ -977,7 +999,7 @@ fn object(
         o.kind = Kind::Slider;
         o.end = end;
         o.sounds = node_sounds;
-        o.slider = Some(Slider { path, spans, span_duration, ticks, main: base });
+        o.slider = Some(Slider { path, spans, span_duration, ticks, main: base, last_control });
     } else if ty & 8 != 0 {
         let end = num(f.get(5).copied()).map_or(time, |e| e + offset).max(time);
         if let Some(v) = f.get(6) {
@@ -1088,6 +1110,27 @@ fn convert_points(mut ty: PathType, points: &[Vec2], end_point: Option<Vec2>, ve
         out.extend_from_slice(&v[start..end]);
     }
     Some(())
+}
+
+/// `OsuHitObjectGenerationUtils.ReflectHorizontallyAlongPlayfield` / `…Vertically…`: the object
+/// across the playfield's middle, a slider's path with it.
+fn reflect(o: &mut Object, horizontal: bool) {
+    let flip = |v: &mut Vec2| {
+        if horizontal {
+            v.x = -v.x;
+        } else {
+            v.y = -v.y;
+        }
+    };
+    if horizontal {
+        o.pos.x = PLAYFIELD.x - o.pos.x;
+    } else {
+        o.pos.y = PLAYFIELD.y - o.pos.y;
+    }
+    if let Some(s) = &mut o.slider {
+        s.path.points.iter_mut().for_each(flip);
+        flip(&mut s.last_control);
+    }
 }
 
 /// `BeatmapProcessor.PreProcess` + `OsuHitObject.UpdateComboInformation`.
@@ -1493,6 +1536,37 @@ mod tests {
         assert!(close(s.path.position_at(1.0), (100.0, 100.0)));
         let s = c.objects[1].slider.as_ref().unwrap();
         assert!(close(s.path.position_at(0.5), (50.0, 0.0)));
+    }
+
+    #[test]
+    fn hard_rock_easy_and_mirror() {
+        let text = format!("{HEAD}[TimingPoints]
+0,500,4,1,0,100,1,0
+[HitObjects]
+100,100,1000,2,0,L|300:100,1,200
+400,50,3000,1,0,0:0:0:0:
+");
+        let plain = parse(&text).unwrap();
+        let hr = parse_with(&text, Mods { hard_rock: true, ..Mods::NONE }).unwrap();
+        // CS 4 × 1.3, AR 9 × 1.4 up to 10; flipped top to bottom, the slider's path with it
+        assert!((hr.scale - ((1.0 - 0.7 * (5.2 - 5.0) / 5.0) / 2.0 * 1.00041)).abs() < 1e-4, "{}", hr.scale);
+        assert_eq!(hr.preempt, 450.0);
+        assert!(close(hr.objects[0].pos, (100.0, 284.0)));
+        assert!(close(hr.objects[0].end_pos(), (300.0, 284.0)));
+        assert!(close(hr.objects[1].pos, (400.0, 334.0)));
+        // autoplay goes where the objects went
+        let at = |c: &Chart, t: f64| c.frames.iter().min_by(|a, b| (a.time - t).abs().total_cmp(&(b.time - t).abs())).unwrap().pos;
+        assert!(close(at(&hr, 3000.0), (400.0, 334.0)), "{:?}", at(&hr, 3000.0));
+        // Easy: CS 2, AR 4.5
+        let ez = parse_with(&text, Mods { easy: true, ..Mods::NONE }).unwrap();
+        assert_eq!(ez.preempt, 1260.0);
+        assert!(ez.scale > plain.scale);
+        // Mirror: left to right, nothing else
+        let mr = parse_with(&text, Mods { mirror: true, ..Mods::NONE }).unwrap();
+        assert_eq!((mr.preempt, mr.scale), (plain.preempt, plain.scale));
+        assert!(close(mr.objects[0].pos, (412.0, 100.0)));
+        assert!(close(mr.objects[0].end_pos(), (212.0, 100.0)));
+        assert!(close(at(&mr, 3000.0), (112.0, 50.0)));
     }
 
     #[test]

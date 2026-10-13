@@ -13,6 +13,8 @@
 //!
 //! Only beatmaps made for osu!taiko are read; lazer's conversions of osu! beatmaps aren't.
 
+use crate::mods::Mods;
+
 /// osu!'s slider speed is lower than taiko's; lazer multiplies by this wherever slider lengths or
 /// beat lengths turn into taiko speeds (as a float, like lazer's constant).
 const VELOCITY_MULTIPLIER: f64 = 1.4f32 as f64;
@@ -161,6 +163,13 @@ fn at<T: Copy>(points: &[T], t: f64, time: impl Fn(&T) -> f64) -> Option<T> {
 
 /// An osu!taiko beatmap as lazer plays it, or `None` for other modes.
 pub fn parse(text: &str) -> Option<Chart> {
+    parse_with(text, Mods::NONE)
+}
+
+/// An osu!taiko beatmap with the mods that change it: Easy and Hard Rock on OD (swells) and the
+/// slider multiplier (the scroll speed; drum rolls keep the length the beatmap gives them, as
+/// lazer converts before applying mods).
+pub fn parse_with(text: &str, mods: Mods) -> Option<Chart> {
     let mut mode = 0i64;
     let mut od = 5.0f64;
     let mut slider_multiplier = 1.4f64;
@@ -251,11 +260,12 @@ pub fn parse(text: &str) -> Option<Chart> {
     let timing_at = |t: f64| at(&timing, t, |p| p.time).or(timing.first().copied());
     let speed_at = |t: f64| at(&speeds, t, |p| p.time);
 
+    let od = mods.ar_od(od as f32) as f64;
     let mut objects: Vec<Object> = raw.iter().filter_map(|line| object(line, od, slider_multiplier, tick_rate, &timing_at, &speed_at)).collect();
     // lazer orders by start time (stable, like OrderBy)
     objects.sort_by(|a, b| a.time.total_cmp(&b.time));
 
-    let scroll = scroll_points(&timing, &speeds, &objects, slider_multiplier);
+    let scroll = scroll_points(&timing, &speeds, &objects, slider_multiplier * mods.taiko_velocity());
     let bars = bar_lines(&timing, &objects);
     let presses = autoplay(&objects);
     Some(Chart { objects, scroll, bars, presses })
@@ -462,6 +472,12 @@ mod tests {
         let c = parse(&text).unwrap();
         // 1.4 × 1000 / 500; at 1000 the green line (×2) wins over the red one's 1
         assert_eq!(c.scroll, vec![(0.0, 2.8), (1000.0, 1.4 * 2.0 * 1000.0 / 250.0)]);
+        // Hard Rock: 1.4 × 4/3 faster, Easy 0.8 ×
+        let hr = parse_with(&text, Mods { hard_rock: true, ..Mods::NONE }).unwrap();
+        assert!((hr.scroll[0].1 - 2.8 * 1.4 * 4.0 / 3.0).abs() < 1e-9);
+        let ez = parse_with(&text, Mods { easy: true, ..Mods::NONE }).unwrap();
+        assert!((ez.scroll[0].1 - 2.8 * 0.8).abs() < 1e-9);
+        assert_eq!(hr.objects.len(), c.objects.len());
     }
 
     #[test]
