@@ -222,15 +222,16 @@ export class LegacyRenderer implements Renderer {
     const n = f.data.notes;
     const from = lowerBound(n, t - f.maxHold - 1);
     const to = lowerBound(n, tFar);
-    for (let i = 0; i < keys; i++) {
-      if (cfg.keysUnderNotes) this.drawKey(f, i);
+    if (cfg.keysUnderNotes) for (let i = 0; i < keys; i++) this.drawKey(f, i);
+    f.notes(() => {
       // earlier objects on top, as lazer sorts them
       for (let j = to - 3; j >= from; j -= 3) {
-        if (n[j + 1] !== i) continue;
-        this.drawObject(f, i, n[j], n[j + 2]);
+        const col = n[j + 1];
+        if (col < 0 || col >= keys) continue;
+        this.drawObject(f, col, n[j], n[j + 2]);
       }
-      if (!cfg.keysUnderNotes) this.drawKey(f, i);
-    }
+    });
+    if (!cfg.keysUnderNotes) for (let i = 0; i < keys; i++) this.drawKey(f, i);
 
     // ── stage foreground (LegacyStageForeground) ──
     if (this.bottom) {

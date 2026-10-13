@@ -134,11 +134,13 @@ export class ArgonRenderer implements Renderer {
     const tFar = t + ((v.S + 60 - hitD) / Math.max(1, len)) * f.timeRange;
     const from = lowerBound(n, t - f.maxHold - 1);
     const to = lowerBound(n, tFar);
-    for (let j = to - 3; j >= from; j -= 3) {
-      const col = n[j + 1];
-      if (col < 0 || col >= keys) continue;
-      this.drawObject(f, col, n[j], n[j + 2]);
-    }
+    f.notes(() => {
+      for (let j = to - 3; j >= from; j -= 3) {
+        const col = n[j + 1];
+        if (col < 0 || col >= keys) continue;
+        this.drawObject(f, col, n[j], n[j + 2]);
+      }
+    });
 
     // ── top level, per column: key area, then explosions ──
     for (let i = 0; i < keys; i++) {
