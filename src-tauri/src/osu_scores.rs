@@ -147,12 +147,12 @@ fn text(v: &Value) -> String {
     v.as_str().unwrap_or_default().to_string()
 }
 
-fn list(v: &Value) -> &[Value] {
+pub fn list(v: &Value) -> &[Value] {
     v.as_array().map(Vec::as_slice).unwrap_or_default()
 }
 
 /// A difficulty from a score's (or a play count's) `beatmap` and `beatmapset`.
-fn parse_beatmap(b: &Value, set: &Value) -> Option<ApiBeatmap> {
+pub fn parse_beatmap(b: &Value, set: &Value) -> Option<ApiBeatmap> {
     Some(ApiBeatmap {
         id: b["id"].as_i64()?,
         set_id: b["beatmapset_id"].as_i64().or_else(|| set["id"].as_i64()),
