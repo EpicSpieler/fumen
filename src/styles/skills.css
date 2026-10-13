@@ -168,3 +168,56 @@
 }
 
 .skills-how { max-width: 760px; margin: 16px 2px 0; font-size: var(--fs-12); line-height: 1.55; color: var(--t3); }
+
+/* ---------- Comparing with another player ---------- */
+.skills-tools { display: flex; align-items: center; gap: 10px; }
+.skills-compare.active { background: var(--accent-soft); color: var(--accent-ink); }
+
+.compare-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: -6px 0 14px;
+  padding: 12px 12px 12px 14px;
+  border-radius: var(--r-xl);
+  background: var(--surface-1);
+  animation: fade-in .2s var(--ease-std);
+}
+.compare-bar[hidden] { display: none; }
+.cmp-row { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.cmp-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.cmp-who { font-size: var(--fs-13); color: var(--t2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cmp-who b { color: var(--t1); font-weight: 700; }
+.cmp-step, .cmp-meta { font-size: var(--fs-11); color: var(--t3); }
+.cmp-avatar { flex: none; width: 34px; height: 34px; border-radius: 50%; overflow: hidden; background: var(--fill-mod); }
+.cmp-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cmp-progress { height: 4px; border-radius: 2px; background: var(--fill-mod); overflow: hidden; }
+.cmp-progress > i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--info);
+  transform: scaleX(var(--p, 0));
+  transform-origin: left;
+  transition: transform .35s var(--ease-out);
+}
+.cmp-input { flex: 1; min-width: 0; max-width: 320px; }
+.cmp-error { display: flex; align-items: center; gap: 8px; font-size: var(--fs-12); color: var(--danger); }
+.cmp-error .ic { width: 15px; height: 15px; flex: none; }
+.cmp-recent { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.cmp-recent-label { margin-right: 4px; font-size: var(--fs-11); color: var(--t3); }
+.cmp-recent .chip-toggle { height: 26px; padding: 0 10px; font-size: var(--fs-11); }
+.cmp-hint { font-size: var(--fs-11); line-height: 1.5; color: var(--t3); }
+
+.radar .them {
+  fill: color-mix(in srgb, var(--info) 14%, transparent);
+  stroke: var(--info);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+.radar .axis-them { font-size: 11px; font-weight: 700; fill: var(--info); font-variant-numeric: tabular-nums; }
+.radar-legend > .lg-them::before { border-top-color: var(--info); }
+.skill-them { font-size: var(--fs-12); font-weight: 700; color: var(--info); text-align: right; }
+.skill-them-head { padding: 10px 8px 4px; font-size: var(--fs-11); font-weight: 600; color: var(--t3); }
+.skill-them-head:first-child { padding-top: 2px; }
+.skill-chart.them:not([data-map]):not([data-add]) { cursor: default; }

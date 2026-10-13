@@ -15,6 +15,7 @@ const install = { path: "C:\\Users\\you\\AppData\\Roaming\\osu", storage: "C:\\U
 let scanned = localStorage.getItem("fumen-preview-scanned") !== "0";
 let previewLoginCancelled = false;
 let previewImportCancel = false;
+let previewCompareCancel = false;
 
 export async function invoke<T>(cmd: string, args: Record<string, unknown> = {}): Promise<T> {
   switch (cmd) {
@@ -118,6 +119,75 @@ export async function invoke<T>(cmd: string, args: Record<string, unknown> = {})
       if (synced) history.syncedAt = synced;
       return history as T;
     }
+    case "compare_player": {
+      // a made-up strong player on the snapshot's osu!mania charts (half "not in your library");
+      // "nobody" isn't found
+      const name = String((args as { name: string }).name).trim();
+      const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+      previewCompareCancel = false;
+      emit("compare-progress", { stage: "player", done: 0, total: 0 });
+      await wait(400);
+      if (name.toLowerCase() === "nobody") throw { code: "player-not-found", message: `osu! has no player called ${name}.` };
+      for (let i = 1; i <= 12; i++) {
+        if (previewCompareCancel) throw { code: "cancelled", message: "Cancelled" };
+        emit("compare-progress", { stage: "scores", done: i, total: 12 });
+        await wait(120);
+      }
+      const snap = (await fetch("/__fumen/snapshot").then((r) => r.json())) as {
+        maps: { id: string; mode: number; cs: number; sr: number; srHt?: number; srDt?: number; shares?: number[]; version: string; set: number; onlineId?: number }[];
+        sets: { title: string; artist: string; creator: string; onlineId?: number }[];
+      };
+      const pool = snap.maps.filter((m) => m.mode === 3 && m.shares && Math.round(m.cs) === 4).sort((a, b) => b.sr - a.sr).slice(0, 80);
+      const charts = pool.map((m, i) => {
+        const set = snap.sets[m.set];
+        return {
+          id: `o${1000 + i}`,
+          beatmapId: 1000 + i,
+          setId: set.onlineId ?? 1225016,
+          mode: 3,
+          cs: 4,
+          sr: m.sr,
+          srHt: m.srHt ?? m.sr * 0.8,
+          srDt: m.srDt ?? m.sr * 1.4,
+          shares: m.shares,
+          version: m.version,
+          title: set.title,
+          artist: set.artist,
+          creator: set.creator,
+          library: i % 2 ? m.id : undefined,
+        };
+      });
+      for (let i = 1; i <= charts.length; i += 4) {
+        if (previewCompareCancel) throw { code: "cancelled", message: "Cancelled" };
+        emit("compare-progress", { stage: "charts", done: Math.min(i + 3, charts.length), total: charts.length });
+        await wait(40);
+      }
+      const plays = charts.map((c, i) => ({
+        map: c.id,
+        beatmapId: c.beatmapId,
+        mode: 3,
+        date: Date.now() - i * 86_400_000,
+        rank: 4,
+        acc: 0.99 - (i % 7) * 0.008,
+        score: 950_000,
+        combo: 1000,
+        mods: i % 5 === 0 ? ["DT"] : [],
+        rate: i % 5 === 0 ? 1.5 : undefined,
+        source: "osu",
+        id: 5000 + i,
+        top: i + 1,
+      }));
+      return {
+        player: { id: 7, name: name || "Preview Rival", avatar: undefined, country: "KR", rank: 1234, countryRank: 56, pp: 9876.5, accuracy: 0.9812, playCount: 45678 },
+        charts,
+        plays,
+        counts: { top: 80, firsts: 3, recent: 2, mostPlayed: 12 },
+        unreadable: 2,
+      } as T;
+    }
+    case "cancel_compare":
+      previewCompareCancel = true;
+      return undefined as T;
     case "sync_osu_scores": {
       if (!localStorage.getItem("fumen-preview-osu")) throw { code: "osu-logged-out", message: "You're not logged in to osu!." };
       await new Promise((r) => setTimeout(r, 1500));
