@@ -259,15 +259,22 @@ export function suggest(
   charts: Counted[],
   maps: MapRow[],
   keys: number,
-  opts: { played?: Set<number>; exclude?: Set<number>; limit?: number } = {},
+  opts: {
+    played?: Set<number>;
+    exclude?: Set<number>;
+    limit?: number;
+    /** the player's best on one of `maps`, when `maps` isn't the library `charts` index into */
+    bestOf?: (mapIdx: number) => Counted | undefined;
+  } = {},
 ): Suggestion[] {
-  const bestOf = new Map(charts.map((c) => [c.mapIdx, c]));
+  const byIdx = new Map(charts.map((c) => [c.mapIdx, c]));
+  const bestOf = opts.bestOf ?? ((i: number) => byIdx.get(i));
   const perSet = new Map<number, { pick: Omit<Suggestion, "after">; score: number }>();
   for (const mapIdx of poolOf(maps, keys)) {
     const map = maps[mapIdx];
     const share = map.shares![k];
     if (share < MIN_SHARE || opts.exclude?.has(mapIdx)) continue;
-    const best = bestOf.get(mapIdx);
+    const best = bestOf(mapIdx);
     if (best && best.stars >= aim.lo) continue;
     const at = rateFor(map, aim);
     if (!at) continue;
