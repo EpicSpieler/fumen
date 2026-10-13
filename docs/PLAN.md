@@ -260,15 +260,20 @@ sections below is the order of the work.
 
 ## v0.5 — pools
 
-- [ ] Mods in the playfield (first: the pool builder shows a slot the way it plays). Rate mods
-      are there; added: HR (osu! flipped vertically, CS ×1.3 / AR / OD ×1.4 capped at 10; catch
-      mirrored with osu!stable's HardRock offsets — `applyHardRockOffset` in catch.rs —, CS ×1.3,
-      AR ×1.4; taiko OD / scroll; mania nothing but OD), EZ (the halves), HD (lazer's fades per
-      ruleset: osu! approach-less fade-out, mania FadeIn/Hidden coverage, catch's fade near the
-      catcher, taiko's), FL (lazer's flashlight sizes by combo), Mirror (mania columns, osu!
-      horizontal / vertical, catch). The chart is re-laid in Rust with the mod's difficulty
-      (stacking, preempt, hyperdashes change); star rating at the mod where Fumen's calculator has
-      it (mania: DT/HT/EZ-HR OD don't change SR, HR doesn't exist; others: lazer's value only)
+- [x] Mods in the playfield (first: the pool builder shows a slot the way it plays) — 0.4.12.
+      `src-tauri/src/mods.rs` + `parse_with` in osu.rs / catch.rs / taiko.rs build the chart with
+      Easy / Hard Rock (CS, AR, OD; osu! flipped vertically, osu!catch's `applyHardRockOffset`,
+      osu!taiko's slider multiplier ×1.4·4/3 or ×0.8) and Mirror (osu! horizontally, osu!catch after
+      the processor, osu!mania's columns in `chart_json`); `get_chart` takes them. `src/lib/mods.ts`:
+      each ruleset's mods, lazer's incompatibilities, the adjusted CS / AR / OD / HP (rate-adjusted
+      AR / OD like lazer's song select), which star ratings still hold (osu!mania's always; others
+      only lazer's, without difficulty mods). The playfields draw Hidden (osu!: no approach circles
+      but the first object's, 0.4 / 0.3 fades, slider bodies over their length; osu!catch: 0.6 / 0.44
+      fade, nothing on the plate; osu!taiko: fading over the first 0.375 of the way; osu!mania:
+      the combo-grown cover from the hit line, Fade In from the top, notes drawn into a layer of
+      their own) and Flashlight (`src/ui/flashlight.ts`: sizes by combo and break time at
+      osu!stable's speed, the circular / rectangular shaders). Mods are the player's, like the rate
+      (session only); the fullscreen player has a toggle per mod
 - [ ] Pool builder (the table above)
 - [ ] Similar maps: a chart's fingerprint (pattern shares, SR, BPM, length, LN %, key mode) and
       the nearest ones in the library; "replace this slot with something like it" in the pool

@@ -60,7 +60,7 @@ const VERSIONS = [
     v: "0.5", name: "Pools", state: "next",
     summary: "Build tournament pools.",
     items: [
-      [0, "<b>Mods in the playfield</b> first: HR, EZ, HD, FL and Mirror, the way lazer plays them"],
+      [1, "<b>Mods in the playfield:</b> HR, EZ, HD, FI, FL and Mirror, the way lazer plays them"],
       [0, "<b>Pool builder</b> with NM, HD, HR, DT, FM and TB slots; star rating, BPM and length per mod"],
       [0, "Maps you don't own looked up; export to JSON, CSV, a sheet and the RPRO bot; a showcase image"],
       [0, "<b>Similar maps:</b> a chart's fingerprint and the closest ones, to fill or replace a slot"],
