@@ -301,7 +301,7 @@ mod tests {
             t += gap;
             i += 1;
         }
-        Chart { mode: 3, keys: 4, od: 8.0, timing: vec![], objects, breaks: vec![] }
+        Chart { mode: 3, keys: 4, od: 8.0, timing: vec![], objects, breaks: vec![], taiko: None }
     }
 
     fn top(c: &Chart) -> Pattern {

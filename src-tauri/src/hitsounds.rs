@@ -8,16 +8,25 @@
 //!   - banks (normal / soft / drum), the custom sample index and the volume come from the note's
 //!     hit sample, else from the timing point 5 ms after the note (lazer's leniency). Additions
 //!     without a bank take the note's normal bank;
-//!   - index 1 and up look in the beatmap's own files first (`soft-hitclap2`, `soft-hitclap`,
-//!     `hitclap`, as .wav / .mp3 / .ogg), index 0 and anything missing come from the skin;
+//!   - index 1 and up look in the beatmap's own files first (index 1: `soft-hitclap`, then
+//!     `hitclap`; index 2 and up only `soft-hitclap2`, then `hitclap`, as .wav / .mp3 / .ogg —
+//!     a beatmap's numbered samples never fall back to its unnumbered ones), index 0 and anything
+//!     missing come from the skin;
 //!   - a hit sample's file name replaces the normal sound (the additions stay); a file the set
 //!     doesn't have stays silent, as in lazer;
-//!   - a long note plays its sounds at its head; the tail is silent;
+//!   - a long note plays its sounds at its head (with the sample settings of its tail); the tail
+//!     is silent;
+//!   - osu!taiko notes play nothing themselves: the drum does, for every key autoplay presses
+//!     (`DrumSamplePlayer`): "hitnormal" for the centre, "hitclap" for the rim, plus "hitfinish" /
+//!     "hitwhistle" when two keys come within 30 ms (a strong hit), with the bank, index and
+//!     volume of the note hit; samples are looked up as "taiko-<bank>-<name>" in the beatmap and in
+//!     legacy skins, and argon has its own drums;
 //!   - storyboard samples (the .osu's and the set's .osb) play too, except on the Fail layer
 //!     (autoplay never fails).
 //!
 //! The skin part is resolved in the webview, which knows the skin: a sample here is either a
-//! beatmap file (by hash) or a skin sample name ("soft-hitclap").
+//! beatmap file (by hash) or a skin sample name ("soft-hitclap", or for osu!taiko
+//! "taiko:<role>:<bank>-<name>:<argon bank>", see `taiko_sample`).
 
 use std::collections::HashMap;
 
@@ -26,12 +35,15 @@ use serde::Serialize;
 
 use crate::error::{Error, Result};
 use crate::paths;
+use crate::taiko;
 
 /// lazer's `SampleStore` looks a name up as itself, then with these extensions.
 const EXTENSIONS: [&str; 3] = ["wav", "mp3", "ogg"];
 
 /// lazer reads a note's sample settings this long after it (`control_point_leniency`).
 const CONTROL_POINT_LENIENCY: f64 = 5.0;
+/// `DrawableHitObject.MINIMUM_SAMPLE_VOLUME`: hit sounds never go quieter.
+const MINIMUM_SAMPLE_VOLUME: i64 = 5;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -181,8 +193,8 @@ pub fn for_map(conn: &Connection, files: &paths::Files, id: &str) -> Result<Soun
     Ok(resolve(&osu, osb.as_deref(), &files))
 }
 
-/// The hitsounds of an osu!mania chart (`osu`), with its set's files and storyboard (`osb`).
-/// Other modes get none: the playfield is osu!mania only.
+/// The hitsounds of an osu!mania or osu!taiko chart (`osu`), with its set's files and storyboard
+/// (`osb`). Other modes get none: the playfield doesn't show them.
 pub fn resolve(osu: &str, osb: Option<&str>, files: &SetFiles) -> Sounds {
     let mut mode = 0i64;
     let mut default_bank = Bank::Normal;
@@ -248,7 +260,7 @@ pub fn resolve(osu: &str, osb: Option<&str>, files: &SetFiles) -> Sounds {
             Section::Other => {}
         }
     }
-    if mode != 3 {
+    if mode != 3 && mode != 1 {
         return Sounds::default();
     }
     // later lines win at the same time (a green line over a red one)
@@ -256,8 +268,14 @@ pub fn resolve(osu: &str, osb: Option<&str>, files: &SetFiles) -> Sounds {
 
     let mut out = Out { index: HashMap::new(), sounds: Sounds::default() };
     let mut events: Vec<(i32, Sample, i64)> = Vec::new();
-    for line in objects {
-        note(line, &points, files, &mut events);
+    if mode == 1 {
+        if let Some(chart) = taiko::parse(osu) {
+            drum(&chart, &points, files, &mut events);
+        }
+    } else {
+        for line in objects {
+            note(line, &points, files, &mut events);
+        }
     }
     for line in storyboard.iter().copied().chain(osb.map(str::lines).into_iter().flatten()) {
         if let Some(e) = storyboard_sample(line, files) {
@@ -302,17 +320,22 @@ fn note(line: &str, points: &[SamplePoint], files: &SetFiles, out: &mut Vec<(i32
         Some(v) => v.split(':').collect(),
         None => Vec::new(),
     };
+    // a long note takes the sample settings of its end (`GetEndTime()`)
+    let end = match f.get(5) {
+        Some(v) if ty & 128 != 0 => v.split(':').next().and_then(|e| e.trim().parse::<f64>().ok()).filter(|e| e.is_finite()).unwrap_or(time),
+        _ => time,
+    };
     let normal_set = extras.first().and_then(|v| Bank::from_legacy(int(v)));
     let addition_set = extras.get(1).and_then(|v| Bank::from_legacy(int(v))).or(normal_set);
     let own_index = extras.get(2).map_or(0, |v| int(v));
     let own_volume = extras.get(3).map_or(0, |v| int(v).max(0));
     let filename = extras.get(4).map(|v| v.trim()).filter(|v| !v.is_empty());
 
-    let p = point_at(points, time + CONTROL_POINT_LENIENCY);
+    let p = point_at(points, end.max(time) + CONTROL_POINT_LENIENCY);
     let normal_bank = normal_set.unwrap_or(p.bank);
     let addition_bank = addition_set.unwrap_or(p.bank);
     let index = if own_index > 0 { own_index } else { p.index };
-    let volume = if own_volume > 0 { own_volume } else { p.volume };
+    let volume = (if own_volume > 0 { own_volume } else { p.volume }).max(MINIMUM_SAMPLE_VOLUME);
     let t = time as i32;
 
     match filename {
@@ -335,16 +358,142 @@ fn note(line: &str, points: &[SamplePoint], files: &SetFiles, out: &mut Vec<(i32
 /// A bank sample: from the beatmap's files when the index asks for custom samples and the set
 /// has one, else the skin's.
 fn hit_sample(bank: Bank, name: &str, index: i64, files: &SetFiles) -> Sample {
-    let plain = format!("{}-{name}", bank.name());
-    if index >= 1 {
-        let numbered = if index >= 2 { format!("{plain}{index}") } else { plain.clone() };
-        for candidate in [numbered.as_str(), plain.as_str(), name] {
-            if let Some(hash) = files.sound(candidate) {
-                return Sample::File(hash.to_string());
+    match beatmap_sample("", bank, name, index, files) {
+        Some(hash) => Sample::File(hash.to_string()),
+        None => Sample::Skin(format!("{}-{name}", bank.name())),
+    }
+}
+
+/// `LegacyBeatmapSkin` (custom sample banks on): with a numbered index only the numbered sample,
+/// with index 1 the bank's and the bare one's, then the bare name ("universal" samples). osu!taiko
+/// puts "taiko-" in front of every name but the last.
+fn beatmap_sample<'a>(prefix: &str, bank: Bank, name: &str, index: i64, files: &'a SetFiles) -> Option<&'a str> {
+    if index < 1 {
+        return None;
+    }
+    let bank = bank.name();
+    let names = if index >= 2 {
+        vec![format!("{prefix}{bank}-{name}{index}"), name.to_string()]
+    } else {
+        vec![format!("{prefix}{bank}-{name}"), format!("{prefix}{name}"), name.to_string()]
+    };
+    names.iter().find_map(|n| files.sound(n))
+}
+
+// ── osu!taiko ─────────────────────────────────────────────────────────────
+
+/// What the drum plays under autoplay. Two keys of the same colour within 30 ms make a strong
+/// hit, which stops what that colour was playing and plays the hit's sound and its strong one.
+fn drum(chart: &taiko::Chart, points: &[SamplePoint], files: &SetFiles, out: &mut Vec<(i32, Sample, i64)>) {
+    use taiko::{LEFT_CENTRE, LEFT_RIM, RIGHT_CENTRE, RIGHT_RIM};
+    let flourish = flourishes(chart);
+    let opposite = |k: u8| match k {
+        LEFT_CENTRE => RIGHT_CENTRE,
+        RIGHT_CENTRE => LEFT_CENTRE,
+        LEFT_RIM => RIGHT_RIM,
+        _ => LEFT_RIM,
+    };
+    let mut last: Option<(u8, f64)> = None;
+    // where the previous key's sounds start in `out`, and whether it was the rim
+    let mut previous: Option<(usize, bool)> = None;
+    for p in &chart.presses {
+        for key in [LEFT_CENTRE, RIGHT_CENTRE, LEFT_RIM, RIGHT_RIM] {
+            if p.keys & key == 0 {
+                continue;
+            }
+            let rim = key & (LEFT_RIM | RIGHT_RIM) != 0;
+            let strong = last.is_some_and(|(k, t)| k == opposite(key) && (0.0..=taiko::SECOND_HIT_WINDOW).contains(&(p.time - t)));
+            if strong {
+                // the drum stops the sounds of that colour (in practice the first key's)
+                if let Some((from, _)) = previous.filter(|&(_, r)| r == rim) {
+                    out.truncate(from);
+                }
+            }
+            let start = out.len();
+            let o = &chart.objects[p.object];
+            let t = p.time as i32;
+            let (base, volume) = taiko_sample(o, if rim { "hitclap" } else { "hitnormal" }, 'b', strong, points, files);
+            let from_beatmap = matches!(base, Sample::File(_));
+            out.push((t, base, volume));
+            if strong {
+                let role = if from_beatmap { 'S' } else { 's' };
+                let (extra, volume) = taiko_sample(o, if rim { "hitwhistle" } else { "hitfinish" }, role, strong, points, files);
+                out.push((t, extra, volume));
+                if rim && !from_beatmap && flourish.contains(&p.object) {
+                    let (f, volume) = taiko_sample(o, "hitflourish", 'f', strong, points, files);
+                    out.push((t, f, volume));
+                }
+            }
+            previous = Some((start, rim));
+            last = Some((key, p.time));
+        }
+    }
+}
+
+/// One drum sound of a note (`HitObject.CreateHitSampleInfo`): "hitnormal" in the note's normal
+/// bank, anything else in its additions' bank when it has additions. A note with a sample file
+/// plays the drum anyway (the taiko lookup drops the file name), in the normal bank with the
+/// beatmap's samples allowed. Skin samples are `taiko:<role>:<bank>-<name>:<argon bank>`, roles:
+/// `b` the hit's sound, `s` a strong hit's second sound, `S` the same after a sound from the
+/// beatmap (argon then plays it like any skin), `f` argon's flourish.
+fn taiko_sample(o: &taiko::Object, name: &str, role: char, strong: bool, points: &[SamplePoint], files: &SetFiles) -> (Sample, i64) {
+    let s = &o.samples;
+    let p = point_at(points, s.point_time);
+    let normal_set = Bank::from_legacy(s.normal_set);
+    let normal_bank = normal_set.unwrap_or(p.bank);
+    let addition_bank = Bank::from_legacy(s.addition_set).or(normal_set).unwrap_or(p.bank);
+    let index = if s.index > 0 { s.index } else { p.index };
+    let volume = if s.volume > 0 { s.volume } else { p.volume };
+    let has_addition = s.sound & (2 | 4 | 8) != 0;
+    let (bank, index) = if name != "hitnormal" && has_addition {
+        (addition_bank, index)
+    } else if s.file.is_some() {
+        (Bank::Normal, 1)
+    } else {
+        (normal_bank, index)
+    };
+    if role != 'f' {
+        if let Some(hash) = beatmap_sample("taiko-", bank, name, index, files) {
+            return (Sample::File(hash.to_string()), volume.max(MINIMUM_SAMPLE_VOLUME));
+        }
+    }
+    // argon's VolumeAwareHitSampleInfo: strong hits get their own bank, the rest one by volume
+    let strong = role == 'f' || (role == 'b' && strong);
+    let argon = match volume {
+        _ if strong => "strong",
+        v if v >= 90 => "drum",
+        v if v >= 60 => "normal",
+        _ => "soft",
+    };
+    (Sample::Skin(format!("taiko:{role}:{}-{name}:{argon}", bank.name())), volume.max(MINIMUM_SAMPLE_VOLUME))
+}
+
+/// `ArgonFlourishTriggerSource`: strong rim hits at least 2 s apart, picked from the latest one on
+/// screen backwards (on screen: within 16:9's scroll time ahead).
+fn flourishes(chart: &taiko::Chart) -> std::collections::HashSet<usize> {
+    let strong: Vec<usize> = (0..chart.objects.len()).filter(|&i| chart.objects[i].kind == taiko::Kind::Rim && chart.objects[i].strong).collect();
+    // TaikoPlayfieldAdjustmentContainer.ComputeTimeRange at 16:9
+    let time_range = ((16.0 / 9.0) * 480.0 - 160.0) / 100.0 * 1000.0 / 1.4;
+    let mut out = std::collections::HashSet::new();
+    for (n, &i) in strong.iter().enumerate() {
+        let t = chart.objects[i].time;
+        let at = chart.scroll.partition_point(|s| s.0 <= t);
+        let multiplier = chart.scroll.get(at.saturating_sub(1)).map_or(1.4, |s| s.1);
+        let ahead = t + time_range / multiplier;
+        let top = strong.partition_point(|&j| chart.objects[j].time <= ahead);
+        let mut last: Option<f64> = None;
+        for &j in strong[n..top.max(n + 1)].iter().rev() {
+            let h = chart.objects[j].time;
+            let can = last.map_or(true, |l| l - h >= 2000.0);
+            if can {
+                last = Some(h);
+            }
+            if j == i && can {
+                out.insert(i);
             }
         }
     }
-    Sample::Skin(plain)
+    out
 }
 
 /// `Sample,time,layer,"path",volume` (or `5,…`) from a storyboard's [Events].
@@ -441,10 +590,10 @@ mod tests {
             vec![
                 // the timing point's index 2: the beatmap's normal-hitnormal2
                 (100, "file:normal-hitnormal2.wav".into(), 100),
-                // index 3: no normal-hitnormal3 nor normal-hitnormal in the set → the skin's;
-                // the clap falls back to the set's plain normal-hitclap
+                // index 3: no normal-hitnormal3 nor hitnormal in the set → the skin's; the set's
+                // unnumbered normal-hitclap doesn't count for a numbered index
                 (200, "skin:normal-hitnormal".into(), 100),
-                (200, "file:normal-hitclap.ogg".into(), 100),
+                (200, "skin:normal-hitclap".into(), 100),
                 (300, "skin:normal-hitnormal".into(), 100),
                 (300, "file:normal-hitclap.ogg".into(), 100),
                 // a file replaces the normal sound, case-insensitively; additions stay
@@ -466,9 +615,65 @@ mod tests {
              64,192,1300,128,0,1500:3:0:0:55:hold.wav\n"
         );
         let s = resolve(&text, None, &files(&["hold.wav"]));
+        // the first one ends after the green line: its bank and volume
         assert_eq!(
             events(&s),
-            vec![(100, "skin:normal-hitnormal".into(), 100), (100, "skin:normal-hitwhistle".into(), 100), (1300, "file:hold.wav".into(), 55)]
+            vec![(100, "skin:soft-hitnormal".into(), 30), (100, "skin:soft-hitwhistle".into(), 30), (1300, "file:hold.wav".into(), 55)]
+        );
+    }
+
+    const TAIKO: &str = "osu file format v14\n[General]\nMode: 1\n[Difficulty]\nOverallDifficulty:5\nSliderMultiplier:1.4\n";
+
+    #[test]
+    fn taiko_drum() {
+        let text = format!(
+            "{TAIKO}[TimingPoints]\n0,500,4,2,0,70,1,0\n1900,-100,4,1,0,95,0,0\n[HitObjects]\n\
+             256,192,100,1,0,0:0:0:0:\n\
+             256,192,200,1,8,0:0:0:0:\n\
+             256,192,300,1,4,0:3:0:0:\n\
+             256,192,400,1,12,0:0:0:0:\n\
+             256,192,2000,1,0,0:0:0:0:\n"
+        );
+        let s = resolve(&text, None, &files(&[]));
+        assert_eq!(
+            events(&s),
+            vec![
+                (100, "skin:taiko:b:soft-hitnormal:normal".into(), 70),
+                (200, "skin:taiko:b:soft-hitclap:normal".into(), 70),
+                // strong: both keys, the first key's sound stopped by the second; the finish in
+                // the additions' bank
+                (300, "skin:taiko:b:soft-hitnormal:strong".into(), 70),
+                (300, "skin:taiko:s:drum-hitfinish:normal".into(), 70),
+                // a strong rim hit, its clap and whistle in the additions' bank; argon's flourish
+                (400, "skin:taiko:b:soft-hitclap:strong".into(), 70),
+                (400, "skin:taiko:s:soft-hitwhistle:normal".into(), 70),
+                (400, "skin:taiko:f:soft-hitflourish:strong".into(), 70),
+                // argon's bank follows the volume
+                (2000, "skin:taiko:b:normal-hitnormal:drum".into(), 95),
+            ]
+        );
+    }
+
+    #[test]
+    fn taiko_beatmap_samples() {
+        let text = format!(
+            "{TAIKO}[TimingPoints]\n0,500,4,1,1,100,1,0\n[HitObjects]\n\
+             256,192,100,1,0,0:0:0:0:\n\
+             256,192,200,1,2,0:0:2:0:\n\
+             256,192,300,1,0,0:0:0:0:kick.wav\n"
+        );
+        let f = files(&["taiko-normal-hitnormal.wav", "normal-hitclap2.wav", "hitwhistle.ogg", "kick.wav"]);
+        let s = resolve(&text, None, &f);
+        assert_eq!(
+            events(&s),
+            vec![
+                // index 1: the beatmap's taiko sample
+                (100, "file:taiko-normal-hitnormal.wav".into(), 100),
+                // index 2: only taiko-normal-hitclap2 or the bare hitclap, neither is there
+                (200, "skin:taiko:b:normal-hitclap:drum".into(), 100),
+                // a sample file doesn't play in taiko: the drum's own lookup (index 1) does
+                (300, "file:taiko-normal-hitnormal.wav".into(), 100),
+            ]
         );
     }
 

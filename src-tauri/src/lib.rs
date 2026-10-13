@@ -19,6 +19,7 @@ mod settings;
 mod skins;
 mod stable;
 mod stars;
+mod taiko;
 #[cfg(test)]
 mod test_http;
 mod thumbs;
