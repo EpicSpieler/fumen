@@ -152,7 +152,16 @@ nothing), and Fumen trades the code (later the refresh token) for tokens at the 
       LegacyCirclePiece, LegacyDrumRoll, LegacySwell, LegacyTaikoScroller, pippidon);
       DrumSamplePlayer's sounds (strong second sounds, taiko- lookups, argon's volume banks and
       flourishes)
-- [ ] Catch / osu! previews
+- [x] osu! playfield: the chart read like lazer (stacking, slider paths and ticks, spinners;
+      `src-tauri/src/osu.rs`), OsuAutoGenerator's cursor, the playfield's timing (approach, snaking,
+      follow points, spinner spins and SPM); argon / argon pro / triangles / legacy skins (circles,
+      bodies, balls, follow circles, reverse arrows, spinners old and new, cursor and trail); slider
+      ticks, slides and spinner spins / bonuses as lazer plays them
+- [x] osu!catch playfield: CatchBeatmapConverter (juice streams with their tiny droplets, banana
+      showers, osu!stable's random offsets), hyperdashes and CatchAutoGenerator
+      (`src-tauri/src/catch.rs`); the catcher's plate, dash / hyperdash trails and after-images,
+      hit explosions; argon / triangles / legacy skins (fruit textures, LegacyCatcherNew / Old);
+      fruits' own sounds, droplets' slider ticks, bananas' rising pitch
 - [x] "tech" detection: the pattern report's "Tech" (mixed speeds) and SV
 
 ## v0.3 — collections

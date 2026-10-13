@@ -44,10 +44,11 @@ database first (see [Adding beatmaps](#adding-beatmaps)).
 - Chart panel on the set page: a notes-per-second graph (kiai and breaks marked) you can click to
   jump, peak / average density, longest burst
 - Fullscreen player (fills the app window), switchable at the top: a visualizer (the art and frequency bars from the song)
-  or the osu!mania or osu!taiko playfield with the live numbers beside it (notes per second, the
+  or the playfield of any ruleset (osu!, osu!taiko, osu!catch, osu!mania) with the live numbers beside it (notes per second, the
   pattern of this second, BPM, notes so far, density graph). osu!mania scrolls at your lazer scroll
   speed and direction (read from lazer's settings, rate mods included; F3 / F4 change it for Fumen
-  only); osu!taiko scrolls the way the chart sets it, laid out like lazer's taiko playfield
+  only); osu!taiko scrolls the way the chart sets it, laid out like lazer's taiko playfield; osu!
+  and osu!catch are laid out and timed like lazer's playfields, with lazer's autoplay
 - Pattern read for osu!mania: stream, jumpstream, handstream, chordjack, jacks, long notes, stamina;
   chord mix, jacks, column and hand balance
 - Rates: HT, DT or anything from 0.5× to 2× — the song plays at it and the panel shows star rating,
@@ -59,7 +60,10 @@ database first (see [Adding beatmaps](#adding-beatmaps)).
   lazer's autoplay with the beatmap's hitsounds (custom samples and keysounds included) at their
   own volume. osu!taiko too: argon, argon pro, triangles and legacy skins (drum, notes, rolls,
   swells, explosions, the scroller and pippidon; whatever a skin leaves out comes from lazer's
-  classic skin), with the drum's sounds as lazer plays them (taiko- samples, argon's own drums)
+  classic skin), with the drum's sounds as lazer plays them (taiko- samples, argon's own drums).
+  osu! in all of them too (circles, sliders snaking in and out, spinners, follow points, the cursor
+  and its trail; slider slides and spinner spins as looping sounds), and osu!catch (fruits,
+  droplets and bananas, the catcher with its plate, dash and hyperdash trails, hit explosions)
 - Dan rating for osu!mania: Azusa for 4K rice, Sunny's star rating on the 4K / 6K / 7K / 10K dan
   tables otherwise (with an LN reading for long-note charts), at any rate. Shown in the chart panel
   and the difficulty rows; search `dan=gamma`, `dan>=13`, `dan>="reform 8"`
