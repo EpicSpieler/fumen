@@ -61,7 +61,7 @@ const VERSIONS = [
     summary: "Find what to play next.",
     items: [
       [1, "<b>Mods in the playfield:</b> HR, EZ, HD, FI, FL and Mirror, the way lazer plays them"],
-      [0, "<b>Similar maps:</b> a chart's fingerprint and the closest ones in your library"],
+      [1, "<b>Similar maps:</b> a chart's fingerprint and the closest ones in your library"],
       [0, "Beatmap search on the mirrors, a whole search as one pack"],
     ],
     explain: [
