@@ -1,24 +1,169 @@
 //! Beatmap sets from the internet: links to set IDs, and `.osz` downloads from mirrors.
 //!
-//! osu!'s own API doesn't let third-party apps download sets (that route is lazer's alone), so
-//! sets come from mirrors, tried in order until one delivers a real archive. Beatmap links
-//! (`/b/<id>`, `/beatmaps/<id>`) are turned into their set by asking osu.ppy.sh where they
-//! redirect to — no login needed.
+//! osu!'s own API doesn't let third-party apps download sets (that route is lazer's alone), and
+//! nothing here ever fetches a file from osu!'s servers: sets come from community mirrors.
+//! Downloads share a [`Mirrors`] pool that spreads them over the mirrors, so no single one sees
+//! a whole import, and that pauses a mirror when it says "too many requests" (for as long as its
+//! `Retry-After` asks) instead of failing sets. Beatmap links (`/b/<id>`, `/beatmaps/<id>`) are
+//! turned into their set by the mirrors' beatmap lookups too.
 
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::time::Duration;
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 use crate::error::{Error, Result};
 
-pub const USER_AGENT: &str = concat!("Fumen/", env!("CARGO_PKG_VERSION"), " (osu! library manager; https://github.com/EpicSpieler/fumen)");
+/// Mirrors want a user agent that names the app (catboy.best turns away ones with a URL in it).
+pub const USER_AGENT: &str = concat!("Fumen/", env!("CARGO_PKG_VERSION"), " (osu! library manager)");
 
-/// Mirrors in the order they're tried, with their download URL for a set (without video).
-pub const MIRRORS: [(&str, fn(u32) -> String); 3] = [
-    ("osu.direct", |id| format!("https://osu.direct/api/d/{id}")),
-    ("catboy.best", |id| format!("https://catboy.best/d/{id}n")),
-    ("nerinyan.moe", |id| format!("https://api.nerinyan.moe/d/{id}?nv=1")),
+pub struct Mirror {
+    pub name: &'static str,
+    /// the download URL for a set, without video where the mirror has that
+    url: fn(u32) -> String,
+}
+
+/// The mirrors, best first: when all of them are equally busy, the first ones get the next set.
+pub const MIRRORS: [Mirror; 6] = [
+    Mirror { name: "osu.direct", url: |id| format!("https://osu.direct/api/d/{id}") },
+    Mirror { name: "nekoha.moe", url: |id| format!("https://mirror.nekoha.moe/api4/download/{id}") },
+    Mirror { name: "catboy.best", url: |id| format!("https://catboy.best/d/{id}n") },
+    Mirror { name: "beatconnect.io", url: |id| format!("https://beatconnect.io/b/{id}/") },
+    Mirror { name: "sayobot.cn", url: |id| format!("https://dl.sayobot.cn/beatmaps/download/novideo/{id}") },
+    Mirror { name: "nerinyan.moe", url: |id| format!("https://api.nerinyan.moe/d/{id}?nv=1") },
 ];
+
+/// Beatmap lookups (beatmap ID → set) that answer osu!-API-style JSON with `beatmapset_id`.
+const LOOKUPS: [(&str, fn(u32) -> String); 3] = [
+    ("osu.direct", |id| format!("https://osu.direct/api/v2/b/{id}")),
+    ("nekoha.moe", |id| format!("https://mirror.nekoha.moe/api4/beatmap/{id}")),
+    ("catboy.best", |id| format!("https://catboy.best/api/v2/b/{id}")),
+];
+
+/// Downloads from one mirror at once, at most.
+const PER_MIRROR: u32 = 2;
+/// Tries per set on a mirror that failed for other reasons than not having it.
+const TRIES: u32 = 2;
+/// A mirror that refuses or breaks rests this long, doubled per failure in a row.
+const REST_AFTER_ERROR: Duration = Duration::from_secs(20);
+const MAX_REST: Duration = Duration::from_secs(60 * 60);
+/// "Too many requests" without a `Retry-After`: this long.
+const REST_AFTER_429: Duration = Duration::from_secs(60);
+/// A set waits this long at most for a resting mirror; longer and it fails (and can be tried
+/// again later).
+const MAX_WAIT: Duration = Duration::from_secs(20 * 60);
+/// Refusals (403) in a row that make a mirror rest: a single one is "not here" (sayobot answers
+/// a set it doesn't have like that).
+const REFUSALS_TO_REST: u32 = 3;
+
+#[derive(Default, Clone)]
+struct MirrorState {
+    rest_until: Option<Instant>,
+    active: u32,
+    /// downloads started (for spreading the sets)
+    started: u32,
+    errors_in_a_row: u32,
+    refusals_in_a_row: u32,
+}
+
+/// The mirrors' state, shared by the downloads of an import.
+pub struct Mirrors {
+    state: Mutex<Vec<MirrorState>>,
+}
+
+impl Default for Mirrors {
+    fn default() -> Self {
+        Mirrors { state: Mutex::new(vec![MirrorState::default(); MIRRORS.len()]) }
+    }
+}
+
+/// How a download goes along.
+pub enum Progress {
+    Bytes { done: u64, total: Option<u64> },
+    /// every mirror that may have the set is busy with other sets, or resting after a rate limit
+    /// until about then
+    Waiting { until: Instant },
+}
+
+#[derive(Debug, PartialEq)]
+enum Outcome {
+    /// not on this mirror (404, refused once, or not an archive)
+    Missing(String),
+    /// "too many requests": the mirror rests this long
+    Limited(Duration),
+    /// broken connection, server error, …
+    Failed(String),
+    Cancelled,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum Tried {
+    No,
+    Missing,
+    Failed(u32),
+}
+
+impl Mirrors {
+    /// The mirror for the next try: of those not resting and not too busy that may still have the
+    /// set, the least busy one, then the one that's had fewest sets, then the best.
+    fn pick(&self, tried: &[Tried]) -> Option<usize> {
+        let now = Instant::now();
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        let best = (0..MIRRORS.len())
+            .filter(|&i| matches!(tried[i], Tried::No) || matches!(tried[i], Tried::Failed(n) if n < TRIES))
+            .filter(|&i| state[i].rest_until.map_or(true, |t| t <= now) && state[i].active < PER_MIRROR)
+            .min_by_key(|&i| (matches!(tried[i], Tried::Failed(_)), state[i].active, state[i].started, i))?;
+        state[best].active += 1;
+        state[best].started += 1;
+        Some(best)
+    }
+
+    fn finished(&self, i: usize, outcome: Option<&Outcome>) {
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        let m = &mut state[i];
+        m.active -= 1;
+        let rest = |m: &mut MirrorState, d: Duration| {
+            let until = Instant::now() + d.min(MAX_REST);
+            m.rest_until = Some(m.rest_until.map_or(until, |t| t.max(until)));
+        };
+        match outcome {
+            // delivered
+            None => {
+                m.errors_in_a_row = 0;
+                m.refusals_in_a_row = 0;
+            }
+            Some(Outcome::Limited(d)) => rest(m, *d),
+            Some(Outcome::Failed(_)) => {
+                m.errors_in_a_row += 1;
+                let d = REST_AFTER_ERROR * 2u32.pow(m.errors_in_a_row.min(8) - 1);
+                rest(m, d);
+            }
+            Some(Outcome::Missing(why)) if why.starts_with("HTTP 403") => {
+                m.refusals_in_a_row += 1;
+                if m.refusals_in_a_row >= REFUSALS_TO_REST {
+                    m.refusals_in_a_row = 0;
+                    rest(m, REST_AFTER_ERROR * 15);
+                }
+            }
+            Some(Outcome::Missing(_)) => m.refusals_in_a_row = 0,
+            Some(Outcome::Cancelled) => {}
+        }
+    }
+
+    /// When the first mirror that may still have the set is free again (None: none may).
+    fn next_free(&self, tried: &[Tried]) -> Option<Instant> {
+        let now = Instant::now();
+        let state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        (0..MIRRORS.len())
+            .filter(|&i| matches!(tried[i], Tried::No) || matches!(tried[i], Tried::Failed(n) if n < TRIES))
+            .map(|i| match state[i].rest_until {
+                Some(t) if t > now => t,
+                // busy with other sets: soon
+                _ => now,
+            })
+            .min()
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Target {
@@ -61,74 +206,152 @@ pub fn parse_link(line: &str) -> Option<Target> {
     }
 }
 
-fn agent(timeout: Duration, follow_redirects: bool) -> ureq::Agent {
+fn agent(timeout: Duration) -> ureq::Agent {
     ureq::Agent::config_builder()
         .user_agent(USER_AGENT)
         .timeout_global(Some(timeout))
-        .max_redirects(if follow_redirects { 10 } else { 0 })
         .http_status_as_error(false)
         .build()
         .into()
 }
 
-/// The set a beatmap belongs to, from where osu.ppy.sh/b/<id> redirects.
+/// The set a beatmap belongs to, asked of the mirrors' beatmap lookups in turn.
 pub fn set_of_beatmap(beatmap: u32) -> Result<u32> {
-    let res = agent(Duration::from_secs(15), false)
-        .get(&format!("https://osu.ppy.sh/b/{beatmap}"))
-        .call()
-        .map_err(|e| Error::known("download-failed", format!("osu.ppy.sh didn't answer: {e}")))?;
-    let location = res.headers().get("location").and_then(|v| v.to_str().ok()).unwrap_or("");
-    set_from_location(location).ok_or_else(|| Error::known("not-found", format!("Beatmap {beatmap} wasn't found on osu!")))
+    let agent = agent(Duration::from_secs(15));
+    let mut failures = Vec::new();
+    for (name, url) in LOOKUPS {
+        let answer = agent.get(&url(beatmap)).call();
+        match answer {
+            Ok(mut res) if res.status() == 200 => {
+                let set = res
+                    .body_mut()
+                    .read_to_string()
+                    .ok()
+                    .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
+                    .and_then(|v| v["beatmapset_id"].as_u64())
+                    .and_then(|v| u32::try_from(v).ok())
+                    .filter(|&v| v > 0);
+                match set {
+                    Some(set) => return Ok(set),
+                    None => failures.push(format!("{name} answered something else")),
+                }
+            }
+            Ok(res) if res.status() == 404 => failures.push(format!("{name} 404")),
+            Ok(res) => failures.push(format!("{name} {}", res.status().as_u16())),
+            Err(e) => failures.push(format!("{name}: {e}")),
+        }
+    }
+    if failures.iter().all(|f| f.ends_with(" 404")) {
+        return Err(Error::known("not-found", format!("Beatmap {beatmap} wasn't found on the mirrors")));
+    }
+    Err(Error::known("download-failed", format!("Couldn't find beatmap {beatmap}'s set ({})", failures.join(", "))))
 }
 
-fn set_from_location(location: &str) -> Option<u32> {
-    let after = location.split("/beatmapsets/").nth(1)?;
-    after.split(|c: char| !c.is_ascii_digit()).next()?.parse().ok().filter(|&v| v > 0)
-}
-
-/// Downloads a set into `dir` as `<id>.osz`, trying the mirrors in turn. `progress` gets
-/// (bytes so far, total if known) and says whether to go on (false: the download stops with a
-/// "cancelled" error). Returns the file and the mirror that delivered it.
-pub fn download_set(set: u32, dir: &Path, mut progress: impl FnMut(u64, Option<u64>) -> bool) -> Result<(PathBuf, &'static str)> {
+/// Downloads a set into `dir` as `<id>.osz` from whichever mirror has it, sharing `mirrors` with
+/// the other downloads running. `progress` hears how it goes and says whether to go on (false:
+/// the download stops with a "cancelled" error). Returns the file and the mirror that delivered
+/// it.
+pub fn download_set(set: u32, dir: &Path, mirrors: &Mirrors, mut progress: impl FnMut(Progress) -> bool) -> Result<(PathBuf, &'static str)> {
     std::fs::create_dir_all(dir)?;
     let target = dir.join(format!("{set}.osz"));
     let part = dir.join(format!("{set}.osz.part"));
-    let agent = agent(Duration::from_secs(300), true);
-    let mut failures = Vec::new();
-    for (name, url) in MIRRORS {
-        match fetch(&agent, &url(set), &part, &mut progress) {
-            Ok(()) => {
-                std::fs::rename(&part, &target)?;
-                return Ok((target, name));
+    let agent = agent(Duration::from_secs(300));
+    let mut tried = [Tried::No; MIRRORS.len()];
+    let mut why: Vec<String> = vec![String::new(); MIRRORS.len()];
+    let mut waited_since: Option<Instant> = None;
+    loop {
+        let Some(i) = mirrors.pick(&tried) else {
+            // every mirror said no, or the ones left are resting or busy
+            let Some(free) = mirrors.next_free(&tried) else { break };
+            let since = *waited_since.get_or_insert_with(Instant::now);
+            if free.saturating_duration_since(since) > MAX_WAIT {
+                return Err(Error::known(
+                    "rate-limited",
+                    format!("The mirrors are busy for a while (rate limits); try this set again later ({})", reasons(&why)),
+                ));
             }
-            Err(e) => {
+            if !progress(Progress::Waiting { until: free }) {
+                return Err(Error::known("cancelled", "Cancelled"));
+            }
+            std::thread::sleep(Duration::from_millis(250));
+            continue;
+        };
+        waited_since = None;
+        let mirror = &MIRRORS[i];
+        let outcome = fetch(&agent, &(mirror.url)(set), &part, &mut progress);
+        match outcome {
+            Ok(()) => {
+                mirrors.finished(i, None);
+                std::fs::rename(&part, &target)?;
+                return Ok((target, mirror.name));
+            }
+            Err(outcome) => {
                 let _ = std::fs::remove_file(&part);
-                if e == CANCELLED {
-                    return Err(Error::known("cancelled", "Cancelled"));
+                mirrors.finished(i, Some(&outcome));
+                match outcome {
+                    Outcome::Cancelled => return Err(Error::known("cancelled", "Cancelled")),
+                    Outcome::Missing(w) => {
+                        tried[i] = Tried::Missing;
+                        why[i] = w;
+                    }
+                    Outcome::Limited(_) => why[i] = "429".into(),
+                    Outcome::Failed(w) => {
+                        tried[i] = Tried::Failed(match tried[i] {
+                            Tried::Failed(n) => n + 1,
+                            _ => 1,
+                        });
+                        why[i] = w;
+                    }
                 }
-                failures.push(format!("{name} {}", e.trim_start_matches("HTTP ")));
             }
         }
     }
-    Err(Error::known("download-failed", format!("No download mirror has this set ({})", failures.join(", "))))
+    if tried.iter().all(|t| *t == Tried::Missing) && why.iter().all(|w| w.starts_with("HTTP 404") || w.starts_with("HTTP 403") || w == NOT_ARCHIVE) {
+        return Err(Error::known("not-found", format!("No download mirror has this set ({})", reasons(&why))));
+    }
+    Err(Error::known("download-failed", format!("No download mirror could deliver this set ({})", reasons(&why))))
 }
 
-const CANCELLED: &str = "cancelled";
+fn reasons(why: &[String]) -> String {
+    MIRRORS
+        .iter()
+        .zip(why)
+        .filter(|(_, w)| !w.is_empty())
+        .map(|(m, w)| format!("{} {}", m.name, w.trim_start_matches("HTTP ")))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
 
-fn fetch(agent: &ureq::Agent, url: &str, out: &Path, progress: &mut impl FnMut(u64, Option<u64>) -> bool) -> std::result::Result<(), String> {
-    let mut res = agent.get(url).call().map_err(|e| e.to_string())?;
+const NOT_ARCHIVE: &str = "not a beatmap archive";
+
+/// How long a "too many requests" answer asks to wait.
+fn retry_after(res: &ureq::http::Response<ureq::Body>) -> Duration {
+    let header = |name: &str| res.headers().get(name).and_then(|v| v.to_str().ok()).map(str::trim);
+    // seconds (an HTTP date is rare here; then the default)
+    header("retry-after")
+        .and_then(|v| v.parse::<u64>().ok())
+        .or_else(|| header("x-ratelimit-reset").and_then(|v| v.parse::<u64>().ok()).filter(|&s| s <= 3600))
+        .map(|s| Duration::from_secs(s.max(1)))
+        .unwrap_or(REST_AFTER_429)
+}
+
+fn fetch(agent: &ureq::Agent, url: &str, out: &Path, progress: &mut impl FnMut(Progress) -> bool) -> std::result::Result<(), Outcome> {
+    let mut res = agent.get(url).call().map_err(|e| Outcome::Failed(e.to_string()))?;
     let status = res.status().as_u16();
-    if status != 200 {
-        return Err(format!("HTTP {status}"));
+    match status {
+        200 => {}
+        429 => return Err(Outcome::Limited(retry_after(&res))),
+        404 | 403 | 410 | 451 => return Err(Outcome::Missing(format!("HTTP {status}"))),
+        _ => return Err(Outcome::Failed(format!("HTTP {status}"))),
     }
     let total = res.body().content_length();
     let mut reader = res.body_mut().as_reader();
-    let mut file = std::fs::File::create(out).map_err(|e| e.to_string())?;
+    let mut file = std::fs::File::create(out).map_err(|e| Outcome::Failed(e.to_string()))?;
     let mut buf = vec![0u8; 64 * 1024];
     let mut done = 0u64;
     let mut head = [0u8; 4];
     loop {
-        let n = reader.read(&mut buf).map_err(|e| e.to_string())?;
+        let n = reader.read(&mut buf).map_err(|e| Outcome::Failed(e.to_string()))?;
         if n == 0 {
             break;
         }
@@ -136,16 +359,19 @@ fn fetch(agent: &ureq::Agent, url: &str, out: &Path, progress: &mut impl FnMut(u
             let take = (4 - done as usize).min(n);
             head[done as usize..done as usize + take].copy_from_slice(&buf[..take]);
         }
-        file.write_all(&buf[..n]).map_err(|e| e.to_string())?;
+        file.write_all(&buf[..n]).map_err(|e| Outcome::Failed(e.to_string()))?;
         done += n as u64;
-        if !progress(done, total) {
-            return Err(CANCELLED.into());
+        if !progress(Progress::Bytes { done, total }) {
+            return Err(Outcome::Cancelled);
         }
     }
-    file.flush().map_err(|e| e.to_string())?;
+    file.flush().map_err(|e| Outcome::Failed(e.to_string()))?;
+    if total.is_some_and(|t| t != done) {
+        return Err(Outcome::Failed(format!("cut off after {done} of {} bytes", total.unwrap_or(0))));
+    }
     // mirrors answer "not found" with JSON or HTML now and then, even with 200
     if &head != b"PK\x03\x04" || done < 1024 {
-        return Err("not a beatmap archive".into());
+        return Err(Outcome::Missing(NOT_ARCHIVE.into()));
     }
     Ok(())
 }
@@ -183,9 +409,74 @@ mod tests {
     }
 
     #[test]
-    fn redirects() {
-        assert_eq!(set_from_location("https://osu.ppy.sh/beatmapsets/1#osu/75"), Some(1));
-        assert_eq!(set_from_location("/beatmapsets/1225016#mania/2549232"), Some(1225016));
-        assert_eq!(set_from_location("https://osu.ppy.sh/home"), None);
+    fn spreads_over_mirrors_and_rests_them() {
+        let m = Mirrors::default();
+        let fresh = [Tried::No; MIRRORS.len()];
+        // three downloads at once go to three mirrors, best first
+        let a = m.pick(&fresh).unwrap();
+        let b = m.pick(&fresh).unwrap();
+        let c = m.pick(&fresh).unwrap();
+        assert_eq!((a, b, c), (0, 1, 2));
+        m.finished(a, None);
+        // the next set goes where fewest sets went
+        assert_eq!(m.pick(&fresh), Some(3));
+        // a rate limit rests the mirror; sets go elsewhere meanwhile
+        m.finished(b, Some(&Outcome::Limited(Duration::from_secs(30))));
+        let mut seen = Vec::new();
+        while let Some(i) = m.pick(&fresh) {
+            seen.push(i);
+        }
+        assert!(!seen.contains(&1), "{seen:?}");
+        // all busy: the next one is free about now; with the others ruled out, when mirror 1 rests
+        // until
+        assert!(m.next_free(&fresh).unwrap() <= Instant::now());
+        let mut only_1 = [Tried::Missing; MIRRORS.len()];
+        only_1[1] = Tried::No;
+        let free = m.next_free(&only_1).unwrap();
+        assert!(free > Instant::now() + Duration::from_secs(25));
+        assert_eq!(m.next_free(&[Tried::Missing; MIRRORS.len()]), None);
+        // a mirror that failed for a set twice isn't tried for it again
+        let mut failed = [Tried::Missing; MIRRORS.len()];
+        failed[0] = Tried::Failed(TRIES);
+        assert_eq!(m.next_free(&failed), None);
+    }
+
+    #[test]
+    fn refusals_rest_a_mirror_after_a_few() {
+        let m = Mirrors::default();
+        let only_0 = {
+            let mut t = [Tried::Missing; MIRRORS.len()];
+            t[0] = Tried::No;
+            t
+        };
+        for _ in 0..REFUSALS_TO_REST - 1 {
+            let i = m.pick(&only_0).unwrap();
+            m.finished(i, Some(&Outcome::Missing("HTTP 403".into())));
+        }
+        assert_eq!(m.pick(&only_0), Some(0));
+        m.finished(0, Some(&Outcome::Missing("HTTP 403".into())));
+        assert_eq!(m.pick(&only_0), None, "three refusals in a row rest the mirror");
+    }
+
+    #[test]
+    fn user_agent_names_the_app_without_a_url() {
+        assert!(USER_AGENT.starts_with("Fumen/"));
+        assert!(!USER_AGENT.contains("http") && !USER_AGENT.contains(".com"));
+    }
+
+    /// The mirrors and lookups answer with this user agent (needs the internet).
+    #[test]
+    #[ignore]
+    fn mirrors_answer() {
+        assert_eq!(set_of_beatmap(75).unwrap(), 1);
+        let dir = std::env::temp_dir().join(format!("fumen-mirrors-{}", std::process::id()));
+        let agent = agent(Duration::from_secs(120));
+        for mirror in &MIRRORS {
+            let out = dir.join(format!("{}.part", mirror.name));
+            std::fs::create_dir_all(&dir).unwrap();
+            let r = fetch(&agent, &(mirror.url)(1), &out, &mut |_| true);
+            println!("{}: {r:?}", mirror.name);
+        }
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

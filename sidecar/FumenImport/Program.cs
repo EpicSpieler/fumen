@@ -10,7 +10,10 @@ namespace FumenImport;
 /// lazer's version — whether a version works is what `selftest` and Fumen's version list are for.
 ///
 ///   fumen-import info                               lazer's version and database schema version
-///   fumen-import import <data-dir> <archive>...     into lazer's library (lazer must be closed)
+///   fumen-import import <data-dir> [--repair] <archive>...
+///                                                   into lazer's library (lazer must be closed);
+///                                                   --repair first finishes sets imported earlier
+///                                                   without their details (see Lazer.Process)
 ///   fumen-import collections <data-dir> <json>      collections into lazer's (lazer must be closed)
 ///   fumen-import selftest <empty-dir> <archive>     into a fresh library, twice
 ///
@@ -30,7 +33,8 @@ internal static class Program
                 ["info"] => Info(),
                 ["members", var type] => Members(type),
                 ["checkschema", var file, var version] => CheckSchema(file, int.Parse(version)),
-                ["import", var dir, .. var files] when files.Length > 0 => Import(dir, files),
+                ["import", var dir, "--repair", .. var files] => Import(dir, files, repair: true),
+                ["import", var dir, .. var files] when files.Length > 0 => Import(dir, files, repair: false),
                 ["collections", var dir, var json] => Collections(dir, json),
                 ["selftest", var dir, var file] => SelfTest(dir, file),
                 _ => Usage(),
@@ -51,7 +55,7 @@ internal static class Program
 
     private static int Usage()
     {
-        Console.Error.WriteLine("usage: fumen-import info | import <data-dir> <archive>... | collections <data-dir> <json> | selftest <empty-dir> <archive>");
+        Console.Error.WriteLine("usage: fumen-import info | import <data-dir> [--repair] <archive>... | collections <data-dir> <json> | selftest <empty-dir> <archive>");
         return 2;
     }
 
@@ -96,7 +100,11 @@ internal static class Program
         return 0;
     }
 
-    private static int Import(string dataDir, string[] files)
+    /// Imports archives one by one: one line per archive, { file, ok, sets }. Each set lazer
+    /// imported gets what lazer works out after an import (Lazer.Process): one line per set,
+    /// { set, processed, maps, status?, message? }. With `repair`, sets imported earlier without
+    /// that come first, the same way.
+    private static int Import(string dataDir, string[] files, bool repair)
     {
         var realmFile = Path.Combine(dataDir, Lazer.ClientDatabase);
         if (!File.Exists(realmFile))
@@ -106,12 +114,21 @@ internal static class Program
         Lazer.CheckSchema(realmFile);
 
         using var lazer = Lazer.Open(dataDir);
+        if (repair)
+        {
+            var unfinished = lazer.Unprocessed();
+            Emit(new { repair = unfinished.Count });
+            foreach (var id in unfinished)
+                ProcessSet(lazer, id);
+        }
         foreach (var file in files)
         {
             try
             {
                 var ids = lazer.ImportBeatmaps(file);
                 Emit(new { file, ok = true, sets = ids });
+                foreach (var id in ids)
+                    ProcessSet(lazer, id);
             }
             catch (Exception e)
             {
@@ -120,6 +137,22 @@ internal static class Program
             }
         }
         return 0;
+    }
+
+    /// A set's details, worked out by lazer's code. A set that can't be done stays as lazer's
+    /// importer left it (lazer finishes it on its next start): never a reason to fail.
+    private static void ProcessSet(Lazer lazer, Guid id)
+    {
+        try
+        {
+            var (maps, status) = lazer.Process(id);
+            Emit(new { set = id, processed = true, maps, status });
+        }
+        catch (Exception e)
+        {
+            var inner = e is TargetInvocationException { InnerException: { } i } ? i : e;
+            Emit(new { set = id, processed = false, message = inner.Message, type = inner.GetType().FullName, stack = inner.StackTrace });
+        }
     }
 
     /// Puts collections into lazer's: `json` is a file with [{ key, lazerId?, name, md5s }]. Each
@@ -233,12 +266,17 @@ internal sealed class Lazer : IDisposable
         }
     }
 
+    private readonly string _dataDir;
     private readonly object _storage;
     private readonly IDisposable _realm;
     private readonly object _importer;
+    /// lazer's BeatmapUpdaterMetadataLookup, made on first use
+    private IDisposable? _lookup;
+    private readonly List<IDisposable> _sources = [];
 
-    private Lazer(object storage, IDisposable realm, object importer)
+    private Lazer(string dataDir, object storage, IDisposable realm, object importer)
     {
+        _dataDir = dataDir;
         _storage = storage;
         _realm = realm;
         _importer = importer;
@@ -260,7 +298,7 @@ internal sealed class Lazer : IDisposable
                 (rulesets as IDisposable)?.Dispose();
             }
             var importer = Construct(T(Game, "osu.Game.Beatmaps.BeatmapImporter"), storage, realm);
-            return new Lazer(storage, realm, importer);
+            return new Lazer(dataDir, storage, realm, importer);
         }
         catch
         {
@@ -300,6 +338,142 @@ internal sealed class Lazer : IDisposable
         var live = running.GetType().GetProperty("Result")!.GetValue(running);
         return live == null ? [] : [(Guid)live.GetType().GetProperty("ID", BindingFlags.Public | BindingFlags.Instance)!.GetValue(live)!];
     }
+
+    // ── after an import ─────────────────────────────────────────────────
+
+    /// lazer's file for the online data cache (LocalCachedBeatmapMetadataSource), and how old it
+    /// may be: lazer fetches a new one when it's older than a month, and making that source with
+    /// an older (or no) file would start the download from here — Fumen leaves that to lazer.
+    private const string OnlineCache = "online.db";
+
+    private bool OnlineCacheFresh()
+    {
+        var file = Path.Combine(_dataDir, OnlineCache);
+        return File.Exists(file) && File.GetLastWriteTime(file) > DateTime.Now.AddMonths(-1).AddDays(1);
+    }
+
+    /// What lazer does after importing a set (BeatmapUpdater.Process, which lazer's importer
+    /// leaves to the running game): ranked status and online IDs from lazer's local cache of
+    /// osu!'s beatmap data (never online: an empty source stands in for osu!'s API), then per
+    /// difficulty the star rating and length, BPM and object counts, all in one write.
+    /// Returns the difficulties done and the set's status afterwards.
+    public (int Maps, int Status) Process(Guid setId)
+    {
+        var lookup = Lookup();
+        var update = lookup.GetType().GetMethod("Update", [T(Game, "osu.Game.Beatmaps.BeatmapSetInfo"), typeof(bool)])
+                     ?? throw new MissingMethodException("BeatmapUpdaterMetadataLookup.Update(BeatmapSetInfo, bool) is gone (lazer changed?)");
+        var setType = T(Game, "osu.Game.Beatmaps.BeatmapSetInfo");
+        var infoType = T(Game, "osu.Game.Beatmaps.BeatmapInfo");
+        var flat = T(Game, "osu.Game.Beatmaps.FlatWorkingBeatmap");
+        var stats = T(Game, "osu.Game.Beatmaps.BeatmapInfoExtensions").GetMethod("UpdateStatisticsFromBeatmap", BindingFlags.Public | BindingFlags.Static)
+                    ?? throw new MissingMethodException("BeatmapInfoExtensions.UpdateStatisticsFromBeatmap is gone (lazer changed?)");
+        var maps = 0;
+        var status = 0;
+        InWrite(realm =>
+        {
+            var set = Find(realm, setType, setId) ?? throw new InvalidOperationException($"lazer has no set {setId}");
+            // preferOnlineFetch: false — the local cache first (the API source is empty anyway)
+            update.Invoke(lookup, [set, false]);
+            foreach (var info in ((IEnumerable)setType.GetProperty("Beatmaps")!.GetValue(set)!).Cast<object>())
+            {
+                var hash = (string)infoType.GetProperty("Hash")!.GetValue(info)!;
+                var file = Path.Combine(_dataDir, "files", hash[..1], hash[..2], hash);
+                // the chart as lazer decodes it, on its own (the stored difficulty stays out of the
+                // calculation; the file is the same)
+                var working = Construct(flat, file);
+                var beatmap = working.GetType().GetProperty("Beatmap")!.GetValue(working)!;
+                var decodedInfo = beatmap.GetType().GetProperty("BeatmapInfo")!.GetValue(beatmap)!;
+                var rulesetInfo = decodedInfo.GetType().GetProperty("Ruleset")!.GetValue(decodedInfo)!;
+                var ruleset = rulesetInfo.GetType().GetMethod("CreateInstance", Type.EmptyTypes)!.Invoke(rulesetInfo, null)!;
+                var calculator = ruleset.GetType().GetMethod("CreateDifficultyCalculator")!.Invoke(ruleset, [working])!;
+                var calculate = calculator.GetType().GetMethod("Calculate", [typeof(CancellationToken)])
+                                ?? throw new MissingMethodException("DifficultyCalculator.Calculate(CancellationToken) is gone (lazer changed?)");
+                var attributes = calculate.Invoke(calculator, [CancellationToken.None])!;
+                var stars = (double)attributes.GetType().GetProperty("StarRating")!.GetValue(attributes)!;
+                infoType.GetProperty("StarRating")!.SetValue(info, stars);
+                stats.Invoke(null, [info, beatmap]);
+                maps++;
+            }
+            status = (int)setType.GetProperty("StatusInt")!.GetValue(set)!;
+        });
+        return (maps, status);
+    }
+
+    /// Sets lazer's importer put in without what Process adds (by Fumen before it did that):
+    /// a difficulty without a star rating, or with objects but no length and BPM.
+    public List<Guid> Unprocessed()
+    {
+        var setType = T(Game, "osu.Game.Beatmaps.BeatmapSetInfo");
+        var infoType = T(Game, "osu.Game.Beatmaps.BeatmapInfo");
+        var p = (string name) => infoType.GetProperty(name) ?? throw new MissingMemberException($"BeatmapInfo.{name} is gone (lazer changed?)");
+        var (stars, length, bpm, objects) = (p("StarRating"), p("Length"), p("BPM"), p("TotalObjectCount"));
+        var found = new List<Guid>();
+        InWrite(realm =>
+        {
+            foreach (var set in All(realm, setType))
+            {
+                if ((bool)setType.GetProperty("DeletePending")!.GetValue(set)!) continue;
+                var unfinished = ((IEnumerable)setType.GetProperty("Beatmaps")!.GetValue(set)!).Cast<object>().Any(b =>
+                    (double)stars.GetValue(b)! < 0
+                    || ((double)length.GetValue(b)! == 0 && (double)bpm.GetValue(b)! == 0 && (int)objects.GetValue(b)! > 0));
+                if (unfinished) found.Add((Guid)setType.GetProperty("ID")!.GetValue(set)!);
+            }
+        });
+        return found;
+    }
+
+    /// lazer's metadata lookup, with an empty source in place of osu!'s API, and its local cache
+    /// only when the cache is there and fresh enough (see OnlineCache).
+    private object Lookup()
+    {
+        if (_lookup != null) return _lookup;
+        var sourceType = T(Game, "osu.Game.Beatmaps.IOnlineBeatmapMetadataSource");
+        // the decoder finds rulesets through a store lazer registers on start
+        var rulesets = Construct(T(Game, "osu.Game.Rulesets.AssemblyRulesetStore"), AppContext.BaseDirectory);
+        var register = T(Game, "osu.Game.Beatmaps.Formats.LegacyBeatmapDecoder").GetMethod("RegisterDependencies", BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy)
+                       ?? throw new MissingMethodException("LegacyBeatmapDecoder.RegisterDependencies is gone (lazer changed?)");
+        register.Invoke(null, [rulesets]);
+        var none = NoSource.For(sourceType);
+        object local = none;
+        if (OnlineCacheFresh())
+        {
+            local = Construct(T(Game, "osu.Game.Beatmaps.LocalCachedBeatmapMetadataSource"), _storage);
+            if (local is IDisposable d) _sources.Add(d);
+        }
+        _lookup = (IDisposable)Construct(T(Game, "osu.Game.Beatmaps.BeatmapUpdaterMetadataLookup"), none, local);
+        return _lookup;
+    }
+
+    /// Runs `body` with lazer's Realm in one of lazer's own write transactions (RealmAccess.Write).
+    private void InWrite(Action<object> body)
+    {
+        var realmType = T(Realms, "Realms.Realm");
+        var write = _realm.GetType().GetMethods(BindingFlags.Public | BindingFlags.Instance)
+            .FirstOrDefault(m => m.Name == "Write" && m.ReturnType == typeof(void) && m.GetParameters() is [{ ParameterType: var p }]
+                                 && p == typeof(Action<>).MakeGenericType(realmType))
+            ?? throw new MissingMethodException("RealmAccess.Write(Action<Realm>) is gone (lazer changed?)");
+        var thunk = new Thunk(body);
+        var apply = typeof(Thunk).GetMethod(nameof(Thunk.Apply))!.MakeGenericMethod(realmType);
+        write.Invoke(_realm, [Delegate.CreateDelegate(typeof(Action<>).MakeGenericType(realmType), thunk, apply)]);
+    }
+
+    private sealed class Thunk(Action<object> body)
+    {
+        public void Apply<TRealm>(TRealm realm) => body(realm!);
+    }
+
+    private static IEnumerable<object> All(object realm, Type type) =>
+        ((IEnumerable)realm.GetType().GetMethods(BindingFlags.Public | BindingFlags.Instance)
+            .First(m => m.Name == "All" && m.IsGenericMethodDefinition && m.GetParameters().Length == 0)
+            .MakeGenericMethod(type)
+            .Invoke(realm, null)!).Cast<object>();
+
+    private static object? Find(object realm, Type type, Guid id) =>
+        (realm.GetType().GetMethods(BindingFlags.Public | BindingFlags.Instance)
+             .FirstOrDefault(m => m.Name == "Find" && m.IsGenericMethodDefinition && m.GetParameters() is [{ ParameterType: var p }] && p == typeof(Guid?))
+         ?? throw new MissingMethodException("Realm.Find<T>(Guid?) is gone (Realm changed?)"))
+        .MakeGenericMethod(type)
+        .Invoke(realm, [(Guid?)id]);
 
     /// Writes collections in one of lazer's own write transactions (RealmAccess.Write); returns
     /// lazer's id for each and whether it was made new.
@@ -365,16 +539,19 @@ internal sealed class Lazer : IDisposable
         }
     }
 
-    /// The constructor of `type` that takes these arguments (trailing optional ones left out).
+    /// The constructor of `type` that takes these arguments (trailing optional ones left out);
+    /// lazer's internal ones too.
     private static object Construct(Type type, params object?[] args)
     {
-        foreach (var ctor in type.GetConstructors(BindingFlags.Public | BindingFlags.Instance))
+        foreach (var ctor in type.GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
         {
             var ps = ctor.GetParameters();
             if (ps.Length < args.Length || ps.Skip(args.Length).Any(p => !p.HasDefaultValue)) continue;
             var ok = true;
             for (var i = 0; i < args.Length && ok; i++)
-                ok = args[i] == null ? !ps[i].ParameterType.IsValueType : ps[i].ParameterType.IsInstanceOfType(args[i]);
+                ok = args[i] == null
+                    ? !ps[i].ParameterType.IsValueType || Nullable.GetUnderlyingType(ps[i].ParameterType) != null
+                    : ps[i].ParameterType.IsInstanceOfType(args[i]);
             if (!ok) continue;
             var full = args.Concat(ps.Skip(args.Length).Select(p => p.DefaultValue)).ToArray();
             return ctor.Invoke(full);
@@ -382,5 +559,28 @@ internal sealed class Lazer : IDisposable
         throw new MissingMethodException($"No constructor of {type.FullName} for ({string.Join(", ", args.Select(a => a?.GetType().Name ?? "null"))}) (lazer changed?)");
     }
 
-    public void Dispose() => _realm.Dispose();
+    public void Dispose()
+    {
+        _lookup?.Dispose();
+        foreach (var s in _sources) s.Dispose();
+        _realm.Dispose();
+    }
+}
+
+/// An IOnlineBeatmapMetadataSource (lazer's, known at run time) that's never available and never
+/// finds anything: what stands in for osu!'s API, so nothing is looked up online.
+public class NoSource : DispatchProxy
+{
+    public static object For(Type sourceInterface) =>
+        typeof(DispatchProxy).GetMethods(BindingFlags.Public | BindingFlags.Static)
+            .First(m => m.Name == "Create" && m.IsGenericMethodDefinition && m.GetGenericArguments().Length == 2)
+            .MakeGenericMethod(sourceInterface, typeof(NoSource))
+            .Invoke(null, null)!;
+
+    protected override object? Invoke(MethodInfo? method, object?[]? args) => method switch
+    {
+        // TryLookup(BeatmapInfo, out OnlineBeatmapMetadata?): the out value stays null
+        { ReturnType: var r } when r == typeof(bool) => false,
+        _ => null,
+    };
 }

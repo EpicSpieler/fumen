@@ -702,7 +702,56 @@ async fn lazer_import_status(app: AppHandle) -> Result<lazer_import::Status> {
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
         let compat = state.compat();
-        Ok(lazer_import::status(state.storage().as_deref(), &compat))
+        let mut status = lazer_import::status(state.storage().as_deref(), &compat);
+        status.unfinished = unfinished_sets(&state.db())?;
+        Ok(status)
+    })
+    .await
+    .map_err(|e| Error::known("internal", e.to_string()))?
+}
+
+/// lazer sets in the library that lazer's importer left without details (no star rating, or
+/// objects but no length and BPM): the ones an older Fumen imported. The importer decides for
+/// itself which to finish; this is for showing.
+fn unfinished_sets(conn: &rusqlite::Connection) -> Result<usize> {
+    Ok(conn.query_row(
+        "SELECT COUNT(DISTINCT s.id) FROM sets s JOIN maps m ON m.set_id = s.id
+         WHERE s.source = 'lazer' AND (m.sr < 0 OR (m.length = 0 AND m.bpm = 0 AND m.objects > 0))",
+        [],
+        |r| r.get::<_, i64>(0),
+    )? as usize)
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RepairSummary {
+    finished: usize,
+    failed: usize,
+}
+
+/// Finishes the sets an older Fumen imported into lazer without their details (see
+/// `lazer_import.rs`), then updates Fumen's library.
+#[tauri::command]
+async fn repair_lazer_sets(app: AppHandle) -> Result<RepairSummary> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        if state.scanning.swap(true, Ordering::SeqCst) {
+            return Err(Error::known("busy", "The library is being updated; try again in a moment."));
+        }
+        let result = (|| {
+            let storage = state
+                .storage()
+                .ok_or_else(|| Error::known("lazer-not-found", "osu!lazer's data folder wasn't found. Pick it in Settings."))?;
+            let (finished, failed) = lazer_import::repair(&storage, &state.cache_dir, &state.data_dir.join("lazer-backups"), &state.compat())?;
+            if finished > 0 {
+                if let Err(e) = run_scan(&app, &state) {
+                    eprintln!("[repair] library update: {e}");
+                }
+            }
+            Ok(RepairSummary { finished, failed })
+        })();
+        state.scanning.store(false, Ordering::SeqCst);
+        result
     })
     .await
     .map_err(|e| Error::known("internal", e.to_string()))?
@@ -713,7 +762,9 @@ async fn lazer_import_status(app: AppHandle) -> Result<lazer_import::Status> {
 struct ImportProgress {
     /// which of the pasted lines
     index: usize,
-    /// resolving | downloading | ready (downloaded, waiting for lazer) | importing | done | skipped | error
+    /// resolving | downloading | held (the mirrors are busy or resting after a rate limit; `total`:
+    /// seconds to go, about) | ready (downloaded, waiting for lazer) | importing | done | skipped |
+    /// error
     stage: &'static str,
     set: Option<u32>,
     title: Option<String>,
@@ -894,6 +945,7 @@ fn run_import(app: &AppHandle, state: &AppState, links: &[String]) -> Result<Imp
     // downloads (a few at once) and imports (a batch at a time) run side by side; downloads wait
     // while enough sets are waiting for lazer
     let dl_dir = state.cache_dir.join("downloads");
+    let mirrors = downloads::Mirrors::default();
     let cancel = &state.import_cancel;
     let queue = Mutex::new(std::collections::VecDeque::from(sets.clone()));
     let waiting = std::sync::atomic::AtomicUsize::new(0);
@@ -902,7 +954,7 @@ fn run_import(app: &AppHandle, state: &AppState, links: &[String]) -> Result<Imp
     std::thread::scope(|scope| {
         for _ in 0..DOWNLOADERS.min(sets.len()) {
             let tx = tx.clone();
-            let (queue, waiting, dl_dir) = (&queue, &waiting, &dl_dir);
+            let (queue, waiting, dl_dir, mirrors) = (&queue, &waiting, &dl_dir, &mirrors);
             scope.spawn(move || loop {
                 if cancel.load(Ordering::SeqCst) {
                     break;
@@ -912,11 +964,24 @@ fn run_import(app: &AppHandle, state: &AppState, links: &[String]) -> Result<Imp
                     continue;
                 }
                 let Some((i, set)) = queue.lock().unwrap_or_else(|e| e.into_inner()).pop_front() else { break };
-                let mut last: Option<std::time::Instant> = None;
-                let result = downloads::download_set(set, dl_dir, |done, total| {
-                    if last.map_or(true, |t| t.elapsed() >= std::time::Duration::from_millis(120)) || Some(done) == total {
-                        last = Some(std::time::Instant::now());
-                        let p = ImportProgress { index: i, stage: "downloading", set: Some(set), title: None, done, total: total.unwrap_or(0), message: None };
+                let mut last: Option<(std::time::Instant, &'static str, u64)> = None;
+                let result = downloads::download_set(set, dl_dir, mirrors, |p| {
+                    let (stage, done, total, end) = match p {
+                        downloads::Progress::Bytes { done, total } => ("downloading", done, total.unwrap_or(0), Some(done) == total),
+                        downloads::Progress::Waiting { until } => {
+                            ("held", 0, until.saturating_duration_since(std::time::Instant::now()).as_secs(), false)
+                        }
+                    };
+                    // bytes a few times a second; a wait when it starts and as its seconds tick
+                    let due = match last {
+                        None => true,
+                        Some((at, s, t)) => {
+                            s != stage || end || if stage == "held" { t != total } else { at.elapsed() >= std::time::Duration::from_millis(120) }
+                        }
+                    };
+                    if due {
+                        last = Some((std::time::Instant::now(), stage, total));
+                        let p = ImportProgress { index: i, stage, set: Some(set), title: None, done, total, message: None };
                         let _ = app.emit("import-progress", p);
                     }
                     !cancel.load(Ordering::SeqCst)
@@ -936,6 +1001,7 @@ fn run_import(app: &AppHandle, state: &AppState, links: &[String]) -> Result<Imp
 
         let mut ready: Vec<(usize, u32, PathBuf)> = Vec::new();
         let mut downloading = true;
+        let mut repaired = false;
         loop {
             match rx.recv_timeout(std::time::Duration::from_millis(100)) {
                 Ok((i, set, Ok(path))) => {
@@ -966,7 +1032,9 @@ fn run_import(app: &AppHandle, state: &AppState, links: &[String]) -> Result<Imp
                     emit(i, "importing", Some(set), None, None);
                 }
                 let paths: Vec<PathBuf> = batch.iter().map(|(_, _, p)| p.clone()).collect();
-                let results = lazer_import::import(&storage, &state.cache_dir, &state.data_dir.join("lazer-backups"), &paths, &compat);
+                // the run's first batch also finishes sets an older Fumen imported without details
+                let results = lazer_import::import(&storage, &state.cache_dir, &state.data_dir.join("lazer-backups"), &paths, !repaired, &compat);
+                repaired = true;
                 for p in &paths {
                     let _ = std::fs::remove_file(p);
                 }
@@ -1131,6 +1199,7 @@ pub fn run() {
             get_skins,
             get_skin_files,
             lazer_import_status,
+            repair_lazer_sets,
             import_beatmaps,
             cancel_import,
             find_played_sets,

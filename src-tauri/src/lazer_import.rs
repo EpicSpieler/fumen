@@ -16,7 +16,11 @@
 //!      lazer update the database is migrated by lazer's next start, not by Fumen;
 //!   5. lazer gets a copy of each archive (it deletes what it imported).
 //!
-//! What lazer would do online (ranked status, star ratings) it does itself on its next start.
+//! After each set, the importer does what lazer does after an import (lazer's own code again):
+//! ranked status from lazer's local cache of osu!'s beatmap data — never online —, star ratings,
+//! length, BPM. Without it lazer shows a set as unknown with 0 BPM until it gets around to it.
+//! What the local cache doesn't know, lazer looks up online itself on its next start. Sets an
+//! older Fumen imported without this are finished by the first import of a run (`--repair`).
 //!
 //! Collections go in the same way, with the same checks (`put_collections`): lazer's own
 //! `RealmAccess.Write` on its `BeatmapCollection`s.
@@ -199,6 +203,8 @@ pub struct Status {
     pub running: bool,
     /// versions listed as tested, newest first
     pub tested_versions: Vec<String>,
+    /// sets in lazer without their details (imported by an older Fumen), from Fumen's library
+    pub unfinished: usize,
 }
 
 pub fn status(storage: Option<&Path>, compat: &Compat) -> Status {
@@ -220,7 +226,7 @@ pub fn status(storage: Option<&Path>, compat: &Compat) -> Status {
         Some(_) if running => (Some("running"), Some("osu!lazer is running. Close it to import.".to_string())),
         Some(_) => (None, None),
     };
-    Status { ready: reason.is_none(), reason, message, version, tested, running, tested_versions }
+    Status { ready: reason.is_none(), reason, message, version, tested, running, tested_versions, unfinished: 0 }
 }
 
 /// A status reason as one of Fumen's error codes.
@@ -338,22 +344,10 @@ pub struct Imported {
 }
 
 /// Imports archives into the lazer library at `storage`, if everything's safe (see the module
-/// docs). `backups` is where `client.realm` is saved first.
-pub fn import(storage: &Path, cache: &Path, backups: &Path, files: &[PathBuf], compat: &Compat) -> Result<Vec<Imported>> {
-    let st = status(Some(storage), compat);
-    if let Some(reason) = st.reason {
-        return Err(Error::known(error_code(reason), st.message.unwrap_or_default()));
-    }
-    let lazer = installed().ok_or_else(|| Error::known("lazer-not-installed", "osu!lazer's installation wasn't found."))?;
-    let host = host_dir(cache, &lazer)?;
-    backup(storage, backups)?;
-
-    let mut args: Vec<&std::ffi::OsStr> = vec!["import".as_ref(), storage.as_os_str()];
-    args.extend(files.iter().map(|f| f.as_os_str()));
-    let (code, lines) = run(&host, &args)?;
-    if code != 0 {
-        return Err(importer_error(code, &lines, "Importing into lazer"));
-    }
+/// docs). `backups` is where `client.realm` is saved first. `repair`: first finish sets imported
+/// earlier without their details (see the module docs).
+pub fn import(storage: &Path, cache: &Path, backups: &Path, files: &[PathBuf], repair: bool, compat: &Compat) -> Result<Vec<Imported>> {
+    let lines = run_import(storage, cache, backups, files, repair, compat)?;
     Ok(lines
         .iter()
         .filter(|l| l.get("file").is_some())
@@ -364,6 +358,40 @@ pub fn import(storage: &Path, cache: &Path, backups: &Path, files: &[PathBuf], c
             message: l["message"].as_str().map(str::to_string),
         })
         .collect())
+}
+
+/// Finishes the sets in lazer that an older Fumen imported without their details (see the module
+/// docs), with the same checks as an import. Returns how many were finished and how many lazer's
+/// code couldn't do (lazer finishes those itself on its next start).
+pub fn repair(storage: &Path, cache: &Path, backups: &Path, compat: &Compat) -> Result<(usize, usize)> {
+    let lines = run_import(storage, cache, backups, &[], true, compat)?;
+    let done = lines.iter().filter(|l| l.get("set").is_some() && l["processed"] == true).count();
+    let failed = lines.iter().filter(|l| l.get("set").is_some() && l["processed"] == false).count();
+    for l in lines.iter().filter(|l| l["processed"] == false) {
+        eprintln!("[repair] {}: {}", l["set"], l["message"]);
+    }
+    Ok((done, failed))
+}
+
+fn run_import(storage: &Path, cache: &Path, backups: &Path, files: &[PathBuf], repair: bool, compat: &Compat) -> Result<Vec<serde_json::Value>> {
+    let st = status(Some(storage), compat);
+    if let Some(reason) = st.reason {
+        return Err(Error::known(error_code(reason), st.message.unwrap_or_default()));
+    }
+    let lazer = installed().ok_or_else(|| Error::known("lazer-not-installed", "osu!lazer's installation wasn't found."))?;
+    let host = host_dir(cache, &lazer)?;
+    backup(storage, backups)?;
+
+    let mut args: Vec<&std::ffi::OsStr> = vec!["import".as_ref(), storage.as_os_str()];
+    if repair {
+        args.push("--repair".as_ref());
+    }
+    args.extend(files.iter().map(|f| f.as_os_str()));
+    let (code, lines) = run(&host, &args)?;
+    if code != 0 {
+        return Err(importer_error(code, &lines, "Importing into lazer"));
+    }
+    Ok(lines)
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -566,6 +594,11 @@ mod tests {
         let real = work.join("real");
         std::fs::create_dir_all(real.join("files")).unwrap();
         std::fs::copy(storage.join("client.realm"), real.join("client.realm")).unwrap();
+        // lazer's cache of osu!'s beatmap data, for the ranked status (a copy too)
+        let online = storage.join("online.db");
+        if online.is_file() {
+            std::fs::copy(&online, real.join("online.db")).unwrap();
+        }
         let realm = real.join("client.realm");
         let realm_arg = realm.to_str().unwrap();
         let (code, out) = importer(&host, &["checkschema", realm_arg, &schema.to_string()]);
@@ -580,11 +613,22 @@ mod tests {
         let before = export(&realm, &work.join("before.json"));
         let owned: Vec<u64> = before["sets"].as_array().unwrap().iter().filter_map(|s| s["onlineId"].as_u64()).collect();
         let set = TEST_SETS.into_iter().find(|s| !owned.contains(&u64::from(*s))).expect("all test sets are in the library");
-        let (archive, mirror) = crate::downloads::download_set(set, &work.join("dl"), |_, _| true).unwrap();
+        let (archive, mirror) = crate::downloads::download_set(set, &work.join("dl"), &crate::downloads::Mirrors::default(), |_| true).unwrap();
         let entries = zip_entries(&archive);
         let charts: Vec<&String> = entries.iter().filter(|(n, _)| n.to_lowercase().ends_with(".osu")).map(|(_, h)| h).collect();
         assert!(!charts.is_empty(), "set {set} has no charts");
         println!("test set {set} from {mirror}: {} files, {} charts", entries.len(), charts.len());
+
+        // what lazer works out after an import is there: star ratings, length, BPM
+        let processed = |out: &[serde_json::Value], exported: &serde_json::Value| {
+            let line = out.iter().find(|l| l["set"] == exported["id"]).unwrap_or_else(|| panic!("no processing reported: {out:?}"));
+            assert_eq!(line["processed"], true, "processing: {line}");
+            for m in exported["maps"].as_array().unwrap() {
+                let (sr, bpm, length) = (m["sr"].as_f64().unwrap(), m["bpm"].as_f64().unwrap(), m["length"].as_f64().unwrap());
+                assert!(sr > 0.0 && bpm > 0.0 && length > 0.0, "{}: {sr}★, {bpm} BPM, {length} ms", m["version"]);
+            }
+            line["status"].as_i64().unwrap()
+        };
 
         // the stored files and charts are the archive's, byte for byte
         let check_set = |data: &Path, exported: &serde_json::Value| {
@@ -612,6 +656,17 @@ mod tests {
         assert_eq!(fresh_sets.len(), 1, "sets in the fresh library");
         check_set(&fresh, fresh_sets.values().next().unwrap());
         println!("fresh library: imported, re-imported, one set with every file intact");
+        // the self test imports like an older Fumen (without processing): a repair run finishes it
+        if online.is_file() {
+            std::fs::copy(&online, fresh.join("online.db")).unwrap();
+        }
+        let (code, out) = importer(&host, &["import", fresh.to_str().unwrap(), "--repair"]);
+        assert_eq!((code, out[0]["repair"].as_u64()), (0, Some(1)), "repair: {out:?}");
+        let fresh_sets = sets_by_id(&export(&fresh.join("client.realm"), &work.join("fresh2.json")));
+        processed(&out, fresh_sets.values().next().unwrap());
+        let (_, out) = importer(&host, &["import", fresh.to_str().unwrap(), "--repair"]);
+        assert_eq!(out[0]["repair"].as_u64(), Some(0), "repairing again: {out:?}");
+        println!("repair: the set imported without details was finished, once");
 
         // 2. the copy of the real library: one set more, nothing else changed
         let (code, out) = importer(&host, &["import", real.to_str().unwrap(), archive.to_str().unwrap()]);
@@ -625,6 +680,8 @@ mod tests {
             assert_eq!(new.get(sid), Some(s), "set {sid} changed");
         }
         check_set(&real, &new[&id]);
+        let status = processed(&out, &new[&id]);
+        println!("the new set got its details (status {status}{})", if online.is_file() { "" } else { ", no online cache" });
         for part in ["scores", "collections", "skins", "rulesetSettings"] {
             assert_eq!(before[part], after[part], "{part} changed");
         }
