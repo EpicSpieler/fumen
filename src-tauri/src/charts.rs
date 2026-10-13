@@ -17,14 +17,19 @@ use crate::mma::{dan, patterns};
 use crate::paths;
 use crate::stars;
 
-pub fn load(files: &paths::Files, hash: &str) -> Result<Chart> {
+/// A difficulty's `.osu` file as text.
+fn read(files: &paths::Files, hash: &str) -> Result<String> {
     let path = files.path(hash).ok_or_else(|| Error::known("chart-missing", "This difficulty has no chart file."))?;
     let bytes = std::fs::read(&path).map_err(|e| match e.kind() {
         std::io::ErrorKind::NotFound => Error::known("chart-missing", "This difficulty's .osu file is missing."),
         _ => e.into(),
     })?;
     // very old files can be in a legacy code page; the parts we read are ASCII anyway
-    let text = String::from_utf8_lossy(&bytes);
+    Ok(String::from_utf8_lossy(&bytes).into_owned())
+}
+
+pub fn load(files: &paths::Files, hash: &str) -> Result<Chart> {
+    let text = read(files, hash)?;
     let mut chart = chart::parse(&text);
     if chart.mode == 1 {
         chart.taiko = crate::taiko::parse(&text);
@@ -96,6 +101,103 @@ fn taiko_out(t: &crate::taiko::Chart) -> TaikoOut {
         bars: t.bars.iter().flat_map(|&(a, b)| [a, b as u8 as f64]).collect(),
         presses: t.presses.iter().flat_map(|p| [p.time, p.keys as f64, p.object as f64]).collect(),
     }
+}
+
+/// An osu! difficulty for the playfield (see `osu.rs`), flat like the notes. Positions are
+/// stacked, in osu!pixels.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct OsuOut {
+    /// `OsuHitObject.Scale` from CS: circles are 128 × this across
+    scale: f32,
+    /// approach time and fade-in, ms
+    preempt: f64,
+    fade_in: f64,
+    /// `[time, kind, end, x, y, colour, number, flags, a, b]` per object: kind 0 circle, 1 slider,
+    /// 2 spinner; colour the combo colour index (lazer's, from 1); number the one on the circle;
+    /// flags 1 new combo; a, b: a slider's index into `sliders`, a spinner's spins needed and
+    /// bonus spins
+    objects: Vec<f64>,
+    sliders: Vec<OsuSliderOut>,
+    /// `[time, x, y, buttons]` per autoplay frame: buttons 1 left, 2 right
+    frames: Vec<f64>,
+    /// the beatmap's own combo colours and slider colours, `[r, g, b]`
+    colours: Vec<[u8; 3]>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    slider_border: Option<[u8; 3]>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    slider_track: Option<[u8; 3]>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct OsuSliderOut {
+    /// `[x, y]` per point of the path, as straight pieces
+    path: Vec<f32>,
+    spans: u32,
+    span_duration: f64,
+    /// `[time, path progress]` per tick
+    ticks: Vec<f64>,
+}
+
+fn round2(v: f64) -> f64 {
+    (v * 100.0).round() / 100.0
+}
+
+fn osu_out(c: &crate::osu::Chart) -> OsuOut {
+    let mut objects = Vec::with_capacity(c.objects.len() * 10);
+    let mut sliders = Vec::new();
+    for o in &c.objects {
+        let pos = o.pos + o.stack_offset(c.scale);
+        let kind = match o.kind {
+            crate::osu::Kind::Circle => 0.0,
+            crate::osu::Kind::Slider => 1.0,
+            crate::osu::Kind::Spinner => 2.0,
+        };
+        let (a, b) = match (&o.slider, o.kind) {
+            (Some(s), _) => {
+                sliders.push(OsuSliderOut {
+                    path: s.path.points.iter().flat_map(|p| [(pos.x + p.x), (pos.y + p.y)]).map(|v| ((v * 100.0).round() / 100.0) as f32).collect(),
+                    spans: s.spans,
+                    span_duration: s.span_duration,
+                    ticks: s.ticks.iter().flat_map(|&(t, p)| [round2(t), (p * 1e6).round() / 1e6]).collect(),
+                });
+                ((sliders.len() - 1) as f64, 0.0)
+            }
+            (None, crate::osu::Kind::Spinner) => (o.spins as f64, o.bonus_spins as f64),
+            _ => (0.0, 0.0),
+        };
+        objects.extend([
+            round2(o.time),
+            kind,
+            round2(o.end),
+            round2(pos.x as f64),
+            round2(pos.y as f64),
+            o.colour as f64,
+            (o.index_in_combo + 1) as f64,
+            o.new_combo as u8 as f64,
+            a,
+            b,
+        ]);
+    }
+    OsuOut {
+        scale: c.scale,
+        preempt: c.preempt,
+        fade_in: c.fade_in,
+        objects,
+        sliders,
+        frames: c.frames.iter().flat_map(|f| [round2(f.time), round2(f.pos.x as f64), round2(f.pos.y as f64), f.buttons as f64]).collect(),
+        colours: c.colours.clone(),
+        slider_border: c.slider_border,
+        slider_track: c.slider_track,
+    }
+}
+
+/// An osu! difficulty for the playfield as raw JSON, `null` for other modes.
+pub fn osu_json(files: &paths::Files, hash: &str) -> Result<Vec<u8>> {
+    let text = read(files, hash)?;
+    let out = crate::osu::parse(&text).map(|c| osu_out(&c));
+    Ok(serde_json::to_vec(&out)?)
 }
 
 pub fn chart_json(chart: &Chart) -> Result<Vec<u8>> {
@@ -332,7 +434,10 @@ mod tests {
                 }
                 let Ok(chart) = load(&paths::Files::lazer(&storage), hash) else { continue };
                 let mut v: serde_json::Value = serde_json::from_slice(&chart_json(&chart).unwrap()).unwrap();
-                if chart.mode == 1 || chart.mode == 3 {
+                if chart.mode == 0 {
+                    v["osu"] = serde_json::from_slice(&osu_json(&paths::Files::lazer(&storage), hash).unwrap()).unwrap();
+                }
+                if chart.mode != 2 {
                     let read = |h: &str| paths::lazer_file(&storage, h).and_then(|p| std::fs::read(p).ok()).map(|b| String::from_utf8_lossy(&b).into_owned());
                     if let Some(osu) = read(hash) {
                         let osb = files.storyboard().and_then(read);
