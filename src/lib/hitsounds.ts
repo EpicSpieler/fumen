@@ -1,6 +1,8 @@
 /* hitsounds.ts — the playing chart's hitsounds in the fullscreen playfield, as lazer plays them
  * under autoplay: every note's sounds at its time, the set's custom samples and storyboard
- * samples included (which sounds: src-tauri/src/hitsounds.rs), the rest from the skin.
+ * samples included (which sounds: src-tauri/src/hitsounds.rs), the rest from the skin. osu!'s
+ * slider slides and spinner spins loop for as long as they last (a spin rising in pitch); a
+ * banana shower's bananas sound higher one by one.
  *
  * Sounds are scheduled a little ahead on the Web Audio clock the song itself plays through
  * (eq.ts), mapped from the song's position; a jump in the song (seek, loop) or a pause stops
@@ -22,6 +24,8 @@ const LOOKAHEAD = 0.12;
 const TICK = 25;
 /** a sound this late (ms of song) is dropped rather than played late */
 const LATE = 40;
+/** numbers per looping sound in `ChartSounds.loops` */
+const LOOP = 7;
 /** the song's clock and the mapping onto Web Audio's may part by this much (ms of song) before
  * it counts as a jump */
 const JUMP = 40;
@@ -66,12 +70,16 @@ class Hitsounds {
   private sounds: ChartSounds | null = null;
   /** decoded sound per sample (null while loading, or missing) */
   private bufs: (AudioBuffer | null)[] = [];
+  /** playback rate per sample (bananas) */
+  private pitches: number[] = [];
   private loaded = "";
   private job = 0;
   private active = false;
   private timer = 0;
   /** next event (index into `sounds.events`) */
   private next = 0;
+  /** next looping sound (index of its start in `sounds.loops`) */
+  private nextLoop = 0;
   /** song ms at context time `at`, at `rate` */
   private anchor: { song: number; at: number; rate: number } | null = null;
   private voices: Voice[] = [];
@@ -92,6 +100,7 @@ class Hitsounds {
     this.halt();
     this.sounds = null;
     this.bufs = [];
+    this.pitches = [];
     const ctx = this.context();
     if (!ctx) return;
     if (this.chart?.id !== mapId) {
@@ -113,6 +122,7 @@ class Hitsounds {
     for (const url of [...buffers.keys()]) if (!keep.has(url)) buffers.delete(url);
     this.sounds = sounds;
     this.bufs = urls.map(() => null);
+    this.pitches = sounds.samples.map(Hitsounds.pitch);
     // sounds join as they're decoded (keysounded charts have hundreds)
     urls.forEach((url, i) => {
       if (!url) return;
@@ -195,6 +205,13 @@ class Hitsounds {
       this.halt();
       an = this.anchor = { song, at: now, rate };
       this.next = lowerBound(s.events, song - LATE);
+      // loops under way carry on from here
+      const loops = s.loops ?? [];
+      this.nextLoop = 0;
+      while (this.nextLoop < loops.length && loops[this.nextLoop] < song) {
+        if (loops[this.nextLoop + 1] > song) this.loop(ctx, an, this.nextLoop, song);
+        this.nextLoop += LOOP;
+      }
     }
     const horizon = an.song + (now + LOOKAHEAD - an.at) * 1000 * rate;
     const ev = s.events;
@@ -206,9 +223,46 @@ class Hitsounds {
       if (!buf || vol <= 0) continue;
       const at = an.at + (t - an.song) / 1000 / rate;
       if (at < now - LATE / 1000) continue;
-      this.play(ctx, buf, Math.max(at, now), vol / 100, rate);
+      this.play(ctx, buf, Math.max(at, now), vol / 100, rate * this.pitches[ev[this.next - 2]]);
+    }
+    const loops = s.loops ?? [];
+    while (this.nextLoop < loops.length && loops[this.nextLoop] <= horizon) {
+      this.loop(ctx, an, this.nextLoop, loops[this.nextLoop]);
+      this.nextLoop += LOOP;
     }
     this.voices = this.voices.filter((v) => v.end > now);
+  }
+
+  /** Starts the looping sound at `i` (into `sounds.loops`) from song time `from`. */
+  private loop(ctx: AudioContext, an: { song: number; at: number; rate: number }, i: number, from: number): void {
+    const l = this.sounds!.loops!;
+    const [start, end, sample, volume, rate0, rate1, rampEnd] = l.slice(i, i + LOOP);
+    const buf = this.bufs[sample];
+    if (!buf || volume <= 0 || end <= from) return;
+    const now = ctx.currentTime;
+    const when = (song: number) => an.at + (song - an.song) / 1000 / an.rate;
+    const at = Math.max(now, when(from));
+    const stop = when(end);
+    if (stop <= at) return;
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.loop = true;
+    // the pitch: from rate0 at the start to rate1 at the ramp's end (and the song's rate on top)
+    const rateAt = (song: number) => (rampEnd > start ? rate0 + (rate1 - rate0) * Math.min(1, Math.max(0, (song - start) / (rampEnd - start))) : rate1);
+    src.playbackRate.setValueAtTime(rateAt(from) * an.rate, at);
+    if (rampEnd > from) src.playbackRate.linearRampToValueAtTime(rate1 * an.rate, Math.max(at, when(rampEnd)));
+    const g = ctx.createGain();
+    g.gain.value = volume / 100;
+    src.connect(g).connect(this.out!);
+    src.start(at);
+    src.stop(stop);
+    this.voices.push({ src, end: stop });
+  }
+
+  /** DrawableBanana: a shower's bananas sound higher one by one ("catch:banana:<number>") */
+  private static pitch(s: ChartSounds["samples"][number]): number {
+    const m = "skin" in s ? /^catch:banana:(\d+)$/.exec(s.skin) : null;
+    return m ? 0.77 + Number(m[1]) * 0.006 : 1;
   }
 
   private play(ctx: AudioContext, buf: AudioBuffer, at: number, gain: number, rate: number): void {
