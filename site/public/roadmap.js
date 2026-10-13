@@ -1113,9 +1113,12 @@ function applyFilter(name) {
 function setupFilter() {
   const seg = $(".seg");
   const bar = $(".seg-bar", seg);
+  // measured from the boxes as drawn (sub-pixel, zoom and a late web font included)
   const move = (btn) => {
-    bar.style.setProperty("--seg-x", `${btn.offsetLeft + 12}px`);
-    bar.style.setProperty("--seg-w", String(btn.offsetWidth - 24));
+    const s = seg.getBoundingClientRect();
+    const r = btn.getBoundingClientRect();
+    bar.style.setProperty("--seg-x", `${r.left - s.left + seg.scrollLeft + 12}px`);
+    bar.style.setProperty("--seg-w", `${Math.max(0, r.width - 24)}px`);
   };
   const current = () => $("[aria-selected='true']", seg);
   seg.addEventListener("click", (e) => {
@@ -1125,8 +1128,10 @@ function setupFilter() {
     move(btn);
     applyFilter(btn.dataset.filter);
   });
+  // the buttons change size when the font comes in or the page is zoomed
+  new ResizeObserver(() => move(current())).observe(seg);
+  for (const b of seg.querySelectorAll("button")) new ResizeObserver(() => move(current())).observe(b);
   document.fonts.ready.then(() => move(current()));
-  addEventListener("resize", () => move(current()));
   move(current());
 }
 

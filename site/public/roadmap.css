@@ -149,13 +149,12 @@ button { font: inherit; color: inherit; cursor: default; }
   position: absolute;
   left: 0;
   bottom: 0;
-  width: 1px;
+  width: var(--seg-w, 0);
   height: 2px;
   border-radius: 1px;
   background: var(--accent);
-  transform-origin: left;
-  transform: translateX(var(--seg-x, 0)) scaleX(var(--seg-w, 0));
-  transition: transform .5s var(--spring);
+  transform: translateX(var(--seg-x, 0));
+  transition: transform .5s var(--spring), width .5s var(--spring);
 }
 
 /* ── timeline ─────────────────────────────────────────────────────────── */
