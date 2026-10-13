@@ -84,9 +84,16 @@ nothing), and Fumen trades the code (later the refresh token) for tokens at the 
 | 0.2 | Charts | `.osu` hit-object parser; mania chart preview (scrolling playfield); density/NPS graph; LN %, chord/jack/stream stats; auto pattern tags ("jumpstream", "LN", "chordjack", "tech") |
 | 0.3 | Collections | Fumen collections + smart collections (saved filters); drag & drop; export to `collection.db` (stable / Collection Manager) and to lazer (lazer closed, backup first); stable source (`osu!.db` + Songs) |
 | 0.4 | You | adding beatmaps from osu! links straight into lazer; lazer scores + osu! API v2 (OAuth); play history; per-pattern skill radar; "practice next" suggestions; goals |
-| 0.5 | Pools | Pool builder: NM/HD/HR/DT/FM/TB slots, mod-adjusted SR/BPM/length, look up maps you don't own via API, export to JSON/CSV/sheet + RPRO bot, pool showcase image |
+| 0.5 | Pools | Pool builder: NM/HD/HR/DT/FM/TB slots, mod-adjusted SR/BPM/length, look up maps you don't own via API, export to JSON/CSV/sheet + RPRO bot, pool showcase image; **mods in the playfield**; **similar maps**; **beatmap search on the mirrors** |
 | 0.6 | Tournament | Schedule, mp-link parsing + match results, OBS overlay served locally |
+| 0.7 | Practice | **Replays in the playfield** (lazer's, else your score on osu!); **practice mode** (A–B loop, rate ramp, metronome); **chart numbers for osu! / taiko / catch** |
+| 0.8 | Library care | **Duplicates, broken files, unplayed space hogs**; osu!stable's `scores.db` |
 | 1.0 | Release | Installer, auto-update (GitHub Releases), de/en, OLED/Light/High-contrast themes, website |
+| later | After 1.0 | Sessions and a weekly report; Discord Rich Presence; skin browser, side-by-side and mixing; the analyser's leftovers |
+
+Before 1.0 is what serves the vision directly (understand a chart, organise, practise with intent,
+build pools); after 1.0 is what's nice to have around it. Within a version, the order of the
+sections below is the order of the work.
 
 ## v0.1 — detailed scope
 
@@ -245,6 +252,64 @@ nothing), and Fumen trades the code (later the refresh token) for tokens at the 
       library or single `.osu` files from osu.direct / nekoha / catboy (cached by id + md5,
       dropped after 60 days), analysed like the library's (shares, Fumen's 0.75× / 1.5× / played
       rates; osu!'s 1× rating); skills worked out by the same lib/skills code
+
+## v0.5 — pools
+
+- [ ] Mods in the playfield (first: the pool builder shows a slot the way it plays). Rate mods
+      are there; added: HR (osu! flipped vertically, CS ×1.3 / AR / OD ×1.4 capped at 10; catch
+      mirrored with osu!stable's HardRock offsets — `applyHardRockOffset` in catch.rs —, CS ×1.3,
+      AR ×1.4; taiko OD / scroll; mania nothing but OD), EZ (the halves), HD (lazer's fades per
+      ruleset: osu! approach-less fade-out, mania FadeIn/Hidden coverage, catch's fade near the
+      catcher, taiko's), FL (lazer's flashlight sizes by combo), Mirror (mania columns, osu!
+      horizontal / vertical, catch). The chart is re-laid in Rust with the mod's difficulty
+      (stacking, preempt, hyperdashes change); star rating at the mod where Fumen's calculator has
+      it (mania: DT/HT/EZ-HR OD don't change SR, HR doesn't exist; others: lazer's value only)
+- [ ] Pool builder (the table above)
+- [ ] Similar maps: a chart's fingerprint (pattern shares, SR, BPM, length, LN %, key mode) and
+      the nearest ones in the library; "replace this slot with something like it" in the pool
+      builder; on the set page and for the compared player's charts ("what they play that hits
+      your weak patterns")
+- [ ] Beatmap search on the mirrors: osu.direct / nerinyan / catboy search APIs (never osu!'s
+      servers), filters (ruleset, keys, SR, BPM, status, mapper), results marked "in library",
+      import through the existing pipeline; "packs": a search's results as one queued import
+
+## v0.6 — tournament
+
+- [ ] (as in the roadmap table)
+
+## v0.7 — practice
+
+- [ ] Replays in the playfield instead of autoplay: lazer's own replays (the score's `.osr` in
+      lazer's files, via the sidecar export), else the player's global score on that difficulty
+      from osu! (API v2 `/beatmaps/{id}/scores/users/{user}`, then the replay download — only when
+      asked, one at a time, cached; replays, never beatmap files). `.osr` read in Rust (LZMA frames),
+      judged per ruleset with lazer's hit windows (mania, osu! hits / slider ends, taiko, catch
+      positions); hit errors and misses on the timeline, jump to each; accuracy so far beside the
+      playfield
+- [ ] Practice mode: an A–B loop over a section (picked on the density graph), a rate that climbs
+      each loop (e.g. 0.80× → 1.00× in 0.05 steps), a metronome from the timing points; the
+      section remembered per chart. "Practice next" can open a chart straight at its hardest part
+      of the pattern
+- [ ] Chart numbers for osu! / taiko / catch in the panel and the fullscreen side: osu! jump
+      distances, stream lengths, slider share, aim vs speed lean; taiko colour changes (don/kat
+      patterns), finisher share; catch hyperdash share, dash distance, banana time
+
+## v0.8 — library care
+
+- [ ] Duplicates (the same MD5 in lazer and stable, the same set twice, re-uploads under new ids),
+      missing or broken audio / backgrounds, sets never played that take the most space; storage
+      by ruleset / status; "clean up" lists that hand the deletion to lazer (never deleting itself)
+- [ ] osu!stable's `scores.db` into the play history
+
+## After 1.0
+
+- Sessions: what was played when (lazer and osu! scores grouped into sittings), a weekly report
+  (plays, time, skills that moved, goals closer), shareable as an image
+- Discord Rich Presence ("listening to …", "practising Jacks 4.5★"); needs a Discord application
+  (its client id, made by the user in Discord's developer portal)
+- Skin browser: every skin on the same moment of a chart, two side by side, and mixing pieces of
+  several skins into an `.osk` (osu! / mania / taiko / catch parts per skin)
+- The analyser's leftovers (Azusa's marathon correction, Roxy / Mixed estimators — v0.2)
 
 ## Workflow
 
