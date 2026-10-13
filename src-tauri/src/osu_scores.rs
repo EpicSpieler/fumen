@@ -343,6 +343,162 @@ pub fn fetch(ep: &Endpoints, token: &str, account: &Account) -> Result<Fetched> 
     Ok(f)
 }
 
+/// A beatmap set the player has played: from osu!'s play counts, top plays (every ruleset) and
+/// the scores Fumen has synced (what the Performance view shows).
+#[derive(Debug, Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlayedSet {
+    pub id: u32,
+    pub title: String,
+    pub artist: String,
+    pub creator: String,
+    /// plays over all its difficulties (osu!'s play counts)
+    pub plays: i64,
+    /// difficulties played
+    pub maps: u32,
+    /// osu!'s status ("ranked", "loved", "graveyard", …; empty when not known)
+    pub status: String,
+    /// one of its difficulties is in the player's top plays
+    pub top: bool,
+}
+
+/// How many play counts are read at most (osu! pages them 100 at a time).
+const MAX_PLAY_COUNTS: usize = 100_000;
+
+/// Played sets by id, each difficulty counted once.
+#[derive(Default)]
+pub struct PlayedSets {
+    sets: Vec<PlayedSet>,
+    index: HashMap<u32, usize>,
+    beatmaps: std::collections::HashSet<i64>,
+}
+
+impl PlayedSets {
+    /// One difficulty of set `id` (`beatmap`, when known, counts once however often it comes).
+    pub fn add(&mut self, id: u32, beatmap: Option<i64>, plays: i64, top: bool, about: impl FnOnce() -> PlayedSet) {
+        if id == 0 {
+            return;
+        }
+        let new_map = beatmap.map_or(true, |b| self.beatmaps.insert(b));
+        let i = match self.index.get(&id) {
+            Some(&i) => i,
+            None => {
+                self.index.insert(id, self.sets.len());
+                self.sets.push(PlayedSet { id, ..about() });
+                self.sets.len() - 1
+            }
+        };
+        let s = &mut self.sets[i];
+        if new_map {
+            s.maps += 1;
+            s.plays += plays;
+        }
+        s.top |= top;
+    }
+
+    /// Most played first, top plays before the rest at equal plays.
+    pub fn into_sorted(mut self) -> Vec<PlayedSet> {
+        self.sets.sort_by(|a, b| b.plays.cmp(&a.plays).then(b.top.cmp(&a.top)).then(a.id.cmp(&b.id)));
+        self.sets
+    }
+}
+
+fn about_set(set: &Value) -> PlayedSet {
+    PlayedSet {
+        title: text(&set["title"]),
+        artist: text(&set["artist"]),
+        creator: text(&set["creator"]),
+        status: text(&set["status"]),
+        ..Default::default()
+    }
+}
+
+fn set_id(item: &Value) -> u32 {
+    item["beatmapset"]["id"]
+        .as_u64()
+        .or_else(|| item["beatmap"]["beatmapset_id"].as_u64())
+        .and_then(|v| u32::try_from(v).ok())
+        .unwrap_or(0)
+}
+
+/// Every set the player has ever played (`most_played` goes through all of them, 100 at a time)
+/// and the sets of their top plays in every ruleset. `progress` gets the play counts and scores
+/// read so far.
+pub fn played_sets(ep: &Endpoints, token: &str, user_id: u64, out: &mut PlayedSets, mut progress: impl FnMut(usize)) -> Result<()> {
+    let mut read = 0;
+    let mut offset = 0;
+    loop {
+        let page = api_get_patiently(ep, token, &format!("users/{user_id}/beatmapsets/most_played?limit=100&offset={offset}"))?;
+        let items = list(&page);
+        for item in items {
+            let count = item["count"].as_i64().unwrap_or(0);
+            let beatmap = item["beatmap_id"].as_i64().or_else(|| item["beatmap"]["id"].as_i64());
+            out.add(set_id(item), beatmap, count, false, || about_set(&item["beatmapset"]));
+        }
+        offset += items.len();
+        read += items.len();
+        progress(read);
+        if items.len() < 100 || offset >= MAX_PLAY_COUNTS {
+            break;
+        }
+    }
+    // top plays (a difficulty can be in them without a play count, e.g. a play from long ago)
+    for name in RULESETS {
+        for page in 0..TOP_PAGES {
+            let offset = page * 100;
+            let top = api_get_patiently(ep, token, &format!("users/{user_id}/scores/best?mode={name}&limit=100&offset={offset}"))?;
+            let items = list(&top);
+            for item in items {
+                let beatmap = item["beatmap_id"].as_i64().or_else(|| item["beatmap"]["id"].as_i64());
+                out.add(set_id(item), beatmap, 0, true, || about_set(&item["beatmapset"]));
+            }
+            read += items.len();
+            progress(read);
+            if items.len() < 100 {
+                break;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// The sets of the scores Fumen has synced from osu! for `user_id` (recent plays from earlier
+/// syncs included), as the Performance view shows them.
+pub fn synced_sets(conn: &Connection, user_id: i64, out: &mut PlayedSets) -> Result<()> {
+    let mut st = conn.prepare(
+        "SELECT b.set_id, s.beatmap_id, MAX(s.best_pos IS NOT NULL), b.title, b.artist, b.creator
+         FROM osu_scores s JOIN osu_beatmaps b ON b.id = s.beatmap_id
+         WHERE s.user_id = ?1 AND b.set_id > 0
+         GROUP BY s.beatmap_id",
+    )?;
+    let mut rows = st.query([user_id])?;
+    while let Some(r) = rows.next()? {
+        let Ok(id) = u32::try_from(r.get::<_, i64>(0)?) else { continue };
+        let about = PlayedSet {
+            title: r.get::<_, Option<String>>(3)?.unwrap_or_default(),
+            artist: r.get::<_, Option<String>>(4)?.unwrap_or_default(),
+            creator: r.get::<_, Option<String>>(5)?.unwrap_or_default(),
+            ..Default::default()
+        };
+        out.add(id, Some(r.get(1)?), 0, r.get::<_, i64>(2)? != 0, || about);
+    }
+    Ok(())
+}
+
+/// `api_get`, waiting out osu!'s rate limit a few times instead of giving up.
+fn api_get_patiently(ep: &Endpoints, token: &str, path: &str) -> Result<Value> {
+    let mut tries = 0;
+    loop {
+        match api_get(ep, token, path) {
+            Err(e) if e.code() == "osu-busy" && tries < 3 => {
+                tries += 1;
+                std::thread::sleep(std::time::Duration::from_secs(if cfg!(test) { 0 } else { 20 }));
+            }
+            r => return r,
+        }
+    }
+}
+
 /// The player's scores osu! keeps on one difficulty, in each of these rulesets.
 pub fn fetch_map(ep: &Endpoints, token: &str, user_id: u64, beatmap_id: i64, modes: &[i64]) -> Result<Vec<ApiScore>> {
     let mut out = Vec::new();
@@ -1358,5 +1514,73 @@ mod tests {
         assert_eq!(one.iter().map(|s| s.id).collect::<Vec<_>>(), vec![100, 500]);
         assert!(fetch_map(&ep, "t", 2, 9, &[3]).unwrap().is_empty());
         assert_eq!(fetch(&ep, "expired", &account).unwrap_err().code(), "osu-logged-out");
+    }
+
+    #[test]
+    fn played_sets_go_through_every_page() {
+        let busy = Arc::new(Mutex::new(1));
+        let b = busy.clone();
+        let osu = mock(Box::new(move |_, path, _, _| {
+            let (path, query) = path.split_once('?').unwrap_or((path, ""));
+            if path == "/api/v2/users/2/scores/best" {
+                // one top play in mania on a set without a play count, one on set 1
+                let page = if query.contains("mode=mania") && query.contains("offset=0") {
+                    r#"[{"beatmap_id":900,"beatmap":{"id":900,"beatmapset_id":300},"beatmapset":{"id":300,"title":"Top","artist":"A","creator":"C","status":"loved"}},
+                        {"beatmap_id":0,"beatmap":{"id":0,"beatmapset_id":1},"beatmapset":{"id":1,"title":"T1","artist":"A","creator":"C","status":"ranked"}}]"#
+                } else {
+                    "[]"
+                };
+                return (200, page.into());
+            }
+            if path != "/api/v2/users/2/beatmapsets/most_played" {
+                return (404, "{}".into());
+            }
+            // one "slow down" on the way
+            if query.contains("offset=100") && std::mem::take(&mut *b.lock().unwrap()) == 1 {
+                return (429, "{}".into());
+            }
+            let item = |beatmap: i64, set: i64, count: i64| {
+                format!(r#"{{"beatmap_id":{beatmap},"count":{count},"beatmap":{{"id":{beatmap},"beatmapset_id":{set}}},"beatmapset":{{"id":{set},"title":"T{set}","artist":"A","creator":"C","status":"ranked"}}}}"#)
+            };
+            let page: Vec<String> = if query.contains("offset=0") {
+                // a full page: 50 sets with two difficulties each
+                (0..100).map(|i| item(i, 1 + i / 2, 1)).collect()
+            } else if query.contains("offset=100") {
+                vec![item(500, 1, 10), item(501, 99, 3)]
+            } else {
+                vec![]
+            };
+            (200, format!("[{}]", page.join(",")))
+        }));
+        let ep = Endpoints { site: osu.clone(), osu };
+        let mut seen = Vec::new();
+        let mut all = PlayedSets::default();
+        played_sets(&ep, "t", 2, &mut all, |n| seen.push(n)).unwrap();
+        // play counts, then the top plays of each ruleset (mania's: 2)
+        assert_eq!(seen, vec![100, 102, 102, 102, 102, 104]);
+
+        // a synced score on set 99 (known) and on set 400 (only Fumen has it)
+        let dir = std::env::temp_dir().join(format!("fumen-played-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let conn = db::open(&dir.join("t.db")).unwrap();
+        conn.execute_batch(
+            "INSERT INTO osu_beatmaps (id, set_id, title, artist, creator) VALUES (501, 99, 'T99', 'A', 'C'), (700, 400, 'Old', 'B', 'D');
+             INSERT INTO osu_scores (id, user_id, beatmap_id, mode, total_score, accuracy, max_combo, rank, passed, date, mods, statistics, best_pos)
+             VALUES (1, 2, 501, 3, 1, 1.0, 1, 1, 1, 0, '[]', '{}', NULL), (2, 2, 700, 3, 1, 1.0, 1, 1, 1, 0, '[]', '{}', 5),
+                    (3, 3, 800, 3, 1, 1.0, 1, 1, 1, 0, '[]', '{}', NULL);",
+        )
+        .unwrap();
+        synced_sets(&conn, 2, &mut all).unwrap();
+        let sets = all.into_sorted();
+        assert_eq!(sets.len(), 53);
+        // set 1: two difficulties at 1 play, one more at 10; its top play is on one of them
+        assert_eq!((sets[0].id, sets[0].plays, sets[0].maps, sets[0].top), (1, 12, 3, true));
+        // set 99: its difficulty counted once though synced too
+        assert_eq!((sets[1].id, sets[1].plays, sets[1].maps, sets[1].title.as_str()), (99, 3, 1, "T99"));
+        assert_eq!(sets[2].status, "ranked");
+        let top = sets.iter().find(|s| s.id == 300).unwrap();
+        assert_eq!((top.plays, top.top, top.status.as_str(), top.title.as_str()), (0, true, "loved", "Top"));
+        let old = sets.iter().find(|s| s.id == 400).unwrap();
+        assert_eq!((old.top, old.title.as_str(), old.status.as_str()), (true, "Old", ""));
     }
 }
