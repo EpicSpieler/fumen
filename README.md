@@ -70,15 +70,19 @@ database first (see [Adding beatmaps](#adding-beatmaps)).
 
 **Adding beatmaps (v0.4)**
 - Paste osu! links (set or beatmap pages, `osu://` links, set IDs; several at once, or anywhere in
-  the app): Fumen downloads each set from a mirror (osu.direct, then catboy.best, then
-  nerinyan.moe) and imports it into osu!lazer, then into its own library. Sets you already have
-  are skipped; failed ones can be retried in one click
+  the app): Fumen downloads each set from community mirrors (osu.direct, nekoha.moe, catboy.best,
+  beatconnect.io, sayobot.cn, nerinyan.moe — never from osu!'s servers), spread over all of them,
+  and imports it into osu!lazer, then into its own library. A mirror that says "too many requests"
+  rests as long as it asks while the others carry on; a set waits for a free mirror instead of
+  failing. Sets you already have are skipped; failed ones can be retried in one click
+- Each imported set gets what lazer works out after its own imports, with lazer's code: star
+  ratings, length, BPM, object counts, and the ranked status from lazer's local cache of osu!'s
+  beatmap data (what isn't in it, lazer looks up on its next start). Sets an older Fumen imported
+  without that are finished with the next import, or with "Finish them" in Add beatmaps
 - Maps you've played: logged in, Fumen finds every set you've played on osu! (play counts and top
   plays in every ruleset, plus the scores in Performance) that osu!lazer doesn't have, and
   downloads and imports all of them: three downloads at once, into lazer 20 sets at a time, each
   set a card with its cover and progress, the whole run stoppable
-- Star ratings for new osu!mania difficulties come from Fumen's calculator until lazer computes its
-  own on its next start
 - Log in with osu! (Settings): your profile, rank and pp
 - History: your plays from osu!lazer's local scores and, logged in, from osu! (other computers,
   stable, pp, top plays, play counts): osu!'s numbers per ruleset (pp, rank over 90 days, accuracy,
@@ -178,8 +182,9 @@ docs/PLAN.md      roadmap
 
 - [osu!](https://github.com/ppy/osu) (MIT, ppy Pty Ltd): the star rating calculator and the mania
   skin components Fumen's ports follow
-- Beatmap mirrors [osu.direct](https://osu.direct), [catboy.best](https://catboy.best) and
-  [nerinyan.moe](https://nerinyan.moe) for the downloads
+- Beatmap mirrors [osu.direct](https://osu.direct), [nekoha.moe](https://mirror.nekoha.moe),
+  [catboy.best](https://catboy.best), [beatconnect.io](https://beatconnect.io),
+  [sayobot.cn](https://osu.sayobot.cn) and [nerinyan.moe](https://nerinyan.moe) for the downloads
 - [ManiaMapAnalyser](https://github.com/LeoBlackMT/osumania_map_analyser) by Leo_Black (MIT): the
   pattern report and dan estimators in `src-tauri/src/mma` (licence alongside), which build on
   [Interlude](https://github.com/YAVSRG/YAVSRG)'s pattern analysis,
