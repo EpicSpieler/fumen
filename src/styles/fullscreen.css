@@ -191,6 +191,7 @@
 .fs-axis { display: flex; justify-content: space-between; gap: 12px; margin-top: -10px; font-size: var(--fs-11); color: var(--t3); }
 
 .fs-setting { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; }
+.fs-setting[hidden] { display: none; }
 .fs-setting > .fs-k { width: 100%; }
 .fs-speed { display: inline-flex; align-items: center; gap: 2px; }
 .fs-speed-val { min-width: 44px; text-align: center; font-size: var(--fs-16); font-weight: 700; }

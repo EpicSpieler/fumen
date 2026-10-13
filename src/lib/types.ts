@@ -167,6 +167,23 @@ export interface ChartData {
   report?: PatternReport;
   /** osu!mania: the dan at 1× */
   dan?: DanRating;
+  /** osu!taiko: the chart as lazer plays it (src-tauri/src/taiko.rs) */
+  taiko?: TaikoChartData;
+}
+
+/** osu!taiko for the playfield, flat (see `TaikoOut` in src-tauri/src/charts.rs). */
+export interface TaikoChartData {
+  /** [time, kind, end, flags, extra] per object: kind 0 centre, 1 rim, 2 drum roll, 3 swell;
+   * flags 1 strong, 2 kiai; extra: a roll's first tick index into `ticks`, a swell's hits */
+  objects: number[];
+  /** every drum roll's ticks, roll after roll */
+  ticks: number[];
+  /** [time, multiplier] scroll speed changes */
+  scroll: number[];
+  /** [time, major] bar lines */
+  bars: number[];
+  /** [time, keys, object] autoplay: keys 1 left centre, 2 right centre, 4 left rim, 8 right rim */
+  presses: number[];
 }
 
 export type CorePattern = "Stream" | "Chordstream" | "Jacks" | "Coordination" | "Density" | "Wildcard";
