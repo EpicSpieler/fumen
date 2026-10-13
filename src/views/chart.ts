@@ -1,6 +1,6 @@
 /* chart.ts — one difficulty's numbers, shown in an expanded difficulty row: note density over
- * time, key numbers, and what the patterns ask of you. The osu!mania playfield itself opens in
- * fullscreen ("Open playfield").
+ * time, key numbers, and what the patterns ask of you; the difficulties in the library most like it.
+ * The playfield itself opens in fullscreen ("Open playfield").
  *
  * For osu!mania the dan rating and the pattern report come from Fumen's port of ManiaMapAnalyser
  * by Leo_Black (MIT; src-tauri/src/mma): Azusa's dan for 4K rice, Sunny's star rating on the dan
@@ -26,6 +26,7 @@ import { AccentColors, drawDensity, laneTone } from "../ui/playfield";
 import { rateClick, rateControlHtml, starsAtRate, syncRateControl } from "../ui/rate";
 import { openFullscreen } from "./fullscreen";
 import { MapPlays } from "./plays";
+import { SimilarMaps } from "./similar";
 
 export class ChartPanel {
   readonly el: HTMLElement;
@@ -43,11 +44,16 @@ export class ChartPanel {
   /** the dan card's last content, kept while the next rate's dan loads */
   private danHtml = "";
   private plays: MapPlays | null = null;
+  private similar: SimilarMaps | null = null;
+  /** scroll to the similar maps once they're there */
+  private wantSimilar: boolean;
 
   constructor(
     private setIdx: number,
     private mapIdx: number,
+    opts: { similar?: boolean } = {},
   ) {
+    this.wantSimilar = !!opts.similar;
     const snap = store.snap!;
     const map = snap.maps[mapIdx];
     const set = snap.sets[setIdx];
@@ -105,15 +111,28 @@ export class ChartPanel {
   // ── rendering ─────────────────────────────────────────────────────────
 
   private renderError(message: string): void {
-    this.el.innerHTML = `<div class="chart-error">${icon("alert")}<span>Couldn't read this chart. ${esc(message)}</span></div><div class="chart-plays"></div>`;
+    this.el.innerHTML = `<div class="chart-error">${icon("alert")}<span>Couldn't read this chart. ${esc(message)}</span></div><div class="chart-plays"></div><div class="chart-similar"></div>`;
     this.mountPlays();
   }
 
-  /** "Your plays" (it doesn't need the chart). */
+  /** "Your plays" and the similar maps (they don't need the chart). */
   private mountPlays(): void {
     this.plays?.destroy();
     this.plays = new MapPlays(this.mapIdx);
     this.el.querySelector(".chart-plays")!.appendChild(this.plays.el);
+    this.similar?.destroy();
+    this.similar = new SimilarMaps(this.mapIdx);
+    this.el.querySelector(".chart-similar")!.appendChild(this.similar.el);
+    if (this.wantSimilar) {
+      this.wantSimilar = false;
+      this.similar.reveal();
+    }
+  }
+
+  /** Brings the similar maps into view (now, or once the chart is in). */
+  revealSimilar(): void {
+    if (this.similar) this.similar.reveal();
+    else this.wantSimilar = true;
   }
 
   private render(d: ChartData): void {
@@ -121,6 +140,8 @@ export class ChartPanel {
     // the song starts at the beginning, so the cursor does too
     this.cursor = 0;
     const mania = d.mode === 3 && d.keys > 0;
+    // every ruleset has its playfield in fullscreen
+    const field = mania || (d.mode >= 0 && d.mode <= 2);
 
     this.el.innerHTML = `
       <div class="chart-grid">
@@ -137,8 +158,9 @@ export class ChartPanel {
         <div class="chart-stats${mania ? " has-dan" : ""}">${this.statsHtml(d)}</div>
         ${mania ? this.maniaBlocks(d) : `<p class="chart-note">Pattern analysis covers osu!mania for now.</p>`}
         <div class="chart-plays"></div>
+        <div class="chart-similar"></div>
         <div class="chart-actions">
-          ${mania ? `<button class="btn btn-primary btn-sm chart-field" type="button">${icon("fullscreen")}<span>Open playfield</span></button>` : ""}
+          ${field ? `<button class="btn btn-primary btn-sm chart-field" type="button">${icon("fullscreen")}<span>Open playfield</span></button>` : ""}
           <button class="btn btn-sm chart-play" type="button">${icon("play", "ic-play")}${icon("pause", "ic-pause")}<span>Play from here</span></button>
           <span class="chart-help">Click the graph to move through the song.</span>
         </div>
@@ -396,6 +418,7 @@ export class ChartPanel {
   destroy(): void {
     this.dead = true;
     this.plays?.destroy();
+    this.similar?.destroy();
     cancelAnimationFrame(this.raf);
     this.resize?.disconnect();
     this.offs.forEach((f) => f());

@@ -11,11 +11,11 @@ import { store } from "../lib/store";
 import { player } from "../player";
 import { openMenu, toast, uiConfirm, uiPrompt, type MenuEntry } from "../ui/controls";
 
-export function openSet(setIdx: number, mapIdx?: number): void {
+export function openSet(setIdx: number, mapIdx?: number, opts: { similar?: boolean } = {}): void {
   const snap = store.snap;
   if (!snap) return;
   const set = snap.sets[setIdx];
-  go({ name: "set", id: set.id, ...(mapIdx !== undefined ? { map: snap.maps[mapIdx].id } : {}) });
+  go({ name: "set", id: set.id, ...(mapIdx !== undefined ? { map: snap.maps[mapIdx].id, ...(opts.similar ? { similar: true } : {}) } : {}) });
 }
 
 async function copy(text: string, what: string): Promise<void> {
@@ -32,7 +32,7 @@ export function setMenu(
   at: Element | { x: number; y: number },
   setIdx: number,
   mapIdx?: number,
-  opts: { onSearch?: (q: string) => void; inSetPage?: boolean; extra?: MenuEntry[]; collection?: string } = {},
+  opts: { onSearch?: (q: string) => void; inSetPage?: boolean; extra?: MenuEntry[]; collection?: string; onSimilar?: () => void } = {},
 ): void {
   const snap = store.snap;
   if (!snap) return;
@@ -43,6 +43,10 @@ export function setMenu(
     { label: playing ? "Pause" : "Play", icon: playing ? "pause" : "play", action: () => player.playSet(setIdx, mapIdx) },
   ];
   if (!opts.inSetPage) entries.push({ label: "Open beatmap set", icon: "library", action: () => openSet(setIdx, mapIdx) });
+  if (mapIdx !== undefined) {
+    const similar = opts.onSimilar ?? (() => openSet(setIdx, mapIdx, { similar: true }));
+    entries.push({ label: "Similar maps", icon: "similar", action: similar });
+  }
   if (opts.extra?.length) entries.push(...opts.extra);
   // a set: all its difficulties
   const picked = mapIdx !== undefined ? [mapIdx] : [...set.maps];

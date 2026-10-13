@@ -309,7 +309,7 @@ function show(route: Route): void {
       view = collectionView(route.id) ?? ensureLibrary();
       break;
     case "set":
-      view = new SetView(route.id, route.map);
+      view = new SetView(route.id, route.map, route.similar);
       content.appendChild(view.el);
       break;
     case "settings":

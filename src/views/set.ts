@@ -22,7 +22,12 @@ export class SetView {
   private openId: string | null = null;
   private panel: ChartPanel | null = null;
 
-  constructor(private id: string, private focusMap?: string) {
+  constructor(
+    private id: string,
+    private focusMap?: string,
+    /** open the asked-for difficulty at its similar maps */
+    private focusSimilar = false,
+  ) {
     this.el = document.createElement("section");
     this.el.className = "view set-view";
     this.render();
@@ -102,7 +107,8 @@ export class SetView {
     this.syncPlay();
 
     const open = this.initialChart(set);
-    if (open !== undefined) this.openChart(open, false);
+    if (open !== undefined) this.openChart(open, false, this.focusSimilar && !!this.focusMap);
+    this.focusSimilar = false;
     if (this.focusMap) {
       const row = this.el.querySelector<HTMLElement>(`.diff[data-id="${CSS.escape(this.focusMap)}"]`);
       if (row) requestAnimationFrame(() => row.scrollIntoView({ block: "start", behavior: "smooth" }));
@@ -123,10 +129,13 @@ export class SetView {
     return list.reduce((best, mi) => (snap.maps[mi].sr > snap.maps[best].sr ? mi : best), list[0]);
   }
 
-  private openChart(mi: number | null, animate = true): void {
+  private openChart(mi: number | null, animate = true, similar = false): void {
     const snap = store.snap!;
     const id = mi === null ? null : snap.maps[mi].id;
-    if (id !== null && id === this.openId && this.panel) return;
+    if (id !== null && id === this.openId && this.panel) {
+      if (similar) this.panel.revealSimilar();
+      return;
+    }
     this.closeChart(animate);
     this.openId = id;
     this.el.querySelectorAll<HTMLElement>(".diff").forEach((d) => {
@@ -142,7 +151,7 @@ export class SetView {
     const inner = document.createElement("div");
     inner.className = "diff-panel-inner";
     wrap.appendChild(inner);
-    this.panel = new ChartPanel(this.setIdx, mi);
+    this.panel = new ChartPanel(this.setIdx, mi, { similar });
     inner.appendChild(this.panel.el);
     row.after(wrap);
     if (animate) requestAnimationFrame(() => requestAnimationFrame(() => wrap.classList.add("open")));
@@ -270,7 +279,8 @@ export class SetView {
       const diff = (e.target as Element).closest<HTMLElement>(".diff");
       if (!diff) return;
       e.preventDefault();
-      setMenu({ x: e.clientX, y: e.clientY }, this.setIdx, +diff.dataset.map!, { inSetPage: true, onSearch: search });
+      const mi = +diff.dataset.map!;
+      setMenu({ x: e.clientX, y: e.clientY }, this.setIdx, mi, { inSetPage: true, onSearch: search, onSimilar: () => this.openChart(mi, true, true) });
     });
     this.el.addEventListener("keydown", (e) => {
       const diff = (e.target as Element).closest<HTMLElement>(".diff");

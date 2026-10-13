@@ -140,7 +140,12 @@ export async function invoke<T>(cmd: string, args: Record<string, unknown> = {})
         maps: { id: string; mode: number; cs: number; sr: number; srHt?: number; srDt?: number; shares?: number[]; version: string; set: number; onlineId?: number }[];
         sets: { title: string; artist: string; creator: string; onlineId?: number }[];
       };
-      const pool = snap.maps.filter((m) => m.mode === 3 && m.shares && Math.round(m.cs) === 4).sort((a, b) => b.sr - a.sr).slice(0, 80);
+      // every eighth of the 640 hardest: a strong player who plays a spread
+      const pool = snap.maps
+        .filter((m) => m.mode === 3 && m.shares && Math.round(m.cs) === 4)
+        .sort((a, b) => b.sr - a.sr)
+        .slice(0, 640)
+        .filter((_, i) => i % 8 === 0);
       const charts = pool.map((m, i) => {
         const set = snap.sets[m.set];
         return {
