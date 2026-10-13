@@ -89,9 +89,14 @@ nothing), and Fumen trades the code (later the refresh token) for tokens at the 
 | 0.7 | Practice | **Replays in the playfield** (lazer's, else your score on osu!); **practice mode** (A–B loop, rate ramp, metronome); **chart numbers for osu! / taiko / catch** |
 | 0.8 | Library care | **Duplicates, broken files, unplayed space hogs**; osu!stable's `scores.db` |
 | 1.0 | Release | Installer, auto-update (GitHub Releases), de/en, OLED/Light/High-contrast themes, website |
-| later | After 1.0 | Sessions and a weekly report; Discord Rich Presence; skin browser, side-by-side and mixing; the analyser's leftovers |
+| 1.1 | Sessions | Plays grouped into sittings; a weekly report (time, skills that moved, goals closer), shareable as an image |
+| 1.2 | Skins | Skin browser on the same moment of a chart; two skins side by side; pieces of several skins mixed into one `.osk` |
+| 1.3 | Presence | Discord Rich Presence; share cards for pools, skills and goals |
+| 1.4 | Everywhere | Linux and macOS (lazer's library there too); goals, skills and pools on fumen.dertesti.dev for the phone |
+| 1.5 | Mapping lens | Difficulty spikes along a chart, a pattern heatmap per section, spread check across a set; the analyser's leftovers |
 
-Before 1.0 is what serves the vision directly (understand a chart, organise, practise with intent,
+The public roadmap at https://fumen.dertesti.dev/roadmap (`site/public/roadmap.js`) shows this
+table; keep the two in step. Before 1.0 is what serves the vision directly (understand a chart, organise, practise with intent,
 build pools); after 1.0 is what's nice to have around it. Within a version, the order of the
 sections below is the order of the work.
 
@@ -303,13 +308,19 @@ sections below is the order of the work.
 
 ## After 1.0
 
-- Sessions: what was played when (lazer and osu! scores grouped into sittings), a weekly report
-  (plays, time, skills that moved, goals closer), shareable as an image
-- Discord Rich Presence ("listening to …", "practising Jacks 4.5★"); needs a Discord application
-  (its client id, made by the user in Discord's developer portal)
-- Skin browser: every skin on the same moment of a chart, two side by side, and mixing pieces of
+- 1.1 Sessions: what was played when (lazer and osu! scores grouped into sittings), a weekly
+  report (plays, time, skills that moved, goals closer), shareable as an image
+- 1.2 Skins: every skin on the same moment of a chart, two side by side, and mixing pieces of
   several skins into an `.osk` (osu! / mania / taiko / catch parts per skin)
-- The analyser's leftovers (Azusa's marathon correction, Roxy / Mixed estimators — v0.2)
+- 1.3 Presence: Discord Rich Presence ("listening to …", "practising Jacks 4.5★"; needs a Discord
+  application, its client id made by the user in Discord's developer portal); share cards for
+  pools, skills and goals
+- 1.4 Everywhere: Linux and macOS builds (Tauri, the .NET sidecar and lazer all run there; the
+  importer's host folder differs); a read-only view of goals, skills and pools on
+  fumen.dertesti.dev, synced from the app on request
+- 1.5 Mapping lens: difficulty spikes along a chart, a pattern heatmap per section, a spread check
+  across a set's difficulties; the analyser's leftovers (Azusa's marathon correction, Roxy /
+  Mixed estimators — v0.2)
 
 ## Workflow
 

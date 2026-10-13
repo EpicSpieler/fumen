@@ -4,8 +4,20 @@
     {
       "name": "fumen-browser",
       "runtimeExecutable": "npx",
-      "runtimeArgs": ["vite", "--config", "tools/browser-preview/vite.config.ts"],
+      "runtimeArgs": [
+        "vite",
+        "--config",
+        "tools/browser-preview/vite.config.ts"
+      ],
       "port": 1431
+    },
+    {
+      "name": "fumen-site",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "site/server.mjs"
+      ],
+      "port": 3020
     }
   ]
 }
