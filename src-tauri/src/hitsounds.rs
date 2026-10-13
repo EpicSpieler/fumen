@@ -26,18 +26,24 @@
 //!     slider's normal bank), "sliderslide" (and "sliderwhistle" with a whistle) looping while
 //!     it's followed; spinners "spinnerspin" looping, higher the further it's spun, a
 //!     "spinnerbonus" for every bonus spin (then "spinnerbonus-max") and their sounds at the end;
+//!   - osu!catch plays what's caught: a fruit its own sounds (a juice stream's head, repeats
+//!     and tail their node sounds), a droplet its stream's sounds as "slidertick" (every one, in
+//!     its bank), a banana "metronomelow" or else "catch-banana", higher for every banana of the
+//!     shower; tiny droplets, the streams and
+//!     the showers themselves nothing;
 //!   - storyboard samples (the .osu's and the set's .osb) play too, except on the Fail layer
 //!     (autoplay never fails).
 //!
 //! The skin part is resolved in the webview, which knows the skin: a sample here is either a
 //! beatmap file (by hash) or a skin sample name ("soft-hitclap", or for osu!taiko
-//! "taiko:<role>:<bank>-<name>:<argon bank>", see `taiko_sample`).
+//! "taiko:<role>:<bank>-<name>:<argon bank>", see `taiko_sample`; a banana "catch:banana:<its number in the shower>").
 
 use std::collections::HashMap;
 
 use rusqlite::{Connection, OptionalExtension};
 use serde::Serialize;
 
+use crate::catch;
 use crate::error::{Error, Result};
 use crate::osu;
 use crate::paths;
@@ -222,8 +228,7 @@ pub fn for_map(conn: &Connection, files: &paths::Files, id: &str) -> Result<Soun
     Ok(resolve(&osu, osb.as_deref(), &files))
 }
 
-/// The hitsounds of an osu!, osu!taiko or osu!mania chart (`osu`), with its set's files and
-/// storyboard (`osb`). osu!catch gets none: the playfield doesn't show it.
+/// The hitsounds of a chart of any ruleset (`osu`), with its set's files and storyboard (`osb`).
 pub fn resolve(osu: &str, osb: Option<&str>, files: &SetFiles) -> Sounds {
     let version = osu
         .trim_start_matches('\u{feff}')
@@ -296,9 +301,6 @@ pub fn resolve(osu: &str, osb: Option<&str>, files: &SetFiles) -> Sounds {
             Section::Other => {}
         }
     }
-    if mode == 2 {
-        return Sounds::default();
-    }
     // later lines win at the same time (a green line over a red one)
     points.sort_by(|a, b| a.time.total_cmp(&b.time));
     // osu! v4 and older: everything 24 ms later (as osu.rs times it)
@@ -316,6 +318,10 @@ pub fn resolve(osu: &str, osb: Option<&str>, files: &SetFiles) -> Sounds {
     } else if mode == 0 {
         if let Some(chart) = osu::parse(osu) {
             standard(&chart, &points, files, &mut events, &mut loops);
+        }
+    } else if mode == 2 {
+        if let Some(chart) = catch::parse(osu) {
+            fruits(&chart, &points, files, &mut events);
         }
     } else {
         for line in objects {
@@ -516,6 +522,39 @@ fn standard(chart: &osu::Chart, points: &[SamplePoint], files: &SetFiles, out: &
                 out.push((t as i32, sample, volume));
                 spin += 1;
             }
+        }
+    }
+}
+
+// ── osu!catch ─────────────────────────────────────────────────────────────
+
+/// What the catcher catches under autoplay plays (`DrawableCatchHitObject`: only fruits,
+/// droplets and bananas are ever hit).
+fn fruits(chart: &catch::Chart, points: &[SamplePoint], files: &SetFiles, out: &mut Vec<(i32, Sample, i64)>) {
+    for o in &chart.objects {
+        let Some(s) = &o.sounds else { continue };
+        let hit = HitSounds::of(s);
+        match o.kind {
+            catch::Kind::Fruit => hit.play(points, files, true, out),
+            // every sound of the stream renamed (`With(@"slidertick")`): the normal one in its
+            // bank, each addition in the additions' bank
+            catch::Kind::Droplet => {
+                let (normal_bank, addition_bank, index, volume) = hit.resolve(points);
+                let t = o.time as i32;
+                out.push((t, hit_sample(normal_bank, "slidertick", index, files), volume));
+                for bit in [4, 2, 8] {
+                    if s.sound & bit != 0 {
+                        out.push((t, hit_sample(addition_bank, "slidertick", index, files), volume));
+                    }
+                }
+            }
+            // `BananaHitSampleInfo`: the skin's, at the shower's volume; its pitch goes with its
+            // number (`DrawableBanana.PlaySamples`)
+            catch::Kind::Banana => {
+                let (_, _, _, volume) = hit.resolve(points);
+                out.push((o.time as i32, Sample::Skin(format!("catch:banana:{}", o.banana)), volume));
+            }
+            catch::Kind::TinyDroplet => {}
         }
     }
 }
@@ -930,8 +969,28 @@ mod tests {
         assert_eq!(events(&s), vec![(100, "skin:soft-hitnormal".into(), 100)]);
         let s = resolve(&format!("{HEAD}[HitObjects]\n64,192,100,1,0\n"), None, &files(&[]));
         assert_eq!(events(&s), vec![(100, "skin:normal-hitnormal".into(), 100)]);
-        let s = resolve("[General]\nMode: 2\n[HitObjects]\n64,192,100,1,0\n", None, &files(&[]));
-        assert!(s.events.is_empty());
+    }
+
+    #[test]
+    fn catch_fruits_droplets_bananas() {
+        let text = "osu file format v14\n[General]\nMode: 2\n[Difficulty]\nSliderMultiplier:1.4\nSliderTickRate:1\n\
+                    [TimingPoints]\n0,500,4,2,0,60,1,0\n[HitObjects]\n\
+                    100,192,100,1,2,0:0:0:0:\n\
+                    100,192,1000,2,2,L|380:192,1,280,8|0,0:0|0:0,0:0:0:0:\n\
+                    256,192,3000,12,0,3200,0:0:0:0:\n";
+        let ev = events(&resolve(text, None, &files(&[])));
+        let at = |t: i32| ev.iter().filter(|e| e.0 == t).map(|e| e.1.as_str()).collect::<Vec<_>>();
+        // a fruit: its sounds, the layered normal too
+        assert_eq!(at(100), ["skin:soft-hitnormal", "skin:soft-hitwhistle"]);
+        // the stream's head with its edge sound, its droplet a whistle stream's two ticks, its tail
+        assert_eq!(at(1000), ["skin:soft-hitnormal", "skin:soft-hitclap"]);
+        assert_eq!(at(1500), ["skin:soft-slidertick", "skin:soft-slidertick"]);
+        assert_eq!(at(2000), ["skin:soft-hitnormal"]);
+        // bananas, nothing for tiny droplets or the shower
+        assert_eq!(at(3000), ["skin:catch:banana:0"]);
+        assert_eq!(at(3200), ["skin:catch:banana:2"]);
+        assert_eq!(ev.iter().filter(|e| e.1.starts_with("skin:catch:banana")).count(), 3);
+        assert_eq!(ev.len(), 2 + 2 + 2 + 1 + 3);
     }
 
     /// Every osu!mania chart of a real library: no panics, and how much comes from the sets.
