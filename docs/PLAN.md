@@ -84,20 +84,22 @@ nothing), and Fumen trades the code (later the refresh token) for tokens at the 
 | 0.2 | Charts | `.osu` hit-object parser; mania chart preview (scrolling playfield); density/NPS graph; LN %, chord/jack/stream stats; auto pattern tags ("jumpstream", "LN", "chordjack", "tech") |
 | 0.3 | Collections | Fumen collections + smart collections (saved filters); drag & drop; export to `collection.db` (stable / Collection Manager) and to lazer (lazer closed, backup first); stable source (`osu!.db` + Songs) |
 | 0.4 | You | adding beatmaps from osu! links straight into lazer; lazer scores + osu! API v2 (OAuth); play history; per-pattern skill radar; "practice next" suggestions; goals |
-| 0.5 | Pools | Pool builder: NM/HD/HR/DT/FM/TB slots, mod-adjusted SR/BPM/length, look up maps you don't own via API, export to JSON/CSV/sheet + RPRO bot, pool showcase image; **mods in the playfield**; **similar maps**; **beatmap search on the mirrors** |
-| 0.6 | Tournament | Schedule, mp-link parsing + match results, OBS overlay served locally |
-| 0.7 | Practice | **Replays in the playfield** (lazer's, else your score on osu!); **practice mode** (A–B loop, rate ramp, metronome); **chart numbers for osu! / taiko / catch** |
-| 0.8 | Library care | **Duplicates, broken files, unplayed space hogs**; osu!stable's `scores.db` |
+| 0.5 | Discover | **Mods in the playfield**; **similar maps**; **beatmap search on the mirrors** |
+| 0.6 | Practice | **Replays in the playfield** (lazer's, else your score on osu!); **practice mode** (A–B loop, rate ramp, metronome); **chart numbers for osu! / taiko / catch** |
+| 0.7 | Library care | **Duplicates, broken files, unplayed space hogs**; osu!stable's `scores.db` |
 | 1.0 | Release | Installer, auto-update (GitHub Releases), de/en, OLED/Light/High-contrast themes, website |
-| 1.1 | Sessions | Plays grouped into sittings; a weekly report (time, skills that moved, goals closer), shareable as an image |
-| 1.2 | Skins | Skin browser on the same moment of a chart; two skins side by side; pieces of several skins mixed into one `.osk` |
-| 1.3 | Presence | Discord Rich Presence; share cards for pools, skills and goals |
-| 1.4 | Everywhere | Linux and macOS (lazer's library there too); goals, skills and pools on fumen.dertesti.dev for the phone |
-| 1.5 | Mapping lens | Difficulty spikes along a chart, a pattern heatmap per section, spread check across a set; the analyser's leftovers |
+| 1.1 | Pools | Pool builder: NM/HD/HR/DT/FM/TB slots, mod-adjusted SR/BPM/length, look up maps you don't own via API, export to JSON/CSV/sheet + RPRO bot, pool showcase image (moved from 0.5) |
+| 1.2 | Tournament | Schedule, mp-link parsing + match results, OBS overlay served locally (moved from 0.6) |
+| 1.3 | Sessions | Plays grouped into sittings; a weekly report (time, skills that moved, goals closer), shareable as an image |
+| 1.4 | Skins | Skin browser on the same moment of a chart; two skins side by side; pieces of several skins mixed into one `.osk` |
+| 1.5 | Presence | Discord Rich Presence; share cards for pools, skills and goals |
+| 1.6 | Everywhere | Linux and macOS (lazer's library there too); goals, skills and pools on fumen.dertesti.dev for the phone |
+| 1.7 | Mapping lens | Difficulty spikes along a chart, a pattern heatmap per section, spread check across a set; the analyser's leftovers |
 
 The public roadmap at https://fumen.dertesti.dev/roadmap (`site/public/roadmap.js`) shows this
-table; keep the two in step (and raise the `?v=` on roadmap.js / .css in roadmap.html, Cloudflare caches them). Before 1.0 is what serves the vision directly (understand a chart, organise, practise with intent,
-build pools); after 1.0 is what's nice to have around it. Within a version, the order of the
+table; keep the two in step (and raise the `?v=` on roadmap.js / .css in roadmap.html, Cloudflare caches them). Before 1.0 is what serves the vision directly (understand a chart, organise, practise with intent);
+after 1.0 is what's nice to have around it. On 2026-10-13 the pool builder and the tournament
+tools moved after 1.0 (1.1, 1.2): they aren't needed before the release (the roadmap page says so). Within a version, the order of the
 sections below is the order of the work.
 
 ## v0.1 — detailed scope
@@ -258,7 +260,7 @@ sections below is the order of the work.
       dropped after 60 days), analysed like the library's (shares, Fumen's 0.75× / 1.5× / played
       rates; osu!'s 1× rating); skills worked out by the same lib/skills code
 
-## v0.5 — pools
+## v0.5 — discover
 
 - [x] Mods in the playfield (first: the pool builder shows a slot the way it plays) — 0.4.12.
       `src-tauri/src/mods.rs` + `parse_with` in osu.rs / catch.rs / taiko.rs build the chart with
@@ -274,20 +276,15 @@ sections below is the order of the work.
       their own) and Flashlight (`src/ui/flashlight.ts`: sizes by combo and break time at
       osu!stable's speed, the circular / rectangular shaders). Mods are the player's, like the rate
       (session only); the fullscreen player has a toggle per mod
-- [ ] Pool builder (the table above)
 - [ ] Similar maps: a chart's fingerprint (pattern shares, SR, BPM, length, LN %, key mode) and
-      the nearest ones in the library; "replace this slot with something like it" in the pool
-      builder; on the set page and for the compared player's charts ("what they play that hits
-      your weak patterns")
+      the nearest ones in the library; on the set page and for the compared player's charts
+      ("what they play that hits your weak patterns"); later "replace this slot with something
+      like it" in the pool builder (1.1)
 - [ ] Beatmap search on the mirrors: osu.direct / nerinyan / catboy search APIs (never osu!'s
       servers), filters (ruleset, keys, SR, BPM, status, mapper), results marked "in library",
       import through the existing pipeline; "packs": a search's results as one queued import
 
-## v0.6 — tournament
-
-- [ ] (as in the roadmap table)
-
-## v0.7 — practice
+## v0.6 — practice
 
 - [ ] Replays in the playfield instead of autoplay: lazer's own replays (the score's `.osr` in
       lazer's files, via the sidecar export), else the player's global score on that difficulty
@@ -304,7 +301,7 @@ sections below is the order of the work.
       distances, stream lengths, slider share, aim vs speed lean; taiko colour changes (don/kat
       patterns), finisher share; catch hyperdash share, dash distance, banana time
 
-## v0.8 — library care
+## v0.7 — library care
 
 - [ ] Duplicates (the same MD5 in lazer and stable, the same set twice, re-uploads under new ids),
       missing or broken audio / backgrounds, sets never played that take the most space; storage
@@ -313,17 +310,21 @@ sections below is the order of the work.
 
 ## After 1.0
 
-- 1.1 Sessions: what was played when (lazer and osu! scores grouped into sittings), a weekly
+- 1.1 Pools (moved from 0.5): the pool builder as in the roadmap table; similar maps fill or replace
+  a slot
+- 1.2 Tournament (moved from 0.6): schedule, mp-link parsing and match results, picks / bans and
+  mod strengths per player, an OBS overlay served from the PC
+- 1.3 Sessions: what was played when (lazer and osu! scores grouped into sittings), a weekly
   report (plays, time, skills that moved, goals closer), shareable as an image
-- 1.2 Skins: every skin on the same moment of a chart, two side by side, and mixing pieces of
+- 1.4 Skins: every skin on the same moment of a chart, two side by side, and mixing pieces of
   several skins into an `.osk` (osu! / mania / taiko / catch parts per skin)
-- 1.3 Presence: Discord Rich Presence ("listening to …", "practising Jacks 4.5★"; needs a Discord
+- 1.5 Presence: Discord Rich Presence ("listening to …", "practising Jacks 4.5★"; needs a Discord
   application, its client id made by the user in Discord's developer portal); share cards for
   pools, skills and goals
-- 1.4 Everywhere: Linux and macOS builds (Tauri, the .NET sidecar and lazer all run there; the
+- 1.6 Everywhere: Linux and macOS builds (Tauri, the .NET sidecar and lazer all run there; the
   importer's host folder differs); a read-only view of goals, skills and pools on
   fumen.dertesti.dev, synced from the app on request
-- 1.5 Mapping lens: difficulty spikes along a chart, a pattern heatmap per section, a spread check
+- 1.7 Mapping lens: difficulty spikes along a chart, a pattern heatmap per section, a spread check
   across a set's difficulties; the analyser's leftovers (Azusa's marathon correction, Roxy /
   Mixed estimators — v0.2)
 
