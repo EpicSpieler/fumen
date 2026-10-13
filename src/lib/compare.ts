@@ -100,12 +100,14 @@ function set(s: CompareState | null): void {
   compareEvents.emit("compare", s);
 }
 
-/** Their charts as library-like rows, for lib/skills (`set` is meaningless here). */
+/** Their charts as library-like rows, for lib/skills and lib/similar. `set` is no index into the
+ * library: it's osu!'s set id negated (a set's difficulties go together), below every one of those
+ * when osu! didn't say. */
 function asMaps(charts: ComparedChart[]): MapRow[] {
   return charts.map(
-    (c) =>
+    (c, i) =>
       ({
-        set: -1,
+        set: c.setId ? -c.setId : -1_000_000_000 - i,
         id: c.id,
         onlineId: c.beatmapId,
         version: c.version,
