@@ -258,16 +258,54 @@ export function loadSkin(entry: SkinEntry, l: SkinList): Promise<LoadedSkin> {
 
 /** The skins a skin's hit sounds come from, in lookup order (lazer's ISkinSource for samples). */
 export class SoundChain {
-  constructor(readonly sources: FileSource[]) {}
+  constructor(
+    readonly sources: FileSource[],
+    /** how many of the first sources are legacy skins (osu!taiko looks "taiko-…" up in them) */
+    private readonly legacy = 0,
+    /** argon: osu!taiko plays argon's own drums */
+    private readonly argon = false,
+  ) {}
 
-  /** A skin sample ("soft-hitclap"): each skin in turn, with the bank, then without it. */
+  /**
+   * A skin sample: "soft-hitclap" (each skin in turn, with the bank, then without it), or an
+   * osu!taiko drum sound "taiko:<role>:<bank>-<name>:<argon bank>" (src-tauri/src/hitsounds.rs):
+   *
+   *  - argon (ArgonDrumSampleTriggerSource): the hit's sound in argon's bank for its volume (or
+   *    "strong"), as "taiko-<bank>-<name>"; a strong hit's second sound isn't played, the
+   *    flourish is; after a beatmap's own sound everything goes the usual way;
+   *  - legacy skins (LegacyTaikoSampleInfo): "taiko-<bank>-<name>", "taiko-<name>", then the bare
+   *    name, skin by skin; lazer's defaults after them without the prefix. No flourishes.
+   */
   find(name: string): string | undefined {
+    if (name.startsWith("taiko:")) return this.drum(name);
+    return this.lookup(name, this.sources);
+  }
+
+  private lookup(name: string, sources: FileSource[]): string | undefined {
     const bare = name.slice(name.indexOf("-") + 1);
-    for (const s of this.sources) {
+    for (const s of sources) {
       const url = s.sound(name) ?? s.sound(bare);
       if (url) return url;
     }
     return undefined;
+  }
+
+  private drum(spec: string): string | undefined {
+    const [, role, sample, argonBank] = spec.split(":");
+    const bare = sample.slice(sample.indexOf("-") + 1);
+    const first = (sources: FileSource[], names: string[]) => {
+      for (const s of sources) {
+        for (const n of names) {
+          const url = s.sound(n);
+          if (url) return url;
+        }
+      }
+      return undefined;
+    };
+    if (this.argon && (role === "b" || role === "f")) return first(this.sources, [`taiko-${argonBank}-${bare}`, `taiko-${bare}`]);
+    if (role === "f" || (this.argon && role === "s")) return undefined;
+    // LegacySkin: the taiko names, then the bare one as a last resort (per skin)
+    return first(this.sources.slice(0, this.legacy), [`taiko-${sample}`, `taiko-${bare}`, bare]) ?? this.lookup(sample, this.sources.slice(this.legacy));
   }
 }
 
@@ -279,7 +317,9 @@ export async function loadSkinSounds(entry: SkinEntry, l: SkinList): Promise<Sou
   else if (entry.kind === "argon-pro") chain = [builtinFiles(l, "argon-pro"), builtinFiles(l, "argon")];
   // legacy, classic, retro: the skin, then classic (as for textures)
   else chain = (await loadSkin(entry, l)).chain;
-  return new SoundChain([...chain, triangles].filter((s): s is FileSource => !!s));
+  const sources = chain.filter((s): s is FileSource => !!s);
+  const legacy = entry.kind === "argon" || entry.kind === "argon-pro" || entry.kind === "triangles" ? 0 : sources.length;
+  return new SoundChain([...sources, ...(triangles ? [triangles] : [])], legacy, entry.kind === "argon" || entry.kind === "argon-pro");
 }
 
 /** Forget loaded skins (after a re-import, files may have changed). */

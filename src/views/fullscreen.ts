@@ -1,9 +1,9 @@
 /* fullscreen.ts — the player in fullscreen, with two views you switch at the top:
  *
  *  - Visualizer: the song's art, big, with frequency bars from the audio itself.
- *  - Playfield: the playing difficulty's osu!mania playfield at full height, in your lazer skin
- *    (or any other you pick here), scrolling like lazer does for you (your lazer scroll speed and
- *    direction, rate mods included), played by lazer's autoplay with the beatmap's hitsounds
+ *  - Playfield: the playing difficulty's osu!mania or osu!taiko playfield, in your lazer skin
+ *    (or any other you pick here), scrolling like lazer does for you (mania: your lazer scroll
+ *    speed and direction; rate mods included), played by lazer's autoplay with the beatmap's hitsounds
  *    (its own samples first, then the skin's; only here, at their own volume), next to what
  *    matters while you watch it: notes per second right now, the pattern of this second, BPM,
  *    notes so far, and the density graph. The numbers about the whole chart stay in the set
@@ -26,12 +26,18 @@ import { icon } from "../ui/icons";
 import { ArgonRenderer } from "../ui/mania/argon";
 import { createRenderer, ManiaPlayfield } from "../ui/mania/playfield";
 import type { Renderer } from "../ui/mania/stage";
+import { TaikoPlayfield, type TaikoRenderer } from "../ui/taiko/playfield";
+import { createTaikoRenderer } from "../ui/taiko/renderers";
 import { AccentColors, drawDensity, fitCanvas } from "../ui/playfield";
 import { rateClick, rateControlHtml, starsAtRate, syncRateControl } from "../ui/rate";
 
 export type FullscreenMode = "visual" | "field";
 
 const BARS = 72;
+
+/** the rulesets the playfield shows: osu!taiko, osu!mania */
+const PLAYABLE = new Set([1, 3]);
+const taikoChart = (d: ChartData): boolean => d.mode === 1 && !!d.taiko;
 
 const NO_SKINS: SkinList = { skins: [], selected: null, classic: [], retro: [], triangles: [], argon: [], argonPro: [] };
 
@@ -54,7 +60,7 @@ class Fullscreen {
   // playfield
   private mapId = "";
   private data: ChartData | null = null;
-  private field: ManiaPlayfield | null = null;
+  private field: ManiaPlayfield | TaikoPlayfield | null = null;
   /** lazer's skins (loaded once per import) */
   private skins: SkinList | null = null;
   /** bumped on every skin / chart change, so late renderers are dropped */
@@ -155,7 +161,7 @@ class Fullscreen {
               <div class="graph-head"></div>
             </div>
             <div class="fs-axis num"><span>0:00</span><span>Notes per second</span><span data-live="graph-end"></span></div>
-            <div class="fs-setting">
+            <div class="fs-setting fs-setting-speed">
               <span class="fs-k">Scroll speed</span>
               <div class="fs-speed">
                 <button class="icon-btn sm" type="button" data-speed="-1" data-tip="Slower (F3)" aria-label="Slower scroll">${icon("minus")}</button>
@@ -296,7 +302,7 @@ class Fullscreen {
     if (!np || !snap) return;
     const map = snap.maps[np.map];
     this.renderDiff();
-    if (map.mode !== 3) {
+    if (!PLAYABLE.has(map.mode)) {
       this.mapId = "";
       this.data = null;
       this.field = null;
@@ -317,10 +323,14 @@ class Fullscreen {
     const job = ++this.skinJob;
     loadChart(map.id)
       .then(async (d) => {
-        const renderer = await this.rendererFor(d.keys);
+        const renderer = await this.rendererFor(d);
         if (this.mapId !== map.id || job !== this.skinJob) return;
         this.data = d;
-        this.field = new ManiaPlayfield(this.el!.querySelector(".fs-pf")!, d, renderer);
+        const canvas = this.el!.querySelector<HTMLCanvasElement>(".fs-pf")!;
+        this.field = taikoChart(d)
+          ? new TaikoPlayfield(canvas, d, renderer as TaikoRenderer)
+          : new ManiaPlayfield(canvas, d, renderer as Renderer);
+        this.renderSpeed();
         this.showEmpty(null);
         this.syncSounds();
         void this.loadSounds();
@@ -333,18 +343,20 @@ class Fullscreen {
 
   // ── skins ─────────────────────────────────────────────────────────────
 
-  /** The renderer for the current skin at a key count; argon if the skin can't be read. */
-  private async rendererFor(keys: number): Promise<Renderer> {
+  /** The renderer for the current skin and the chart's ruleset; mania: argon if the skin can't be read. */
+  private async rendererFor(d: ChartData): Promise<Renderer | TaikoRenderer> {
     // cached until the next import
     this.skins = await loadSkinList().catch(() => this.skins);
     this.renderSkin();
     const entry = currentSkin(this.skins);
+    const list = this.skins ?? NO_SKINS;
     try {
-      const skin = await loadSkin(entry, this.skins ?? NO_SKINS);
-      return await createRenderer(skin, keys);
+      const skin = await loadSkin(entry, list);
+      return taikoChart(d) ? await createTaikoRenderer(skin, list) : await createRenderer(skin, d.keys);
     } catch (e) {
       console.warn("[skin]", entry.name, e);
-      return new ArgonRenderer(keys);
+      if (!taikoChart(d)) return new ArgonRenderer(d.keys);
+      return createTaikoRenderer({ entry, chain: [], own: null }, list);
     }
   }
 
@@ -366,9 +378,10 @@ class Fullscreen {
     const field = this.field;
     if (!field) return;
     const job = ++this.skinJob;
-    const renderer = await this.rendererFor(field.data.keys);
+    const renderer = await this.rendererFor(field.data);
     if (job !== this.skinJob || this.field !== field) return;
-    field.setRenderer(renderer);
+    if (field instanceof TaikoPlayfield) field.setRenderer(renderer as TaikoRenderer);
+    else field.setRenderer(renderer as Renderer);
     this.kick();
     void this.loadSounds();
   }
@@ -432,7 +445,7 @@ class Fullscreen {
     openMenu(anchor, entries, { minWidth: 320 });
   }
 
-  /** Message in place of the playfield: not mania (with a way to pick a mania difficulty), loading, errors. */
+  /** Message in place of the playfield: not mania or taiko (with a way to pick a difficulty that is), loading, errors. */
   private showEmpty(mode: number | null, text?: string): void {
     const el = this.el!;
     const box = el.querySelector<HTMLElement>(".fs-empty")!;
@@ -450,18 +463,18 @@ class Fullscreen {
       box.innerHTML = `<p>${esc(text)}</p>`;
       return;
     }
-    const maniaMaps = this.maniaMaps();
+    const maps = this.playableMaps();
     box.innerHTML = `
       ${icon("lanes-duo")}
-      <div class="fs-empty-title">The playfield is for osu!mania</div>
-      <p>${maniaMaps.length ? "This difficulty isn't one. Pick one of the set's osu!mania difficulties:" : "This set has no osu!mania difficulty."}</p>
-      ${maniaMaps.length ? `<div class="fs-empty-list">${maniaMaps.map((mi) => this.diffButton(mi)).join("")}</div>` : ""}`;
+      <div class="fs-empty-title">The playfield is for osu!mania and osu!taiko</div>
+      <p>${maps.length ? "This difficulty isn't either. Pick one of the set's difficulties that is:" : "This set has no osu!mania or osu!taiko difficulty."}</p>
+      ${maps.length ? `<div class="fs-empty-list">${maps.map((mi) => this.diffButton(mi)).join("")}</div>` : ""}`;
   }
 
-  private maniaMaps(): number[] {
+  private playableMaps(): number[] {
     const snap = store.snap!;
     const np = player.now!;
-    return snap.sets[np.set].maps.filter((mi) => snap.maps[mi].mode === 3 && !snap.maps[mi].hidden);
+    return snap.sets[np.set].maps.filter((mi) => PLAYABLE.has(snap.maps[mi].mode) && !snap.maps[mi].hidden);
   }
 
   private diffButton(mi: number): string {
@@ -478,12 +491,16 @@ class Fullscreen {
     el.querySelector(".fs-diff")!.innerHTML = `
       ${sr !== undefined ? srChip(sr, "lg", icon("star-fill")) : ""}
       <span class="fs-diff-name"><b>${esc(m.version)}</b><span>${esc(keysOrMode(m))} · OD ${Math.round(m.od * 10) / 10} · HP ${Math.round(m.hp * 10) / 10}</span></span>
-      ${this.maniaMaps().length > 1 ? icon("chevron-down") : ""}`;
+      ${this.playableMaps().length > 1 ? icon("chevron-down") : ""}`;
   }
 
   private renderSpeed(): void {
     const el = this.el;
     if (!el) return;
+    // osu!taiko scrolls at the speed the chart sets; there's nothing to pick
+    const taiko = this.field instanceof TaikoPlayfield;
+    el.querySelector<HTMLElement>(".fs-setting-speed")!.hidden = taiko;
+    if (taiko) return;
     const s = scrollSpeed();
     el.querySelector(".fs-speed-val")!.textContent = fmtSpeed(s.speed);
     el.querySelector<HTMLButtonElement>("[data-speed='-1']")!.disabled = s.speed <= SCROLL_SPEED_MIN;
@@ -598,7 +615,8 @@ class Fullscreen {
     const r = player.rate;
     const t = player.audio.currentTime * 1000;
 
-    field.draw(t, scrollTime(scrollSpeed().speed) * r, scrollUp(), r);
+    if (field instanceof TaikoPlayfield) field.draw(t, r);
+    else field.draw(t, scrollTime(scrollSpeed().speed) * r, scrollUp(), r);
 
     // live numbers
     const a = d.analysis;
@@ -656,7 +674,7 @@ class Fullscreen {
       const pick = t.closest<HTMLElement>(".fs-pick[data-map]");
       if (pick) return player.selectMap(+pick.dataset.map!);
       const diff = t.closest<HTMLElement>(".fs-diff");
-      if (diff && this.maniaMaps().length > 1) this.diffMenu(diff);
+      if (diff && this.playableMaps().length > 1) this.diffMenu(diff);
     });
 
     // hitsound volume
@@ -728,7 +746,7 @@ class Fullscreen {
           case "F3":
           case "F4":
             e.preventDefault();
-            if (this.mode === "field") this.changeSpeed(e.key === "F3" ? -1 : 1);
+            if (this.mode === "field" && !(this.field instanceof TaikoPlayfield)) this.changeSpeed(e.key === "F3" ? -1 : 1);
             break;
           case "ArrowLeft":
           case "ArrowRight": {
@@ -749,8 +767,8 @@ class Fullscreen {
   private diffMenu(anchor: HTMLElement): void {
     const snap = store.snap!;
     const now = player.now!.map;
-    const entries: MenuEntry[] = [{ group: "osu!mania difficulties" }];
-    for (const mi of this.maniaMaps()) {
+    const entries: MenuEntry[] = [{ group: "Difficulties" }];
+    for (const mi of this.playableMaps()) {
       const m = snap.maps[mi];
       entries.push({ label: `${m.version} · ${m.sr.toFixed(2)} stars · ${keysOrMode(m)}`, checked: mi === now, radio: "diff", action: () => player.selectMap(mi) });
     }
