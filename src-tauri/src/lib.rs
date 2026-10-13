@@ -1,4 +1,5 @@
 mod analysis;
+mod catch;
 mod chart;
 mod charts;
 mod collections;
@@ -402,16 +403,6 @@ fn load_chart(app: &AppHandle, id: &str) -> Result<chart::Chart> {
     charts::load(&app.state::<AppState>().files(), &hash)
 }
 
-/// An osu! difficulty for the playfield as raw JSON (`null` for other modes, see `charts.rs`).
-#[tauri::command]
-async fn get_osu_chart(app: AppHandle, id: String) -> Result<tauri::ipc::Response> {
-    tauri::async_runtime::spawn_blocking(move || {
-        let hash = chart_hash(&app, &id)?;
-        charts::osu_json(&app.state::<AppState>().files(), &hash).map(tauri::ipc::Response::new)
-    })
-    .await
-    .map_err(|e| Error::known("internal", e.to_string()))?
-}
 
 /// One difficulty's notes, timing and full analysis as raw JSON (see `charts.rs`).
 #[tauri::command]
@@ -1238,7 +1229,6 @@ pub fn run() {
             scan_library,
             get_library,
             get_chart,
-            get_osu_chart,
             get_dan,
             get_hitsounds,
             get_skins,

@@ -31,8 +31,11 @@ pub fn read(files: &paths::Files, hash: &str) -> Result<String> {
 pub fn load(files: &paths::Files, hash: &str) -> Result<Chart> {
     let text = read(files, hash)?;
     let mut chart = chart::parse(&text);
-    if chart.mode == 1 {
-        chart.taiko = crate::taiko::parse(&text);
+    match chart.mode {
+        0 => chart.osu = crate::osu::parse(&text),
+        1 => chart.taiko = crate::taiko::parse(&text),
+        2 => chart.catch = crate::catch::parse(&text),
+        _ => {}
     }
     Ok(chart)
 }
@@ -62,6 +65,12 @@ struct ChartOut<'a> {
     /// osu!taiko: the chart as lazer plays it
     #[serde(skip_serializing_if = "Option::is_none")]
     taiko: Option<TaikoOut>,
+    /// osu!: the chart as lazer plays it
+    #[serde(skip_serializing_if = "Option::is_none")]
+    osu: Option<OsuOut>,
+    /// osu!catch: the chart as lazer plays it
+    #[serde(skip_serializing_if = "Option::is_none")]
+    catch: Option<CatchOut>,
 }
 
 /// osu!taiko for the playfield (see `taiko.rs`), flat like the notes.
@@ -193,11 +202,39 @@ fn osu_out(c: &crate::osu::Chart) -> OsuOut {
     }
 }
 
-/// An osu! difficulty for the playfield as raw JSON, `null` for other modes.
-pub fn osu_json(files: &paths::Files, hash: &str) -> Result<Vec<u8>> {
-    let text = read(files, hash)?;
-    let out = crate::osu::parse(&text).map(|c| osu_out(&c));
-    Ok(serde_json::to_vec(&out)?)
+/// An osu!catch difficulty for the playfield (see `catch.rs`), flat like the notes.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CatchOut {
+    /// `CatchHitObject.Scale` from CS: the catcher is twice that
+    scale: f32,
+    /// how long objects fall, ms
+    preempt: f64,
+    /// `[time, kind, x, flags, index, banana]` per object: kind 0 fruit, 1 droplet, 2 tiny droplet,
+    /// 3 banana; flags 1 hyperdash, 2 last in combo; index the object it came from; banana its
+    /// number in the shower
+    objects: Vec<f64>,
+    /// `[time, x, dash]` per autoplay frame
+    frames: Vec<f64>,
+    /// the beatmap's own combo colours, `[r, g, b]`
+    colours: Vec<[u8; 3]>,
+}
+
+fn catch_out(c: &crate::catch::Chart) -> CatchOut {
+    CatchOut {
+        scale: c.scale,
+        preempt: c.preempt,
+        objects: c
+            .objects
+            .iter()
+            .flat_map(|o| {
+                let flags = o.hyper as u8 | (o.last_in_combo as u8) << 1;
+                [round2(o.time), o.kind.code() as f64, round2(o.x as f64), flags as f64, o.index as f64, o.banana as f64]
+            })
+            .collect(),
+        frames: c.frames.iter().flat_map(|f| [round2(f.time), round2(f.x as f64), f.dash as u8 as f64]).collect(),
+        colours: c.colours.clone(),
+    }
 }
 
 pub fn chart_json(chart: &Chart) -> Result<Vec<u8>> {
@@ -220,6 +257,8 @@ pub fn chart_json(chart: &Chart) -> Result<Vec<u8>> {
         report: patterns::report(chart),
         dan: dan::rate(chart, 1.0),
         taiko: chart.taiko.as_ref().map(taiko_out),
+        osu: chart.osu.as_ref().map(osu_out),
+        catch: chart.catch.as_ref().map(catch_out),
     };
     Ok(serde_json::to_vec(&out)?)
 }
@@ -434,15 +473,10 @@ mod tests {
                 }
                 let Ok(chart) = load(&paths::Files::lazer(&storage), hash) else { continue };
                 let mut v: serde_json::Value = serde_json::from_slice(&chart_json(&chart).unwrap()).unwrap();
-                if chart.mode == 0 {
-                    v["osu"] = serde_json::from_slice(&osu_json(&paths::Files::lazer(&storage), hash).unwrap()).unwrap();
-                }
-                if chart.mode != 2 {
-                    let read = |h: &str| paths::lazer_file(&storage, h).and_then(|p| std::fs::read(p).ok()).map(|b| String::from_utf8_lossy(&b).into_owned());
-                    if let Some(osu) = read(hash) {
-                        let osb = files.storyboard().and_then(read);
-                        v["hitsounds"] = serde_json::to_value(crate::hitsounds::resolve(&osu, osb.as_deref(), &files)).unwrap();
-                    }
+                let read = |h: &str| paths::lazer_file(&storage, h).and_then(|p| std::fs::read(p).ok()).map(|b| String::from_utf8_lossy(&b).into_owned());
+                if let Some(osu) = read(hash) {
+                    let osb = files.storyboard().and_then(read);
+                    v["hitsounds"] = serde_json::to_value(crate::hitsounds::resolve(&osu, osb.as_deref(), &files)).unwrap();
                 }
                 if chart.mode == 3 {
                     let dans: serde_json::Map<String, serde_json::Value> = stars::RATES

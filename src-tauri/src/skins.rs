@@ -58,8 +58,9 @@ fn parse_selected(ini: &str) -> Option<String> {
 const BUILTIN: [&str; 5] = ["classic", "retro", "triangles", "argon", "argon-pro"];
 
 /// Bumped when the extraction takes more out of the resources (2: hit sounds, 3: osu!taiko's
-/// default drum and argon's taiko drums).
-const EXTRACT_VERSION: u32 = 3;
+/// default drum and argon's taiko drums, 4: osu! and osu!catch textures, the cursor trail, spinner
+/// and banana sounds).
+const EXTRACT_VERSION: u32 = 4;
 
 /// The installed lazer's resources assembly (Velopack install, the default).
 fn resources_dll() -> Option<PathBuf> {

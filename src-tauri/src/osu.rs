@@ -14,7 +14,7 @@
 //!   - `OsuAutoGenerator`: autoplay's cursor, frame by frame (60 a second), with its eased
 //!     moves, slider following, spinning and button alternation.
 //!
-//! Only beatmaps made for osu! are read.
+//! Only beatmaps made for osu! are read; osu!catch (catch.rs) builds on the same objects (`read`).
 
 use std::ops::{Add, Div, Mul, Sub};
 
@@ -623,8 +623,45 @@ fn colour(v: &str) -> Option<[u8; 3]> {
     (c.len() >= 3).then(|| [c[0], c[1], c[2]])
 }
 
-/// An osu! beatmap as lazer plays it, or `None` for other modes.
+/// What a beatmap's objects are before osu!'s own steps (combo numbers, stacking, autoplay), for
+/// the rulesets that start from them (osu!catch).
+pub(crate) struct Raw {
+    pub version: i32,
+    pub cs: f32,
+    pub od: f32,
+    pub ar: f32,
+    pub stack_leniency: f32,
+    /// by time, a new combo after every break
+    pub objects: Vec<Object>,
+    pub colours: Vec<[u8; 3]>,
+    pub slider_border: Option<[u8; 3]>,
+    pub slider_track: Option<[u8; 3]>,
+}
+
+/// An osu! difficulty for the playfield, `None` for other rulesets.
 pub fn parse(text: &str) -> Option<Chart> {
+    let Raw { version, cs, od, ar, stack_leniency, mut objects, colours, slider_border, slider_track } = read(text, 0)?;
+    let scale = ((1.0f32 - 0.7f32 * ((cs as f64 - 5.0) / 5.0) as f32) / 2.0) * 1.00041;
+    let preempt = difficulty_range(ar as f64, 1800.0, 1200.0, 450.0) as i32 as f64;
+    let fade_in = 400.0 * (preempt / 450.0).min(1.0);
+
+    // spinners: spins to clear, bonus spins (Spinner.ApplyDefaultsToSelf)
+    for o in objects.iter_mut().filter(|o| o.kind == Kind::Spinner) {
+        let min_rps = difficulty_range(od as f64, 90.0, 150.0, 225.0) / 60.0;
+        let max_rps = difficulty_range(od as f64, 250.0, 380.0, 430.0) / 60.0;
+        let seconds = (o.end - o.time) / 1000.0;
+        o.spins = (min_rps * seconds + 0.0001) as u32;
+        o.bonus_spins = (((max_rps * seconds + 0.0001) as i64) - o.spins as i64 - BONUS_SPINS_GAP as i64).max(0) as u32;
+    }
+
+    combos(&mut objects);
+    stacking(&mut objects, version, preempt, stack_leniency);
+    let frames = autoplay(&objects, scale, preempt);
+    Some(Chart { scale, preempt, fade_in, objects, frames, colours, slider_border, slider_track })
+}
+
+/// A beatmap made for ruleset `want` (0 osu!, 2 osu!catch) read into osu!'s objects.
+pub(crate) fn read(text: &str, want: i64) -> Option<Raw> {
     let text = text.trim_start_matches('\u{feff}');
     let version = text
         .lines()
@@ -715,7 +752,7 @@ pub fn parse(text: &str) -> Option<Chart> {
             Section::Other => {}
         }
     }
-    if mode != 0 {
+    if mode != want {
         return None;
     }
     // LegacyBeatmapDecoder.applyDifficultyRestrictions
@@ -774,23 +811,7 @@ pub fn parse(text: &str) -> Option<Chart> {
         o.new_combo |= force;
     }
 
-    let scale = ((1.0f32 - 0.7f32 * ((cs as f64 - 5.0) / 5.0) as f32) / 2.0) * 1.00041;
-    let preempt = difficulty_range(ar as f64, 1800.0, 1200.0, 450.0) as i32 as f64;
-    let fade_in = 400.0 * (preempt / 450.0).min(1.0);
-
-    // spinners: spins to clear, bonus spins (Spinner.ApplyDefaultsToSelf)
-    for o in objects.iter_mut().filter(|o| o.kind == Kind::Spinner) {
-        let min_rps = difficulty_range(od as f64, 90.0, 150.0, 225.0) / 60.0;
-        let max_rps = difficulty_range(od as f64, 250.0, 380.0, 430.0) / 60.0;
-        let seconds = (o.end - o.time) / 1000.0;
-        o.spins = (min_rps * seconds + 0.0001) as u32;
-        o.bonus_spins = (((max_rps * seconds + 0.0001) as i64) - o.spins as i64 - BONUS_SPINS_GAP as i64).max(0) as u32;
-    }
-
-    combos(&mut objects);
-    stacking(&mut objects, version, preempt, stack_leniency);
-    let frames = autoplay(&objects, scale, preempt);
-    Some(Chart { scale, preempt, fade_in, objects, frames, colours, slider_border, slider_track })
+    Some(Raw { version, cs, od, ar, stack_leniency, objects, colours, slider_border, slider_track })
 }
 
 /// Parses `normalSet:additionSet:index:volume:filename` into `s` (`ConvertHitObjectParser.readCustomSampleBanks`).
@@ -910,7 +931,9 @@ fn object(
         let bpm_multiplier = if sv_beat_len < 0.0 { ((-sv_beat_len) as f32).clamp(10.0, 1000.0) as f64 / 100.0 } else { 1.0 };
         let velocity = 100.0 * slider_multiplier / (beat_len * bpm_multiplier);
         let scoring_distance = velocity * beat_len;
-        let tick_distance = if d.ticks { scoring_distance / tick_rate } else { f64::INFINITY };
+        // before v8, a faster slider velocity doesn't spread its ticks further apart
+        let tick_multiplier = if version < 8 { 1.0 / d.sv } else { 1.0 };
+        let tick_distance = if d.ticks { scoring_distance / tick_rate * tick_multiplier } else { f64::INFINITY };
         let distance = path.distance();
         let end = time + spans as f64 * distance / velocity;
         let span_duration = (end - time) / spans as f64;
