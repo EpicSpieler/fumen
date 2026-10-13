@@ -1,6 +1,6 @@
 [package]
 name = "fumen"
-version = "0.4.7"
+version = "0.4.8"
 description = "Fumen — a beatmap library for osu!"
 edition = "2021"
 rust-version = "1.80"
