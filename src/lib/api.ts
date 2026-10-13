@@ -1,6 +1,7 @@
 /* Typed wrappers around the Tauri commands, plus fumen:// URLs. */
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import type { Comparison } from "./compare";
 import type { Goal } from "./goals";
 import type {
   ApiError,
@@ -62,6 +63,13 @@ export const api = {
   /** stops the running import after the sets being imported right now */
   cancelImport: () => invoke<void>("cancel_import"),
   repairLazerSets: () => invoke<RepairSummary>("repair_lazer_sets"),
+  /** another player's osu!mania plays and charts, for comparing skills (lib/compare.ts) */
+  comparePlayer: async (name: string): Promise<Comparison> => {
+    const raw = await invoke<ArrayBuffer | Comparison>("compare_player", { name });
+    if (raw instanceof ArrayBuffer) return JSON.parse(new TextDecoder().decode(raw)) as Comparison;
+    return raw;
+  },
+  cancelCompare: () => invoke<void>("cancel_compare"),
   /** every set the player has played that osu!lazer doesn't have (progress: onPlayedProgress) */
   findPlayedSets: () => invoke<PlayedFound>("find_played_sets"),
   /** the osu! account as last seen (no network) */

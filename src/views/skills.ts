@@ -1,8 +1,11 @@
 /* skills.ts — how good you are at each osu!mania pattern (see lib/skills.ts for how it's worked
  * out): a radar now and 90 days ago, per pattern the charts behind the number, the player's goals,
- * and charts from the library to practice the weakest ones on.
+ * and charts from the library to practice the weakest ones on. Another player's skills can be put
+ * next to yours (lib/compare.ts): their polygon on the radar, their value and best charts per
+ * pattern.
  */
 import { asApiError, thumbUrl } from "../lib/api";
+import { compareEvents, compareNow, compareWith, endCompare, progressShare, progressText, recentPlayers, type ComparedChart } from "../lib/compare";
 import { goalNow, goalTarget, goalTitle, goalValue, progress, type Goal, type GoalContext } from "../lib/goals";
 import { currentContext, goalEvents, goalsNow, loadGoals, removeGoal } from "../lib/goals-store";
 import { displayTitle, esc, num, pct, relativeTime, srChip } from "../lib/format";
@@ -17,6 +20,7 @@ import { attachSegIndicator, openMenu, toast, type MenuEntry } from "../ui/contr
 import { icon } from "../ui/icons";
 import { openSet, setMenu } from "./actions";
 import { openGoalDialog } from "./goal-dialog";
+import { openImport } from "./import";
 
 /** the comparison polygon: skills as they were this long ago */
 const THEN_MS = 90 * 86_400_000;
@@ -35,6 +39,10 @@ export class SkillsView {
   private more = new Set<string>();
   /** goals reached, listed */
   private showReached = false;
+  /** the field for a player to compare with is open */
+  private entering = false;
+  /** what the compare bar shows, so progress only updates its line */
+  private barKey = "";
 
   constructor() {
     this.el = document.createElement("section");
@@ -45,13 +53,22 @@ export class SkillsView {
           <h1 class="view-title">Skills</h1>
           <div class="view-sub skills-sub meta-line num"></div>
         </div>
-        <div class="seg-pill skills-keys" role="tablist" aria-label="Keys"></div>
+        <div class="skills-tools">
+          <div class="seg-pill skills-keys" role="tablist" aria-label="Keys"></div>
+          <button class="btn btn-sm skills-compare" type="button">${icon("user")}<span>Compare</span></button>
+        </div>
       </header>
+      <div class="compare-bar" hidden></div>
       <div class="skills-body"></div>`;
     this.bind();
     this.offs.push(
       historyEvents.on("history", () => this.render()),
       goalEvents.on("goals", () => this.render()),
+      compareEvents.on("compare", (s) => {
+        // progress moves the bar along; the rest waits for the answer
+        if (s?.status === "loading" && this.barKey.startsWith("loading|")) this.renderBar();
+        else this.render();
+      }),
       events.on("library", () => this.render()),
       events.on("prefs", (p) => {
         if ("unicode" in p) this.render();
@@ -71,11 +88,17 @@ export class SkillsView {
     const body = this.el.querySelector<HTMLElement>(".skills-body")!;
     const sub = this.el.querySelector<HTMLElement>(".skills-sub")!;
     const keysEl = this.el.querySelector<HTMLElement>(".skills-keys")!;
+    this.renderBar();
     if (!h || !snap) {
       body.innerHTML = `<div class="skills-loading"><div class="skeleton" style="height:360px"></div></div>`;
       return;
     }
+    const cmp = compareNow();
+    const them = cmp?.status === "ready" ? cmp : null;
+    const theirIndex = (id: string | undefined) => (id === undefined ? undefined : them?.index.get(id));
     const modes = keyModes(h.plays, mapIndexOf, snap.maps);
+    // their key modes join yours (after yours)
+    if (them) for (const m of keyModes(them.data.plays, theirIndex, them.maps)) if (!modes.some((x) => x.keys === m.keys)) modes.push({ keys: m.keys, plays: 0 });
     const ctx = currentContext();
     if (!modes.length) {
       sub.innerHTML = "";
@@ -111,13 +134,16 @@ export class SkillsView {
       if (!p.failed) passed.add(i);
     }
     const plan = practice(now, charts, snap.maps, keys, { played, shown: (p) => (this.more.has(p) ? MORE_SUGGESTIONS : SUGGESTIONS) });
+    // theirs, worked out the same way on their charts
+    const theirs = them ? skills(bestPerChart(them.data.plays, theirIndex, them.maps, keys)) : null;
+    const versus = them && theirs ? { name: them.data.player.name, skills: theirs, charts: them.data.charts } : null;
     sub.innerHTML = [`osu!mania ${keys}K`, `${num(plays)} ${plays === 1 ? "chart" : "charts"} passed`]
       .map((w) => `<span>${w}</span>`)
       .join("");
     body.innerHTML = `
       <div class="skills-grid">
-        <section class="panel skills-radar">${radar(now, then, this.goalMarks(keys))}</section>
-        <section class="panel skills-list">${now.map((s, i) => this.row(s, then[i])).join("")}</section>
+        <section class="panel skills-radar">${radar(now, then, this.goalMarks(keys), versus)}</section>
+        <section class="panel skills-list">${now.map((s, i) => this.row(s, then[i], versus && { name: versus.name, skill: versus.skills[i], charts: versus.charts })).join("")}</section>
       </div>
       ${this.goalsHtml(ctx)}
       ${this.practiceHtml(plan, played, passed)}
@@ -129,31 +155,122 @@ export class SkillsView {
       </p>`;
   }
 
-  private row(s: Skill, before: Skill): string {
+  private row(s: Skill, before: Skill, vs: { name: string; skill: Skill; charts: ComparedChart[] } | null): string {
     const label = PATTERN_LABEL[s.pattern];
     const guess = s.charts > 0 && s.charts < MIN_CHARTS;
     // a guess can move either way; a settled skill only grows
     const change = s.value !== null && before.value !== null && s.charts >= MIN_CHARTS && before.charts >= MIN_CHARTS ? s.value - before.value : null;
-    const delta =
+    let delta =
       change !== null && Math.abs(change) >= 0.01
         ? `<span class="skill-delta ${change > 0 ? "up" : "down"}" data-tip="Since ${playWhen(Date.now() - THEN_MS)}">${change > 0 ? "+" : "−"}${Math.abs(change).toFixed(2)}</span>`
         : "";
+    // comparing: their value where the change since 90 days ago was
+    if (vs) {
+      const t = vs.skill;
+      const tip = t.value === null ? `${vs.name} has no ${label.toLowerCase()} charts` : `${vs.name}: ${t.value.toFixed(2)}★ from ${plural(t.charts, "chart")}${t.charts < MIN_CHARTS ? ", a guess" : ""}`;
+      delta = `<span class="skill-them num" data-tip="${esc(tip)}">${t.value !== null ? `${t.value.toFixed(2)}★` : "–"}</span>`;
+    }
     const open = this.open.has(s.pattern);
+    const any = s.value !== null || (vs !== null && vs.skill.value !== null);
+    const theirList =
+      vs && vs.skill.top.length
+        ? `<div class="skill-them-head">${esc(vs.name)}'s best with ${label.toLowerCase()}</div>${vs.skill.top.map((c) => theirRow(c, s, vs.charts)).join("")}`
+        : "";
     return `
       <div class="skill${open ? " open" : ""}${s.value === null ? " empty" : ""}" data-pattern="${s.pattern}">
-        <button class="skill-head" type="button" aria-expanded="${open}"${s.value === null ? " disabled" : ""}>
+        <button class="skill-head" type="button" aria-expanded="${open}"${any ? "" : " disabled"}>
           <span class="skill-name">${label}</span>
           <span class="skill-charts">${s.charts ? `${num(s.charts)} ${s.charts === 1 ? "chart" : "charts"}${guess ? " · a guess so far" : ""}` : "no charts yet"}</span>
           ${delta}
           <b class="skill-value num">${s.value !== null ? `${s.value.toFixed(2)}★` : "–"}</b>
-          ${s.value !== null ? icon("chevron-down", "skill-chev") : `<span></span>`}
+          ${any ? icon("chevron-down", "skill-chev") : `<span></span>`}
         </button>
         ${
           open
-            ? `<div class="skill-charts-list">${s.top.map((c) => chartRow(c, s)).join("")}<button class="btn btn-ghost btn-sm skill-goal" type="button">${icon("flag")}<span>Set a goal for ${label.toLowerCase()}</span></button></div>`
+            ? `<div class="skill-charts-list">${vs && s.top.length ? `<div class="skill-them-head">Yours</div>` : ""}${s.top.map((c) => chartRow(c, s)).join("")}${theirList}<button class="btn btn-ghost btn-sm skill-goal" type="button">${icon("flag")}<span>Set a goal for ${label.toLowerCase()}</span></button></div>`
             : ""
         }
       </div>`;
+  }
+
+  /** The bar under the header: a field for a player's name, the comparison on its way, or who's
+   * compared. */
+  private renderBar(): void {
+    const bar = this.el.querySelector<HTMLElement>(".compare-bar")!;
+    const s = compareNow();
+    const btn = this.el.querySelector<HTMLElement>(".skills-compare")!;
+    btn.classList.toggle("active", !!s || this.entering);
+    if (!s && !this.entering) {
+      bar.hidden = true;
+      this.barKey = "";
+      return;
+    }
+    bar.hidden = false;
+    if (s?.status === "loading") {
+      if (this.barKey !== `loading|${s.name}`) {
+        this.barKey = `loading|${s.name}`;
+        bar.innerHTML = `
+          <div class="cmp-row">
+            <span class="cmp-text"><span class="cmp-who">Comparing with <b>${esc(s.name)}</b></span><span class="cmp-step num"></span></span>
+            <button class="btn btn-sm cmp-stop" type="button">Stop</button>
+          </div>
+          <div class="cmp-progress"><i></i></div>`;
+      }
+      bar.querySelector<HTMLElement>(".cmp-step")!.textContent = progressText(s.progress);
+      bar.querySelector<HTMLElement>(".cmp-progress")!.style.setProperty("--p", progressShare(s.progress).toFixed(3));
+      return;
+    }
+    if (s?.status === "ready" && !this.entering) {
+      const key = `ready|${s.name}|${s.data.plays.length}`;
+      if (this.barKey === key) return;
+      this.barKey = key;
+      const p = s.data.player;
+      const passed = new Set(s.data.plays.filter((x) => !x.failed).map((x) => x.map)).size;
+      const meta = [
+        p.rank ? `#${num(p.rank)}` : "Unranked",
+        p.pp ? `${num(Math.round(p.pp))}pp` : "",
+        p.accuracy ? pct(p.accuracy) : "",
+        `${plural(passed, "chart")} passed`,
+        s.data.unreadable ? `${plural(s.data.unreadable, "chart")} no mirror had` : "",
+      ].filter(Boolean);
+      bar.innerHTML = `
+        <div class="cmp-row">
+          <span class="cmp-avatar${p.avatar ? "" : " img-missing"}">${p.avatar ? `<img src="${esc(p.avatar)}" alt="" decoding="async" />` : ""}</span>
+          <span class="cmp-text">
+            <span class="cmp-who">Compared with <b>${esc(p.name || s.name)}</b></span>
+            <span class="meta-line num cmp-meta">${meta.map((m) => `<span>${esc(m)}</span>`).join("")}</span>
+          </span>
+          <button class="btn btn-ghost btn-sm cmp-change" type="button">Other player</button>
+          <button class="icon-btn sm cmp-close" type="button" data-tip="End the comparison" aria-label="End the comparison">${icon("x")}</button>
+        </div>`;
+      return;
+    }
+    // the field (also after an error)
+    const err = s?.status === "error" ? s : null;
+    const recent = recentPlayers();
+    const key = `field|${err?.error ?? ""}|${recent.join()}`;
+    if (this.barKey === key) return;
+    this.barKey = key;
+    bar.innerHTML = `
+      <form class="cmp-row cmp-form" autocomplete="off">
+        <input class="cmp-input" type="text" spellcheck="false" maxlength="32" placeholder="osu! player name" aria-label="osu! player name" value="${esc(err?.name ?? "")}" />
+        <button class="btn btn-primary btn-sm" type="submit">Compare</button>
+        <button class="btn btn-ghost btn-sm cmp-cancel" type="button">Cancel</button>
+      </form>
+      ${err ? `<div class="cmp-error">${icon("alert")}<span>${esc(err.error)}</span></div>` : ""}
+      ${
+        recent.length
+          ? `<div class="cmp-recent"><span class="cmp-recent-label">Recent</span>${recent.map((n) => `<button class="chip-toggle cmp-pick" type="button" data-name="${esc(n)}">${esc(n)}</button>`).join("")}</div>`
+          : `<div class="cmp-hint">Their top plays, first places, recent passes and most played osu!mania charts come from osu!; charts you don't have are read from the mirrors.</div>`
+      }`;
+    const input = bar.querySelector<HTMLInputElement>(".cmp-input")!;
+    setTimeout(() => input.focus(), 0);
+  }
+
+  private startCompare(name: string): void {
+    if (!name.trim()) return;
+    this.entering = false;
+    void compareWith(name);
   }
 
   /** Open skill goals in a key mode, as targets per pattern for the radar. */
@@ -294,6 +411,29 @@ export class SkillsView {
   private bind(): void {
     this.el.addEventListener("click", (e) => {
       const t = e.target as Element;
+      if (t.closest(".skills-compare")) {
+        if (compareNow()?.status === "loading") return;
+        this.entering = !this.entering;
+        if (!this.entering && compareNow()?.status === "error") endCompare();
+        return this.renderBar();
+      }
+      if (t.closest(".cmp-cancel")) {
+        this.entering = false;
+        if (compareNow()?.status === "error") endCompare();
+        return this.renderBar();
+      }
+      if (t.closest(".cmp-stop") || t.closest(".cmp-close")) {
+        this.entering = false;
+        return endCompare();
+      }
+      if (t.closest(".cmp-change")) {
+        this.entering = true;
+        return this.renderBar();
+      }
+      const pick = t.closest<HTMLElement>(".cmp-pick");
+      if (pick) return this.startCompare(pick.dataset.name!);
+      const add = t.closest<HTMLElement>(".skill-chart[data-add]");
+      if (add) return openImport(`https://osu.ppy.sh/beatmapsets/${add.dataset.add}`);
       const k = t.closest<HTMLElement>(".skills-keys [data-keys]");
       if (k) {
         this.keys = +k.dataset.keys!;
@@ -337,6 +477,12 @@ export class SkillsView {
       const row = t.closest<HTMLElement>(".skill-chart[data-map]");
       if (row) openSet(store.snap!.maps[+row.dataset.map!].set, +row.dataset.map!);
     });
+    this.el.addEventListener("submit", (e) => {
+      const form = (e.target as Element).closest(".cmp-form");
+      if (!form) return;
+      e.preventDefault();
+      this.startCompare(form.querySelector<HTMLInputElement>(".cmp-input")!.value);
+    });
     this.el.addEventListener("contextmenu", (e) => {
       const row = (e.target as Element).closest<HTMLElement>(".skill-chart[data-map]");
       if (!row) return;
@@ -348,6 +494,17 @@ export class SkillsView {
       });
     });
     this.el.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && (e.target as Element).closest(".cmp-input")) {
+        e.stopPropagation();
+        this.entering = false;
+        if (compareNow()?.status === "error") endCompare();
+        return this.renderBar();
+      }
+      const add = (e.target as Element).closest<HTMLElement>(".skill-chart[data-add]");
+      if (add && (e.key === "Enter" || e.key === " ")) {
+        e.preventDefault();
+        return openImport(`https://osu.ppy.sh/beatmapsets/${add.dataset.add}`);
+      }
       const row = (e.target as Element).closest<HTMLElement>(".skill-chart[data-map], .goal[data-map]");
       if (row && (e.key === "Enter" || e.key === " ")) {
         e.preventDefault();
@@ -393,6 +550,32 @@ function chartRow(c: Skill["top"][number], s: Skill): string {
     </div>`;
 }
 
+/** One of the other player's charts behind a skill: like yours, with osu!'s cover; a click opens
+ * it in the library, or offers to add it. */
+function theirRow(c: Skill["top"][number], s: Skill, charts: ComparedChart[]): string {
+  const chart = charts.find((x) => x.id === c.map.id);
+  const unicode = store.prefs.unicode;
+  const title = chart ? `${(unicode && chart.artistUnicode) || chart.artist} - ${(unicode && chart.titleUnicode) || chart.title}` : c.map.version;
+  const lib = chart?.library !== undefined ? mapIndexOf(chart.library) : undefined;
+  const rate = rateOf(c.play);
+  const cover = chart?.setId ? `https://assets.ppy.sh/beatmaps/${chart.setId}/covers/list.jpg` : "";
+  const where = lib !== undefined ? ` data-map="${lib}"` : chart?.setId ? ` data-add="${chart.setId}" data-tip="Not in your library: add it"` : "";
+  return `
+    <div class="skill-chart them"${where} role="button" tabindex="0">
+      <span class="t-art${cover ? "" : " img-missing"}">${cover ? `<img src="${cover}" alt="" loading="lazy" decoding="async" />` : ""}</span>
+      <div class="prow-text">
+        <div class="t-title">${esc(title)}</div>
+        <div class="t-sub">${esc(c.map.version)} · ${c.share}% ${PATTERN_LABEL[s.pattern].toLowerCase()}${lib === undefined ? " · not in your library" : ""}</div>
+      </div>
+      <span class="skill-chart-sr" data-tip="${rate !== 1 ? `Star rating at ${rate.toFixed(2)}×` : "Star rating"}">${srChip(chartStars(c.play, c.map))}</span>
+      <span class="skill-chart-mods">${esc(modsText(c.play as Play))}</span>
+      <span class="num skill-chart-acc">${pct(c.play.acc)}</span>
+      <b class="num skill-chart-worth" data-tip="What this play is worth at ${Math.round(REF_ACC * 100)}% accuracy">${c.stars.toFixed(2)}★</b>
+    </div>`;
+}
+
+const plural = (n: number, one: string, many = `${one}s`) => `${num(n)} ${n === 1 ? one : many}`;
+
 /** How lazer plays a chart at a rate: Half Time or Double Time, with the speed adjusted off 0.75×
  * and 1.5× (shown like a play's mods). */
 const rateMods = (rate: number): string =>
@@ -431,8 +614,8 @@ function suggestionRow(s: Suggestion, pattern: SkillPattern, aim: Aim, state: st
 
 /** The six patterns around a hexagon: now (filled) and 90 days ago (dashed). The centre isn't
  * zero: rings are labelled in stars, so small differences show. */
-function radar(now: Skill[], then: Skill[], goals: (number | null)[]): string {
-  const values = [...[...now, ...then].map((s) => s.value), ...goals].filter((v): v is number => v !== null);
+function radar(now: Skill[], then: Skill[], goals: (number | null)[], vs: { name: string; skills: Skill[] } | null = null): string {
+  const values = [...[...now, ...(vs ? vs.skills : then)].map((s) => s.value), ...goals].filter((v): v is number => v !== null);
   const max = values.length ? Math.max(...values) : 1;
   const min = values.length ? Math.min(...values) : 0;
   const step = max - min > 3 ? 1 : 0.5;
@@ -459,8 +642,10 @@ function radar(now: Skill[], then: Skill[], goals: (number | null)[]): string {
     return `<line class="spoke" x1="0" y1="0" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" />`;
   }).join("");
   const nowPts = now.map((s, i) => at(i, s.value));
-  const hasThen = then.some((s) => s.value !== null) && then.some((s, i) => s.value !== now[i].value);
+  // comparing: their polygon instead of 90 days ago
+  const hasThen = !vs && then.some((s) => s.value !== null) && then.some((s, i) => s.value !== now[i].value);
   const thenPoly = hasThen ? `<polygon class="then" points="${poly(then.map((s, i) => at(i, s.value)))}" />` : "";
+  const themPoly = vs && vs.skills.some((s) => s.value !== null) ? `<polygon class="them" points="${poly(vs.skills.map((s, i) => at(i, s.value)))}" />` : "";
   const dots = now
     .map((s, i) => {
       if (s.value === null) return "";
@@ -481,18 +666,24 @@ function radar(now: Skill[], then: Skill[], goals: (number | null)[]): string {
       const k = 1.17;
       const anchor = Math.abs(x) < 1 ? "middle" : x > 0 ? "start" : "end";
       const dy = y < -1 ? -4 : y > 1 ? 14 : 4;
-      return `<text class="axis-label" x="${(x * k).toFixed(1)}" y="${(y * k + dy).toFixed(1)}" text-anchor="${anchor}">${PATTERN_LABEL[s.pattern]}<tspan class="axis-value" x="${(x * k).toFixed(1)}" dy="13">${s.value !== null ? `${s.value.toFixed(2)}★` : "–"}</tspan></text>`;
+      const theirs = vs ? vs.skills[i].value : undefined;
+      const value =
+        theirs === undefined
+          ? `<tspan class="axis-value" x="${(x * k).toFixed(1)}" dy="13">${s.value !== null ? `${s.value.toFixed(2)}★` : "–"}</tspan>`
+          : `<tspan class="axis-value" x="${(x * k).toFixed(1)}" dy="13">${s.value !== null ? s.value.toFixed(2) : "–"}</tspan><tspan class="axis-them"> · ${theirs !== null ? theirs.toFixed(2) : "–"}</tspan>`;
+      return `<text class="axis-label" x="${(x * k).toFixed(1)}" y="${(y * k + dy).toFixed(1)}" text-anchor="${anchor}">${PATTERN_LABEL[s.pattern]}${value}</text>`;
     })
     .join("");
   return `
     <svg class="radar" viewBox="-170 -140 340 290" role="img" aria-label="Skill per pattern">
-      ${rings.join("")}${spokes}${thenPoly}
+      ${rings.join("")}${spokes}${thenPoly}${themPoly}
       <polygon class="now" points="${poly(nowPts)}" />
       ${dots}${marks}${labels}
     </svg>
     <div class="radar-legend">
-      <span class="lg-now">Now</span>
+      <span class="lg-now">${vs ? "You" : "Now"}</span>
       ${hasThen ? `<span class="lg-then">90 days ago</span>` : ""}
+      ${vs ? `<span class="lg-them">${esc(vs.name)}</span>` : ""}
       ${goals.some((v) => v !== null) ? `<span class="lg-goal">Goal</span>` : ""}
     </div>`;
 }
