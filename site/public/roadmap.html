@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Roadmap · Fumen</title>
+  <meta name="description" content="Where Fumen, a beatmap library for osu!, is and where it's going.">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="preload" href="/fonts/instrument-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/roadmap.css">
+  <script src="/roadmap.js" defer></script>
+</head>
+<body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-mark" viewBox="0 0 24 24"><rect x="3" y="15" width="4" height="2.6" rx="1.3"/><rect x="8" y="11" width="4" height="2.6" rx="1.3"/><rect x="13" y="7" width="4" height="2.6" rx="1.3"/><rect x="18" y="3" width="4" height="6.6" rx="1.6" opacity=".45"/><rect x="18" y="7" width="4" height="2.6" rx="1.3"/><rect x="2" y="20" width="21" height="1.2" rx=".6" opacity=".35"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="M6.5 9.5 12 15l5.5-5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5.5 12.5 4.2 4.2 8.8-9.4" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-open" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6.5" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+    <symbol id="i-replay" viewBox="0 0 24 24"><path d="M5 12a7 7 0 1 0 2.05-4.95M5 4.5V8h3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h13m-5-5.5L18.5 12 13 17.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="M19 12H6m5-5.5L5.5 12 11 17.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  </svg>
+
+  <div class="glow" aria-hidden="true"></div>
+
+  <header class="top">
+    <a class="brand" href="/"><svg class="brand-mark"><use href="#i-mark"/></svg><span>Fumen</span></a>
+  </header>
+
+  <main class="page">
+    <section class="hero">
+      <h1>Roadmap</h1>
+      <p class="lead">What Fumen can do today, what comes next, and where it goes after 1.0. Open a version to see what's in it; some show how a feature works.</p>
+      <div class="stats">
+        <div class="stat">
+          <div class="label">Latest release</div>
+          <div class="value num" data-latest>0.4.11</div>
+          <div class="sub" data-latest-date>&nbsp;</div>
+        </div>
+        <div class="stat">
+          <div class="label">On the way to 1.0</div>
+          <div class="value num"><span data-shipped>4</span><span class="of"> of <span data-total>9</span> versions out</span></div>
+          <div class="meter" aria-hidden="true"><div class="meter-fill" data-meter></div></div>
+        </div>
+        <div class="stat">
+          <div class="label">Up next</div>
+          <div class="value" data-next>0.5 Pools</div>
+          <div class="sub" data-next-sub>&nbsp;</div>
+        </div>
+      </div>
+    </section>
+
+    <nav class="seg" role="tablist" aria-label="Show">
+      <button role="tab" aria-selected="true" data-filter="all">Everything</button>
+      <button role="tab" aria-selected="false" data-filter="done">Shipped</button>
+      <button role="tab" aria-selected="false" data-filter="coming">On the way to 1.0</button>
+      <button role="tab" aria-selected="false" data-filter="later">After 1.0</button>
+      <span class="seg-bar" aria-hidden="true"></span>
+    </nav>
+
+    <ol class="timeline" data-timeline>
+      <li class="spine" aria-hidden="true"><span class="spine-fill" data-spine></span></li>
+    </ol>
+
+    <p class="foot">Plans change as Fumen grows; this page follows the project's plan. <a href="/"><svg class="ic"><use href="#i-back"/></svg>Back to Fumen</a></p>
+  </main>
+</body>
+</html>

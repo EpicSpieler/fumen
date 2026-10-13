@@ -50,6 +50,16 @@ describe("site", () => {
     expect(await r.text()).toContain("Upcoming project");
   });
 
+  it("serves pages without their extension, scripts as scripts", async () => {
+    const r = await fetch(base + "/roadmap");
+    expect(r.status).toBe(200);
+    expect(r.headers.get("content-type")).toContain("text/html");
+    expect(await r.text()).toContain("Roadmap");
+    expect((await fetch(base + "/roadmap/")).status).toBe(200);
+    expect((await fetch(base + "/roadmap.js")).headers.get("content-type")).toContain("text/javascript");
+    expect((await fetch(base + "/nothing-here")).status).toBe(404);
+  });
+
   it("keeps to its folder", async () => {
     expect((await fetch(base + "/..%2Fserver.mjs")).status).toBe(404);
     expect((await fetch(base + "/%2e%2e/.env.example")).status).toBe(404);

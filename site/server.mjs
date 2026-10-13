@@ -23,6 +23,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const TYPES = {
   ".html": "text/html; charset=utf-8",
   ".css": "text/css; charset=utf-8",
+  ".js": "text/javascript; charset=utf-8",
   ".svg": "image/svg+xml",
   ".png": "image/png",
   ".ico": "image/x-icon",
@@ -121,7 +122,9 @@ export function createSite(config) {
   }
 
   async function staticFile(res, pathname, head) {
-    const rel = pathname === "/" ? "index.html" : decodeURIComponent(pathname).replace(/^\/+/, "");
+    let rel = pathname === "/" ? "index.html" : decodeURIComponent(pathname).replace(/^\/+/, "").replace(/\/+$/, "");
+    // pages without their extension: /roadmap is roadmap.html
+    if (rel && !extname(rel)) rel += ".html";
     const file = normalize(join(config.publicDir, rel));
     if (!file.startsWith(config.publicDir.endsWith(sep) ? config.publicDir : config.publicDir + sep)) return false;
     let data;
@@ -133,7 +136,8 @@ export function createSite(config) {
     const type = TYPES[extname(file)] ?? "application/octet-stream";
     res.writeHead(200, {
       "Content-Type": type,
-      "Cache-Control": type.startsWith("text/html") ? "no-cache" : "public, max-age=86400",
+      // pages, styles and scripts are checked every time (they change together); the rest keeps a day
+      "Cache-Control": type.startsWith("text/") ? "no-cache" : "public, max-age=86400",
       ...(type.startsWith("text/html") ? PAGE_HEADERS : { "X-Content-Type-Options": "nosniff" }),
     });
     res.end(head ? undefined : data);

@@ -28,6 +28,24 @@ main { padding: 24px; text-align: center; animation: rise .6s cubic-bezier(.2, .
 h1 { margin: 16px 0 4px; font-size: 30px; font-weight: 700; letter-spacing: -.02em; }
 p { margin: 0; color: var(--t2); }
 a { color: var(--accent); text-decoration: none; }
+.road {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  margin-top: 18px;
+  padding: 0 14px 0 16px;
+  border-radius: 17px;
+  background: rgba(255, 255, 255, .07);
+  color: var(--t1);
+  font-size: 13.5px;
+  font-weight: 600;
+  transition: background-color .15s, transform .2s cubic-bezier(.34, 1.56, .64, 1);
+}
+.road:hover { background: rgba(255, 255, 255, .12); }
+.road:active { transform: scale(.97); }
+.road svg { width: 16px; height: 16px; fill: none; stroke: var(--accent); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transition: transform .2s cubic-bezier(.22, 1, .36, 1); }
+.road:hover svg { transform: translateX(2px); }
 .soon { margin-top: 26px; font-size: 11px; font-weight: 650; letter-spacing: .1em; text-transform: uppercase; color: var(--t3); }
 
 @keyframes rise { from { opacity: 0; transform: translateY(8px); } }
