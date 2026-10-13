@@ -144,7 +144,15 @@ nothing), and Fumen trades the code (later the refresh token) for tokens at the 
       ratings within 1e-14). Dan in the chart panel at any rate, in the set and library rows,
       search `dan=gamma`, `dan>=13`, `category=…`
 - [ ] Azusa's marathon correction (needs Etterna's MinaCalc), the analyser's Roxy / Mixed estimators
-- [ ] Taiko / catch / osu! previews
+- [x] osu!taiko playfield: the chart converted like lazer's TaikoBeatmapConverter (rolls, swells,
+      strong notes, scroll speed per timing point, bar lines; `src-tauri/src/taiko.rs`, checked on
+      7071 charts), lazer's autoplay (alternating hands, strong hits with both, roll and swell
+      timing), TaikoPlayfield's layout and scrolling; argon / argon pro / triangles (lazer's drum
+      textures, extracted with the hit sounds) and legacy skins over classic (LegacyInputDrum,
+      LegacyCirclePiece, LegacyDrumRoll, LegacySwell, LegacyTaikoScroller, pippidon);
+      DrumSamplePlayer's sounds (strong second sounds, taiko- lookups, argon's volume banks and
+      flourishes)
+- [ ] Catch / osu! previews
 - [x] "tech" detection: the pattern report's "Tech" (mixed speeds) and SV
 
 ## v0.3 — collections
