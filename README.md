@@ -51,6 +51,11 @@ database first (see [Adding beatmaps](#adding-beatmaps)).
   and osu!catch are laid out and timed like lazer's playfields, with lazer's autoplay
 - Pattern read for osu!mania: stream, jumpstream, handstream, chordjack, jacks, long notes, stamina;
   chord mix, jacks, column and hand balance
+- Mods in the playfield, picked beside it and kept for whatever plays (like the rate): Easy, Hard
+  Rock, Hidden, Fade In (osu!mania), Flashlight and Mirror, the way lazer plays them — Hard Rock
+  flips osu!, pushes osu!catch's fruits apart and speeds osu!taiko up; Hidden and Flashlight follow
+  the combo and breaks; the difficulty line shows CS / AR / OD / HP with them (and AR / OD at the
+  rate)
 - Rates: HT, DT or anything from 0.5× to 2× — the song plays at it and the panel shows star rating,
   length, BPM and density at that rate. osu!mania star ratings come from Fumen's own port of lazer's
   calculator (matches lazer's own value within 0.005★ on 99.8 % of a 5.7k-chart library)
