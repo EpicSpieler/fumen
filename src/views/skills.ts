@@ -12,10 +12,11 @@ import { displayTitle, esc, num, pct, relativeTime, srChip } from "../lib/format
 import { historyEvents, historyNow, loadHistory, mapIndexOf, modsText, playWhen } from "../lib/history";
 import {
   bestPerChart, chartStars, keyModes, MIN_CHARTS, MIN_SHARE, MORE_SUGGESTIONS, PATTERN_LABEL, PATTERNS, practice, rateOf, REF_ACC, skills,
-  SUGGESTIONS, TOP, type Aim, type Practice, type Skill, type SkillPattern, type Suggestion,
+  suggest, SUGGESTIONS, TOP, type Aim, type Counted, type Practice, type Skill, type SkillPattern, type Suggestion,
 } from "../lib/skills";
+import { similarTo } from "../lib/similar";
 import { events, store } from "../lib/store";
-import type { Play } from "../lib/types";
+import type { MapRow, Play } from "../lib/types";
 import { attachSegIndicator, openMenu, toast, type MenuEntry } from "../ui/controls";
 import { icon } from "../ui/icons";
 import { openSet, setMenu } from "./actions";
@@ -26,6 +27,18 @@ import { openImport } from "./import";
 const THEN_MS = 90 * 86_400_000;
 /** patterns with practice suggestions before "All patterns" */
 const PRACTICE_GROUPS = 3;
+/** their charts per practice group, comparing */
+const THEIR_PICKS = 3;
+/** library charts offered as like one of theirs */
+const LIKE_THEIRS = 5;
+
+/** The compared player's charts that practise your patterns (their indices, into `maps`). */
+interface TheirPractice {
+  name: string;
+  charts: ComparedChart[];
+  maps: MapRow[];
+  picks: Map<SkillPattern, Suggestion[]>;
+}
 
 export class SkillsView {
   readonly el: HTMLElement;
@@ -137,6 +150,7 @@ export class SkillsView {
     // theirs, worked out the same way on their charts
     const theirs = them ? skills(bestPerChart(them.data.plays, theirIndex, them.maps, keys)) : null;
     const versus = them && theirs ? { name: them.data.player.name, skills: theirs, charts: them.data.charts } : null;
+    const theirPractice = them ? this.theirPractice(plan, charts, them, keys, played) : null;
     sub.innerHTML = [`osu!mania ${keys}K`, `${num(plays)} ${plays === 1 ? "chart" : "charts"} passed`]
       .map((w) => `<span>${w}</span>`)
       .join("");
@@ -146,7 +160,7 @@ export class SkillsView {
         <section class="panel skills-list">${now.map((s, i) => this.row(s, then[i], versus && { name: versus.name, skill: versus.skills[i], charts: versus.charts })).join("")}</section>
       </div>
       ${this.goalsHtml(ctx)}
-      ${this.practiceHtml(plan, played, passed)}
+      ${this.practiceHtml(plan, played, passed, theirPractice)}
       <p class="skills-how">
         A play is worth the chart's star rating at the rate you played it, at ${Math.round(REF_ACC * 100)}% accuracy along osu!'s own osu!mania pp curve:
         a 5★ chart at 92% counts as about 4.4★. A pattern's skill is the average of your ${TOP} best charts with that pattern
@@ -348,8 +362,40 @@ export class SkillsView {
     openMenu(at, entries, { minWidth: 200 });
   }
 
+  /** What the compared player plays that would practise your patterns: per pattern, their charts
+   * in its aim (at a rate, as yours), the ones already suggested from your library left out. */
+  private theirPractice(
+    plan: Practice[],
+    charts: Counted[],
+    them: { data: { player: { name: string }; charts: ComparedChart[] }; maps: MapRow[] },
+    keys: number,
+    played: Set<number>,
+  ): TheirPractice {
+    // their charts as your library's difficulties, where you have them
+    const lib = them.data.charts.map((c) => (c.library !== undefined ? mapIndexOf(c.library) : undefined));
+    const mine = new Map(charts.map((c) => [c.mapIdx, c]));
+    const shown = new Set<number>();
+    for (const g of plan) for (const p of g.picks.slice(0, this.more.has(g.skill.pattern) ? MORE_SUGGESTIONS : SUGGESTIONS)) shown.add(p.mapIdx);
+    const exclude = new Set<number>();
+    const playedThem = new Set<number>();
+    lib.forEach((i, j) => {
+      if (i === undefined) return;
+      if (shown.has(i)) exclude.add(j);
+      if (played.has(i)) playedThem.add(j);
+    });
+    const picks = new Map<SkillPattern, Suggestion[]>();
+    for (const g of plan) {
+      const k = PATTERNS.indexOf(g.skill.pattern);
+      const bestOf = (j: number) => (lib[j] !== undefined ? mine.get(lib[j]!) : undefined);
+      const list = suggest(k, g.aim, charts, them.maps, keys, { played: playedThem, exclude, limit: THEIR_PICKS, bestOf });
+      list.forEach((s) => exclude.add(s.mapIdx));
+      picks.set(g.skill.pattern, list);
+    }
+    return { name: them.data.player.name, charts: them.data.charts, maps: them.maps, picks };
+  }
+
   /** Practice next: the weakest patterns (or all), each with charts a little above its skill. */
-  private practiceHtml(plan: Practice[], played: Set<number>, passed: Set<number>): string {
+  private practiceHtml(plan: Practice[], played: Set<number>, passed: Set<number>, theirs: TheirPractice | null): string {
     if (!plan.length) return "";
     const groups = this.allPatterns ? plan : plan.slice(0, PRACTICE_GROUPS);
     return `
@@ -361,11 +407,11 @@ export class SkillsView {
           </div>
           ${plan.length > PRACTICE_GROUPS ? `<button class="btn btn-ghost btn-sm practice-all" type="button">${this.allPatterns ? "Weakest only" : `All ${plan.length} patterns`}</button>` : ""}
         </div>
-        <div class="practice-groups">${groups.map((g) => this.practiceGroup(g, played, passed)).join("")}</div>
+        <div class="practice-groups">${groups.map((g) => this.practiceGroup(g, played, passed, theirs)).join("")}</div>
       </section>`;
   }
 
-  private practiceGroup({ skill, aim, picks }: Practice, played: Set<number>, passed: Set<number>): string {
+  private practiceGroup({ skill, aim, picks }: Practice, played: Set<number>, passed: Set<number>, theirs: TheirPractice | null): string {
     const name = PATTERN_LABEL[skill.pattern];
     const more = this.more.has(skill.pattern);
     const shown = picks.slice(0, more ? MORE_SUGGESTIONS : SUGGESTIONS);
@@ -379,7 +425,7 @@ export class SkillsView {
       return played.has(s.mapIdx) ? (passed.has(s.mapIdx) ? "played" : "not passed yet") : "";
     };
     return `
-      <section class="panel practice-group" data-pattern="${skill.pattern}">
+      <section class="panel practice-group${theirs?.picks.get(skill.pattern)?.length ? " has-them" : ""}" data-pattern="${skill.pattern}">
         <div class="practice-group-head">
           <span class="skill-name">${name}</span>
           <span class="practice-aim num">${from} · aiming at ${band}</span>
@@ -390,7 +436,46 @@ export class SkillsView {
             : `<div class="practice-none">Nothing in your library with at least ${MIN_SHARE}% ${name.toLowerCase()} reaches ${band}, not even at 0.75× to 1.5×.</div>`
         }
         ${picks.length > SUGGESTIONS ? `<button class="btn btn-ghost btn-sm practice-more" type="button">${more ? "Show fewer" : "Show more"}</button>` : ""}
+        ${this.theirGroup(skill.pattern, aim, theirs)}
       </section>`;
+  }
+
+  /** Their charts for a pattern of yours, under yours. */
+  private theirGroup(pattern: SkillPattern, aim: Aim, theirs: TheirPractice | null): string {
+    const list = theirs?.picks.get(pattern);
+    if (!theirs || !list?.length) return "";
+    return `
+      <div class="practice-them-head">From ${esc(theirs.name)}'s plays</div>
+      <div class="practice-list">${list.map((s) => theirSuggestionRow(s, theirs.charts[s.mapIdx], pattern, aim)).join("")}</div>`;
+  }
+
+  /** What in your library is like one of their charts (not in it), and a way to add it. */
+  private likeMenu(at: Element | { x: number; y: number }, theirId: string): void {
+    const s = compareNow();
+    const snap = store.snap;
+    if (s?.status !== "ready" || !snap) return;
+    const j = s.index.get(theirId);
+    if (j === undefined) return;
+    const chart = s.data.charts[j];
+    const key = (title: string, version: string) => `${title.toLowerCase()} / ${version.toLowerCase()}`;
+    const same = (m: MapRow) => (m.set >= 0 ? key(snap.sets[m.set]?.title ?? "", m.version) : key(chart.title, chart.version));
+    const like = similarTo(s.maps[j], snap.maps, { limit: LIKE_THEIRS, same });
+    const unicode = store.prefs.unicode;
+    const entries: MenuEntry[] = [];
+    if (chart.setId) entries.push({ label: "Add to osu!lazer…", icon: "download", action: () => openImport(`https://osu.ppy.sh/beatmapsets/${chart.setId}`) }, "sep");
+    entries.push({ group: "Like it in your library" });
+    if (!like.length) entries.push({ label: "Nothing much like it", icon: "similar", disabled: true });
+    for (const l of like) {
+      const m = snap.maps[l.mapIdx];
+      const title = displayTitle(snap.sets[m.set], unicode);
+      entries.push({
+        label: `${title.length > 34 ? `${title.slice(0, 33)}…` : title} [${m.version.length > 22 ? `${m.version.slice(0, 21)}…` : m.version}]`,
+        icon: "similar",
+        hint: `${m.sr.toFixed(2)}★ · ${Math.round(l.score * 100)}%`,
+        action: () => openSet(m.set, l.mapIdx, { similar: true }),
+      });
+    }
+    openMenu(at, entries, { minWidth: 300 });
   }
 
   /** The weakest pattern in the key mode shown, for a new goal. */
@@ -432,6 +517,8 @@ export class SkillsView {
       }
       const pick = t.closest<HTMLElement>(".cmp-pick");
       if (pick) return this.startCompare(pick.dataset.name!);
+      const like = t.closest<HTMLElement>(".like-btn");
+      if (like) return this.likeMenu(like, like.closest<HTMLElement>("[data-their]")!.dataset.their!);
       const add = t.closest<HTMLElement>(".skill-chart[data-add]");
       if (add) return openImport(`https://osu.ppy.sh/beatmapsets/${add.dataset.add}`);
       const k = t.closest<HTMLElement>(".skills-keys [data-keys]");
@@ -484,6 +571,12 @@ export class SkillsView {
       this.startCompare(form.querySelector<HTMLInputElement>(".cmp-input")!.value);
     });
     this.el.addEventListener("contextmenu", (e) => {
+      // one of theirs you don't have: what's like it in yours
+      const theirs = (e.target as Element).closest<HTMLElement>(".skill-chart[data-their]:not([data-map])");
+      if (theirs) {
+        e.preventDefault();
+        return this.likeMenu({ x: e.clientX, y: e.clientY }, theirs.dataset.their!);
+      }
       const row = (e.target as Element).closest<HTMLElement>(".skill-chart[data-map]");
       if (!row) return;
       e.preventDefault();
@@ -500,6 +593,7 @@ export class SkillsView {
         if (compareNow()?.status === "error") endCompare();
         return this.renderBar();
       }
+      if ((e.target as Element).closest(".like-btn")) return;
       const add = (e.target as Element).closest<HTMLElement>(".skill-chart[data-add]");
       if (add && (e.key === "Enter" || e.key === " ")) {
         e.preventDefault();
@@ -561,7 +655,7 @@ function theirRow(c: Skill["top"][number], s: Skill, charts: ComparedChart[]): s
   const cover = chart?.setId ? `https://assets.ppy.sh/beatmaps/${chart.setId}/covers/list.jpg` : "";
   const where = lib !== undefined ? ` data-map="${lib}"` : chart?.setId ? ` data-add="${chart.setId}" data-tip="Not in your library: add it"` : "";
   return `
-    <div class="skill-chart them"${where} role="button" tabindex="0">
+    <div class="skill-chart them"${where} data-their="${esc(c.map.id)}" role="button" tabindex="0">
       <span class="t-art${cover ? "" : " img-missing"}">${cover ? `<img src="${cover}" alt="" loading="lazy" decoding="async" />` : ""}</span>
       <div class="prow-text">
         <div class="t-title">${esc(title)}</div>
@@ -584,6 +678,31 @@ const rateMods = (rate: number): string =>
 function rateTip(rate: number): string {
   const mod = rate < 1 ? "Half Time" : "Double Time";
   return rate === 0.75 || rate === 1.5 ? `${mod}, ${rate}×` : `${mod} with its speed set to ${rate.toFixed(2)}×`;
+}
+
+/** One of their charts to practice on, like yours: osu!'s cover; a click opens it in the library or
+ * offers to add it, and one you don't have can show what's like it in yours. */
+function theirSuggestionRow(s: Suggestion, chart: ComparedChart, pattern: SkillPattern, aim: Aim): string {
+  const unicode = store.prefs.unicode;
+  const title = `${(unicode && chart.artistUnicode) || chart.artist} - ${(unicode && chart.titleUnicode) || chart.title}`;
+  const lib = chart.library !== undefined ? mapIndexOf(chart.library) : undefined;
+  const cover = chart.setId ? `https://assets.ppy.sh/beatmaps/${chart.setId}/covers/list.jpg` : "";
+  const name = PATTERN_LABEL[pattern].toLowerCase();
+  const gain = aim.from !== null ? s.after - aim.from : null;
+  const where = lib !== undefined ? ` data-map="${lib}" data-rate="${s.rate}"` : chart.setId ? ` data-add="${chart.setId}" data-tip="Not in your library: add it"` : "";
+  const state = s.best ? `your best ${pct(s.best.play.acc)}` : lib !== undefined ? "in your library" : "not in your library";
+  return `
+    <div class="skill-chart practice-chart them"${where} data-their="${esc(chart.id)}" role="button" tabindex="0">
+      <span class="t-art${cover ? "" : " img-missing"}">${cover ? `<img src="${cover}" alt="" loading="lazy" decoding="async" />` : ""}</span>
+      <div class="prow-text">
+        <div class="t-title">${esc(title)}</div>
+        <div class="t-sub">${[esc(chart.version), `${s.share}% ${name}`, state].join(" · ")}</div>
+      </div>
+      <span class="skill-chart-sr" data-tip="${s.rate !== 1 ? `Star rating at ${s.rate.toFixed(2)}×` : "Star rating"}">${srChip(s.stars)}</span>
+      <span class="skill-chart-mods"${s.rate !== 1 ? ` data-tip="${rateTip(s.rate)}"` : ""}>${rateMods(s.rate)}</span>
+      <b class="num practice-gain" data-tip="${gain !== null ? `A ${pct(REF_ACC, 0)} pass here takes ${name} from ${aim.from!.toFixed(2)}★ to ${s.after.toFixed(2)}★` : `A ${pct(REF_ACC, 0)} pass here starts ${name} at ${s.after.toFixed(2)}★`}">${gain === null ? "new" : gain < 0.005 ? "+&lt;0.01" : `+${gain.toFixed(2)}`}</b>
+      ${lib === undefined ? `<button class="icon-btn like-btn" type="button" data-tip="Like it in your library" aria-label="Like it in your library">${icon("similar")}</button>` : "<span></span>"}
+    </div>`;
 }
 
 /** One chart to practice on: what it is, the rate to play it at, its star rating there, and what a

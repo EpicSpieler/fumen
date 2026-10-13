@@ -136,3 +136,35 @@
   .chart-stats, .chart-stats.has-dan { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .chart-cols { grid-template-columns: minmax(0, 1fr); gap: 18px; }
 }
+
+/* ---------- similar maps ---------- */
+.chart-similar { margin-top: 20px; }
+.similar { container-type: inline-size; animation: fade-in .2s var(--ease-std); }
+.similar-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 14px; margin-bottom: 8px; }
+.similar-sub { color: var(--t3); font-size: var(--fs-12); }
+.similar .chart-note { margin-top: 0; }
+.sim-list { display: flex; flex-direction: column; margin: 0 -8px; }
+.sim-row {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) 50px 44px;
+  column-gap: 12px;
+  align-items: center;
+  min-height: 44px;
+  padding: 4px 8px;
+  border-radius: var(--r-md);
+  font-size: var(--fs-12);
+  cursor: pointer;
+  outline-offset: -2px;
+}
+.sim-row > * { min-width: 0; }
+.sim-row:hover { background: var(--tint-hover); }
+.sim-row .t-art { width: 52px; height: 30px; }
+.sim-row .t-art img { opacity: 1; }
+.sim-row .t-sub { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; white-space: normal; }
+.sim-sr { display: flex; justify-content: flex-end; }
+.sim-score { text-align: right; color: var(--t1); }
+.similar-more { margin-top: 4px; }
+@container (max-width: 520px) {
+  .sim-row { grid-template-columns: minmax(0, 1fr) 50px 44px; }
+  .sim-row .t-art { display: none; }
+}
