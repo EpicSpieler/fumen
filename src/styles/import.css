@@ -1,5 +1,5 @@
 /* ===========================================================================
-   Add beatmaps — links in, one row per set on its way into osu!lazer
+   Add beatmaps — links or played maps in, one card per set on its way into osu!lazer
    =========================================================================== */
 
 .imp {
@@ -42,64 +42,216 @@
   font-size: var(--fs-11);
 }
 
-.imp-rows {
+.imp-tabs { align-self: flex-start; margin-top: -2px; }
+.imp-tabs[hidden] { display: none; }
+
+/* ---------- Maps you've played: before the import ---------- */
+.imp-played {
   display: flex;
   flex-direction: column;
-  max-height: 320px;
-  overflow-y: auto;
-  border-radius: var(--r-xl);
-  background: var(--surface-1);
+  gap: 10px;
+  min-height: 136px;
   animation: fade-in .2s var(--ease-std);
 }
-.imp-row {
-  position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  column-gap: 14px;
-  padding: 10px 14px;
+.imp-played[hidden] { display: none; }
+.imp-pl-msg {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px;
+  border-radius: var(--r-xl);
+  background: var(--surface-1);
+  font-size: var(--fs-12);
+  line-height: 1.5;
+  color: var(--t2);
 }
-.imp-row + .imp-row::before {
-  content: "";
-  position: absolute;
-  left: 14px;
-  right: 14px;
-  top: 0;
-  height: 1px;
-  background: var(--stroke-dim);
-}
-.imp-row-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-12); font-weight: 600; }
-.imp-row-state {
-  max-width: 260px;
-  font-size: var(--fs-11);
-  font-variant-numeric: tabular-nums;
-  color: var(--t3);
-  text-align: right;
-  transition: color .2s var(--ease-std);
-}
-.imp-row[data-stage="waiting"] .imp-row-title { color: var(--t2); }
-.imp-row[data-stage="downloading"] .imp-row-state,
-.imp-row[data-stage="importing"] .imp-row-state { color: var(--t2); }
-.imp-row[data-stage="done"] .imp-row-state { color: var(--success); }
-.imp-row[data-stage="error"] .imp-row-state { color: var(--danger); }
+.imp-pl-msg.bad { background: var(--danger-soft); color: var(--t1); }
+.imp-pl-msg.bad .imp-pl-ic { color: var(--danger); }
+.imp-pl-ic { flex: none; width: 16px; height: 16px; margin-top: 1px; color: var(--t3); }
+.imp-pl-finding { display: flex; flex-direction: column; gap: 0; border-radius: var(--r-xl); background: var(--surface-1); overflow: hidden; }
+.imp-pl-finding .imp-pl-msg { justify-content: space-between; background: none; }
+.imp-pl-read { font-variant-numeric: tabular-nums; color: var(--t3); }
+.imp-pl-finding .imp-bar { position: static; height: 2px; margin: 0; border-radius: 0; }
 
-.imp-bar {
-  grid-column: 1 / -1;
-  height: 3px;
-  margin-top: 8px;
+.imp-pl-sum { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.imp-pl-big { display: flex; align-items: baseline; gap: 10px; min-width: 0; animation: rise-in .35s var(--ease-out); }
+.imp-pl-big b { font-size: 28px; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.imp-pl-big span { font-size: var(--fs-12); color: var(--t2); }
+.imp-pl-sum .btn { flex: none; }
+.imp-pl-meta .meta-line { font-size: var(--fs-11); color: var(--t3); }
+
+.imp-pl-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 300px;
+  overflow-y: auto;
+  padding: 4px;
+  border-radius: var(--r-xl);
+  background: var(--surface-1);
+}
+.imp-pl-set {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 5px 10px 5px 5px;
+  border-radius: var(--r-lg);
+  content-visibility: auto;
+  flex: none;
+  contain-intrinsic-height: auto 50px;
+  animation: imp-card-in .4s var(--ease-out) both;
+  animation-delay: calc(var(--i, 0) * 22ms);
+}
+.imp-pl-set:hover { background: var(--fill-subtle); }
+.imp-pl-text { min-width: 0; }
+.imp-pl-title, .imp-pl-by { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.imp-pl-title { font-size: var(--fs-12); font-weight: 600; }
+.imp-pl-by { margin-top: 1px; font-size: var(--fs-11); color: var(--t3); }
+.imp-pl-by span { color: var(--t4); }
+.imp-pl-plays { font-size: var(--fs-11); font-variant-numeric: tabular-nums; color: var(--t3); }
+
+/* a set's cover (osu!'s small list cover), the placeholder until it's there */
+.imp-cover {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--r-md);
+  background: var(--placeholder-gradient);
+  overflow: hidden;
+}
+.imp-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transform: scale(1.08);
+  transition: opacity .35s var(--ease-std), transform .5s var(--ease-out);
+}
+.imp-cover.loaded img { opacity: 1; transform: none; }
+
+/* ---------- The import: all sets at once ---------- */
+.imp-overall { display: flex; flex-direction: column; gap: 8px; animation: fade-in .2s var(--ease-std); }
+.imp-overall[hidden] { display: none; }
+.imp-ov-top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.imp-ov-count { font-size: var(--fs-12); color: var(--t2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.imp-ov-count b { margin-right: 2px; font-size: var(--fs-16); font-weight: 700; color: var(--t1); }
+.imp-ov-meta .meta-line { justify-content: flex-end; font-size: var(--fs-11); color: var(--t3); font-variant-numeric: tabular-nums; }
+.imp-ov-meta .bad { color: var(--danger); }
+.imp-ov-bar {
+  display: flex;
+  height: 4px;
   border-radius: var(--r-full);
   background: var(--fill-mod);
   overflow: hidden;
 }
+.imp-ov-bar > i { display: block; height: 100%; transition: flex-basis .45s var(--ease-out); }
+.imp-ov-bar > .ok { flex: 0 0 calc(var(--ok, 0) * 100%); background: var(--accent); }
+.imp-ov-bar > .bad { flex: 0 0 calc(var(--bad, 0) * 100%); background: var(--danger); }
+.imp-ov-bar > .other { flex: 0 0 calc(var(--other, 0) * 100%); background: var(--t4); }
+
+/* ---------- One card per set ---------- */
+.imp-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 340px;
+  overflow-y: auto;
+  padding: 4px;
+  border-radius: var(--r-xl);
+  background: var(--surface-1);
+  animation: fade-in .2s var(--ease-std);
+}
+.imp-rows[hidden] { display: none; }
+.imp-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) 18px;
+  align-items: center;
+  column-gap: 12px;
+  padding: 6px 12px 8px 6px;
+  border-radius: var(--r-lg);
+  background: transparent;
+  overflow: hidden;
+  content-visibility: auto;
+  flex: none;
+  contain-intrinsic-height: auto 54px;
+  transition: background .3s var(--ease-std), opacity .3s var(--ease-std);
+}
+.imp-rows.fresh .imp-row { animation: imp-card-in .45s var(--ease-out) both; animation-delay: calc(var(--i, 0) * 35ms); }
+@keyframes imp-card-in { from { opacity: 0; transform: translateX(22px); } }
+
+.imp-row-main { min-width: 0; }
+.imp-row-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-12); font-weight: 600; transition: color .3s var(--ease-std); }
+.imp-row-state {
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-11);
+  font-variant-numeric: tabular-nums;
+  color: var(--t3);
+  transition: color .3s var(--ease-std);
+}
+.imp-row-end { display: grid; place-items: center; width: 18px; height: 18px; }
+.imp-row-end .ic { width: 16px; height: 16px; }
+
+/* waiting sets sit back; the ones on their way stand out */
+.imp-row[data-stage="waiting"] { opacity: .5; }
+.imp-row[data-stage="resolving"],
+.imp-row[data-stage="downloading"],
+.imp-row[data-stage="ready"],
+.imp-row[data-stage="importing"] { background: var(--fill-subtle); }
+.imp-row[data-stage="downloading"] .imp-row-state,
+.imp-row[data-stage="importing"] .imp-row-state { color: var(--t2); }
+.imp-row[data-stage="skipped"] { opacity: .65; }
+.imp-row[data-stage="done"] .imp-row-state,
+.imp-row[data-stage="done"] .imp-row-end { color: var(--success); }
+.imp-row[data-stage="error"] .imp-row-state,
+.imp-row[data-stage="error"] .imp-row-end { color: var(--danger); }
+
+/* progress along the card's bottom edge */
+.imp-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: transparent;
+  overflow: hidden;
+  transition: opacity .4s var(--ease-std);
+}
 .imp-bar > i {
   display: block;
   height: 100%;
-  border-radius: inherit;
   background: var(--accent);
   transform-origin: left;
   transform: scaleX(var(--p, 0));
-  transition: transform .2s var(--ease-out);
+  transition: transform .25s var(--ease-out), background .3s var(--ease-std);
 }
+.imp-row[data-stage="waiting"] .imp-bar,
+.imp-row[data-stage="skipped"] .imp-bar,
+.imp-row[data-stage="done"] .imp-bar,
+.imp-row[data-stage="error"] .imp-bar { opacity: 0; }
+.imp-row[data-stage="ready"] .imp-bar > i { background: var(--t4); }
+.imp-row[data-stage="done"] .imp-bar > i { background: var(--success); }
+/* lazer is at it: no amount to show, so a sweep says it's working */
+.imp-row[data-stage="importing"] .imp-bar > i,
+.imp-bar-sweep > i {
+  width: 40%;
+  transform: none;
+  animation: imp-sweep 1.1s var(--ease-std) infinite;
+}
+@keyframes imp-sweep { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
+
+/* a set that just got in or failed says so once */
+.imp-row.live[data-stage="done"] { animation: imp-done .9s var(--ease-out); }
+.imp-row.live[data-stage="done"] .imp-row-end .ic { animation: pop .5s var(--ease-out); }
+.imp-row.live[data-stage="error"] { animation: shake .4s var(--ease-std); }
+.imp-row.live[data-stage="importing"] .imp-cover,
+.imp-row.live[data-stage="downloading"] .imp-cover { animation: imp-cover-in .4s var(--ease-spring); }
+@keyframes imp-done { from { background: var(--success-soft); } }
+@keyframes imp-cover-in { 50% { transform: scale(1.08); } }
 
 .imp-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 2px; }
 .imp-note { min-width: 0; font-size: var(--fs-12); line-height: 1.45; color: var(--t3); }

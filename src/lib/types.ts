@@ -435,7 +435,8 @@ export interface LazerImportStatus {
   testedVersions: string[];
 }
 
-export type ImportStage = "resolving" | "downloading" | "importing" | "done" | "skipped" | "error";
+/** `ready`: downloaded, waiting for its turn in osu!lazer's importer */
+export type ImportStage = "resolving" | "downloading" | "ready" | "importing" | "done" | "skipped" | "error";
 
 /** `import-progress`: one pasted line moving along */
 export interface ImportProgress {
@@ -453,6 +454,37 @@ export interface ImportSummary {
   imported: number;
   skipped: number;
   failed: number;
+  /** sets left out because the import was stopped */
+  cancelled: number;
+  /** why the import stopped before the end (osu!lazer was opened, …) */
+  stopped: string | null;
+}
+
+/** A set the player has played (osu!'s play counts, top plays, synced scores) that osu!lazer doesn't have. */
+export interface PlayedSet {
+  id: number;
+  title: string;
+  artist: string;
+  creator: string;
+  /** plays over all its difficulties (0: known from a score only) */
+  plays: number;
+  /** difficulties played */
+  maps: number;
+  /** osu!'s status ("ranked", "loved", …; empty when not known) */
+  status: string;
+  /** one of its difficulties is in the player's top plays */
+  top: boolean;
+  /** osu!stable has it */
+  inStable: boolean;
+}
+
+export interface PlayedFound {
+  /** most played first */
+  missing: PlayedSet[];
+  /** sets played in all */
+  played: number;
+  /** play counts and top plays read from osu! */
+  read: number;
 }
 
 export interface ApiError {
