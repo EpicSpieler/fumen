@@ -70,6 +70,10 @@ database first (see [Adding beatmaps](#adding-beatmaps)).
   the app): Fumen downloads each set from a mirror (osu.direct, then catboy.best, then
   nerinyan.moe) and imports it into osu!lazer, then into its own library. Sets you already have
   are skipped; failed ones can be retried in one click
+- Maps you've played: logged in, Fumen finds every set you've played on osu! (play counts and top
+  plays in every ruleset, plus the scores in Performance) that osu!lazer doesn't have, and
+  downloads and imports all of them: three downloads at once, into lazer 20 sets at a time, each
+  set a card with its cover and progress, the whole run stoppable
 - Star ratings for new osu!mania difficulties come from Fumen's calculator until lazer computes its
   own on its next start
 - Log in with osu! (Settings): your profile, rank and pp

@@ -175,6 +175,13 @@ nothing), and Fumen trades the code (later the refresh token) for tokens at the 
       osu.ppy.sh's redirect) → `.osz` from mirrors (osu.direct, catboy.best, nerinyan.moe, checked to
       be a zip) → lazer's own import (see *Writing to lazer*) → library rescan; sets already there
       skipped; per-line progress, retry of failed lines; paste anywhere in the app
+- [x] Maps you've played: every set from osu!'s play counts (`most_played`, all pages), top plays
+      (200 per ruleset) and the synced scores the Performance view shows, minus what lazer has
+      (`find_played_sets`); the import runs three downloads at once next to lazer's importer in
+      batches of 20 (one backup, one importer start each; at most 40 sets wait on disk), can be
+      stopped (the batch in lazer finishes, the rest is left out), and stops by itself when lazer
+      is opened. Cards with set covers, a bar along each card, a sweep while lazer imports,
+      overall counts; the list follows the sets on their way
 - [x] Tested-version list `lazer-compat.json` + `npm run verify-lazer` (schema guard both ways,
       fresh-library import twice, import into a copy of the real library: +1 set, all else identical,
       every file's hash checked)
