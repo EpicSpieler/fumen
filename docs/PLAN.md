@@ -180,9 +180,21 @@ nothing), and Fumen trades the code (later the refresh token) for tokens at the 
 ## v0.4 — you
 
 - [x] Adding beatmaps: osu! links (set / beatmap pages, `osu://`, IDs) → set IDs (beatmap links via
-      osu.ppy.sh's redirect) → `.osz` from mirrors (osu.direct, catboy.best, nerinyan.moe, checked to
-      be a zip) → lazer's own import (see *Writing to lazer*) → library rescan; sets already there
-      skipped; per-line progress, retry of failed lines; paste anywhere in the app
+      the mirrors' beatmap lookups) → `.osz` from mirrors (checked to be a whole zip) → lazer's own
+      import (see *Writing to lazer*) → library rescan; sets already there skipped; per-line
+      progress, retry of failed lines; paste anywhere in the app
+- [x] Mirrors (0.4.9): nothing is ever fetched from osu!'s servers (IP-ban risk). Six mirrors
+      (osu.direct, nekoha.moe, catboy.best, beatconnect.io, sayobot.cn, nerinyan.moe) share a pool:
+      each set goes to the least busy, least used one (at most 2 downloads per mirror); 429 rests a
+      mirror for its `Retry-After`, errors rest it 20 s doubling, three 403s in a row 5 min; a set
+      waits ("held", with a countdown) for a mirror that may still have it, up to 20 min. User
+      agent without a URL (catboy.best refuses those). osu.direct allows 200 downloads per hour and
+      8 GiB a day per IP; its API keys (`x-ratelimit-key`, raised API limits) aren't public
+- [x] After each import, what lazer's BeatmapUpdater does (0.4.9): metadata from lazer's local
+      `online.db` only (used only when it's younger than a month, else lazer's code would download
+      it), star rating, length, BPM, object counts — lazer's importer leaves that to the game, so
+      sets showed as unknown with 0 BPM. `import --repair` finishes sets imported without it
+      (first batch of every run, and "Finish them" in Add beatmaps); verify-lazer checks both
 - [x] Maps you've played: every set from osu!'s play counts (`most_played`, all pages), top plays
       (200 per ruleset) and the synced scores the Performance view shows, minus what lazer has
       (`find_played_sets`); the import runs three downloads at once next to lazer's importer in
