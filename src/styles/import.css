@@ -34,6 +34,22 @@
 .imp-lazer.off { background: var(--danger-soft); color: var(--t1); }
 .imp-lazer.off .imp-lazer-ic { color: var(--danger); }
 
+/* sets an older Fumen left without details: a quiet line with its fix */
+.imp-repair {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 8px 7px 14px;
+  border-radius: var(--r-xl);
+  background: var(--warning-soft);
+  font-size: var(--fs-12);
+  color: var(--t1);
+}
+.imp-repair[hidden] { display: none; }
+.imp-repair .imp-lazer-ic { color: var(--warning); }
+.imp-repair-text { flex: 1; min-width: 0; line-height: 1.45; }
+.imp-repair .btn { flex: none; }
+
 .imp-input {
   width: 100%;
   min-height: 136px;
@@ -200,6 +216,7 @@
 .imp-row[data-stage="waiting"] { opacity: .5; }
 .imp-row[data-stage="resolving"],
 .imp-row[data-stage="downloading"],
+.imp-row[data-stage="held"],
 .imp-row[data-stage="ready"],
 .imp-row[data-stage="importing"] { background: var(--fill-subtle); }
 .imp-row[data-stage="downloading"] .imp-row-state,

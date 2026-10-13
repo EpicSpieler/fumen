@@ -53,9 +53,11 @@ let draft = "";
 let mode: Mode = "links";
 let played: Played = { state: "idle", read: 0 };
 let dialog: ImportDialog | null = null;
+/** sets an older Fumen imported without details are being finished */
+let repairing = false;
 
 const FINISHED: ReadonlySet<Row["stage"]> = new Set(["done", "skipped", "error"]);
-const ACTIVE: ReadonlySet<Row["stage"]> = new Set(["resolving", "downloading", "ready", "importing"]);
+const ACTIVE: ReadonlySet<Row["stage"]> = new Set(["resolving", "downloading", "held", "ready", "importing"]);
 
 export const isImporting = (): boolean => !!job?.running;
 
@@ -94,6 +96,7 @@ class ImportDialog {
   private readonly overallEl: HTMLElement;
   private readonly rowsEl: HTMLElement;
   private readonly lazerEl: HTMLElement;
+  private readonly repairEl: HTMLElement;
   private readonly noteEl: HTMLElement;
   private readonly goBtn: HTMLButtonElement;
   private readonly stopBtn: HTMLButtonElement;
@@ -134,6 +137,7 @@ class ImportDialog {
           <button type="button" role="tab" data-mode="played">Maps you've played</button>
         </div>
         <div class="imp-lazer"></div>
+        <div class="imp-repair" hidden></div>
         <textarea class="imp-input" rows="6" spellcheck="false" autocomplete="off" aria-label="osu! links"
           placeholder="https://osu.ppy.sh/beatmapsets/…&#10;https://osu.ppy.sh/beatmaps/…"></textarea>
         <div class="imp-played" hidden></div>
@@ -156,6 +160,10 @@ class ImportDialog {
     this.overallEl = el.querySelector(".imp-overall")!;
     this.rowsEl = el.querySelector(".imp-rows")!;
     this.lazerEl = el.querySelector(".imp-lazer")!;
+    this.repairEl = el.querySelector(".imp-repair")!;
+    this.repairEl.addEventListener("click", (e) => {
+      if ((e.target as Element).closest('[data-act="repair"]')) void this.repair();
+    });
     this.noteEl = el.querySelector(".imp-note")!;
     this.goBtn = el.querySelector('[data-act="go"]')!;
     this.stopBtn = el.querySelector('[data-act="stop"]')!;
@@ -215,10 +223,32 @@ class ImportDialog {
     try {
       this.status = await api.lazerImportStatus();
     } catch (e) {
-      this.status = { ready: false, reason: null, message: asApiError(e).message, version: null, tested: false, running: false, testedVersions: [] };
+      this.status = { ready: false, reason: null, message: asApiError(e).message, version: null, tested: false, running: false, testedVersions: [], unfinished: 0 };
     }
     this.renderLazer();
     this.renderActions();
+  }
+
+  /** finishes the sets an older Fumen imported without their details */
+  private async repair(): Promise<void> {
+    if (repairing || job?.running || !this.status?.ready) return;
+    repairing = true;
+    this.renderLazer();
+    this.renderActions();
+    try {
+      const r = await api.repairLazerSets();
+      if (r.finished) {
+        toast(`${plural(r.finished, "set")} in osu!lazer got ${r.finished === 1 ? "its" : "their"} details`, { kind: "success", timeout: 4200 });
+        await reloadLibrary().catch((e) => console.warn("[import] reload failed", e));
+      }
+      if (r.failed) toast(`${plural(r.failed, "set")} couldn't be finished; osu!lazer does ${r.failed === 1 ? "it" : "them"} on its next start`, { timeout: 6000 });
+      if (!r.finished && !r.failed) toast("Nothing to finish: osu!lazer has every set's details");
+    } catch (e) {
+      toast(`Couldn't finish the sets: ${asApiError(e).message}`, { kind: "danger", timeout: 6000 });
+    } finally {
+      repairing = false;
+      void this.refreshStatus();
+    }
   }
 
   // ── rendering ─────────────────────────────────────────────────────────
@@ -268,11 +298,35 @@ class ImportDialog {
       st.ready && st.version
         ? `${ic}<span class="meta-line imp-lazer-text"><span>osu!lazer ${esc(short(st.version))}</span><span>Tested with Fumen</span><span>Closed</span></span>`
         : `${ic}<span class="imp-lazer-text">${esc(st.message ?? "Importing isn't possible right now.")}</span>`;
+    this.renderRepair();
     if (st.reason === "untested") {
       el.dataset.tip = st.testedVersions.length
         ? `Tested: ${st.testedVersions.map(short).join(", ")}\nImporting comes back once this version is checked.`
         : "No osu!lazer version is tested yet.";
     } else delete el.dataset.tip;
+  }
+
+  /** sets an older Fumen put into lazer without their details, and the way to finish them */
+  private renderRepair(): void {
+    const st = this.status;
+    const el = this.repairEl;
+    const n = st?.unfinished ?? 0;
+    el.hidden = !st || (n === 0 && !repairing) || showsRows(job);
+    if (!st || el.hidden) return;
+    const off = !st.ready || !!job?.running;
+    const key = `${n}|${repairing}|${off}|${st.reason}`;
+    if (el.dataset.key === key) return;
+    el.dataset.key = key;
+    el.innerHTML = `
+      ${icon("alert", "imp-lazer-ic")}
+      <span class="imp-repair-text">${
+        repairing
+          ? "Working out star ratings, BPM, length and ranked status…"
+          : `${plural(n, "set")} imported by an older Fumen ${n === 1 ? "is" : "are"} missing ${n === 1 ? "its" : "their"} details in osu!lazer: unknown status, 0 BPM, no length.`
+      }</span>
+      <button class="btn btn-sm" type="button" data-act="repair" ${off || repairing ? "disabled" : ""}>${repairing ? "Finishing…" : "Finish them"}</button>`;
+    const b = el.querySelector<HTMLElement>("button")!;
+    if (off && !repairing) b.dataset.tip = st.reason === "running" ? "Close osu!lazer first" : (st.message ?? "Not possible right now");
   }
 
   /** the "Maps you've played" panel before an import */
@@ -384,6 +438,8 @@ class ImportDialog {
     if (running) {
       b.disabled = true;
       b.textContent = "Importing…";
+    } else if (repairing) {
+      b.disabled = true;
     } else if (showsRows(job)) {
       b.disabled = false;
       b.textContent = job.from === "played" ? "Back to played maps" : job.summary?.failed ? "Try failed again" : "Add more";
@@ -423,9 +479,11 @@ class ImportDialog {
     const meta: [string, string?][] = [];
     if (job.running) {
       const dl = count(["downloading", "resolving"]);
+      const held = count(["held"]);
       const ready = count(["ready"]);
       const importing = count(["importing"]);
       if (dl) meta.push([`${num(dl)} downloading`]);
+      if (held) meta.push([`${num(held)} waiting for a mirror`]);
       if (ready) meta.push([`${num(ready)} ready`]);
       if (importing) meta.push([`${num(importing)} going into osu!lazer`]);
       if (failed) meta.push([`${num(failed)} failed`, "bad"]);
@@ -491,7 +549,7 @@ class ImportDialog {
       end.innerHTML = r.stage === "done" ? icon("check") : r.stage === "error" ? icon("alert") : "";
     }
     const bar = el.querySelector<HTMLElement>(".imp-bar")!;
-    const p = r.stage === "downloading" ? (r.total ? Math.min(1, r.done / r.total) : 0.04) : r.stage === "waiting" || r.stage === "resolving" ? 0 : 1;
+    const p = r.stage === "downloading" ? (r.total ? Math.min(1, r.done / r.total) : 0.04) : r.stage === "waiting" || r.stage === "resolving" || r.stage === "held" ? 0 : 1;
     bar.style.setProperty("--p", String(p));
     if (live && changed && ACTIVE.has(r.stage)) this.follow();
   }
@@ -569,6 +627,8 @@ function stateText(r: Row): string {
       return "Finding its set";
     case "downloading":
       return r.total ? `Downloading · ${mb(r.done)} of ${mb(r.total)} MB` : r.done ? `Downloading · ${mb(r.done)} MB` : "Downloading";
+    case "held":
+      return r.total > 2 ? `Mirrors are busy · trying again in ${clock(r.total)}` : "Waiting for a free mirror";
     case "ready":
       return "Downloaded · waiting for osu!lazer";
     case "importing":
@@ -580,6 +640,12 @@ function stateText(r: Row): string {
     case "error":
       return r.message ?? "Failed";
   }
+}
+
+/** "45 s", "3:20" */
+function clock(seconds: number): string {
+  const s = Math.ceil(seconds);
+  return s < 60 ? `${s} s` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
 
 async function findPlayed(): Promise<void> {
