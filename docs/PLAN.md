@@ -230,6 +230,12 @@ nothing), and Fumen trades the code (later the refresh token) for tokens at the 
 - [x] Goals: skill (pattern + key mode), chart (accuracy at a rate or faster, fair passes), osu!
       pp/rank per ruleset; stored as JSON in `goals` (migration 10, `src/goals.rs`), measured in
       `src/lib/goals.ts`, reached ones marked with the time and a toast (`lib/goals-store.ts`)
+- [x] Compare skills with another player (0.4.10, `src-tauri/src/player.rs`, `lib/compare.ts`):
+      osu! API with the logged-in token (user by name, top 200, firsts, recent passes, most
+      played → up to 60 best-score lookups; one request at a time, 350 ms apart), charts from the
+      library or single `.osu` files from osu.direct / nekoha / catboy (cached by id + md5,
+      dropped after 60 days), analysed like the library's (shares, Fumen's 0.75× / 1.5× / played
+      rates; osu!'s 1× rating); skills worked out by the same lib/skills code
 
 ## Workflow
 

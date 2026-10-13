@@ -96,6 +96,11 @@ database first (see [Adding beatmaps](#adding-beatmaps)).
   behind it. "Practice next" picks charts from your library for your weakest patterns, a little
   above your skill, at 1× or at the Half Time / Double Time speed that gets them there, and shows
   what a 96% pass on each would do to the skill
+- Compare with another player (Skills › Compare): type an osu! name; Fumen reads their osu!mania
+  top plays, first places, recent passes and their best on their most played charts from osu!,
+  reads the charts behind them (your library's, or single `.osu` files from the mirrors) and puts
+  their skills next to yours: their polygon on the radar, their value per pattern and the charts
+  behind it, ones you don't have one click from Add beatmaps
 - Goals: a pattern skill to reach (shown on the radar), an accuracy on a chart at a rate, or your
   osu! pp or rank. Each shows how far along it is, and Fumen ticks it off (with a note) once your
   plays or the next sync get there
