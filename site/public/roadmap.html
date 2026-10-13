@@ -7,8 +7,8 @@
   <meta name="description" content="Where Fumen, a beatmap library for osu!, is and where it's going.">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="preload" href="/fonts/instrument-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/roadmap.css?v=2">
-  <script src="/roadmap.js?v=3" defer></script>
+  <link rel="stylesheet" href="/roadmap.css?v=3">
+  <script src="/roadmap.js?v=4" defer></script>
 </head>
 <body>
   <svg width="0" height="0" style="position:absolute" aria-hidden="true">
@@ -18,6 +18,7 @@
     <symbol id="i-open" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6.5" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
     <symbol id="i-replay" viewBox="0 0 24 24"><path d="M5 12a7 7 0 1 0 2.05-4.95M5 4.5V8h3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
     <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h13m-5-5.5L18.5 12 13 17.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 11v5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="7.8" r="1.2" fill="currentColor"/></symbol>
     <symbol id="i-back" viewBox="0 0 24 24"><path d="M19 12H6m5-5.5L5.5 12 11 17.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   </svg>
 
@@ -39,12 +40,12 @@
         </div>
         <div class="stat">
           <div class="label">On the way to 1.0</div>
-          <div class="value num"><span data-shipped>4</span><span class="of"> of <span data-total>9</span> versions out</span></div>
+          <div class="value num"><span data-shipped>4</span><span class="of"> of <span data-total>8</span> versions out</span></div>
           <div class="meter" aria-hidden="true"><div class="meter-fill" data-meter></div></div>
         </div>
         <div class="stat">
           <div class="label">Up next</div>
-          <div class="value" data-next>0.5 Pools</div>
+          <div class="value" data-next>0.5 Discover</div>
           <div class="sub" data-next-sub>&nbsp;</div>
         </div>
       </div>
@@ -57,6 +58,8 @@
       <button role="tab" aria-selected="false" data-filter="later">After 1.0</button>
       <span class="seg-bar" aria-hidden="true"></span>
     </nav>
+
+    <p class="change"><svg class="ic" aria-hidden="true"><use href="#i-info"/></svg><span><b>Changed on 13 Oct 2026:</b> the pool builder and the tournament tools moved after 1.0. They aren't needed before the release, so what helps you play comes first. <a href="#v1-1">See 1.1 and 1.2</a></span></p>
 
     <ol class="timeline" data-timeline>
       <li class="spine" aria-hidden="true"><span class="spine-fill" data-spine></span></li>

@@ -281,6 +281,40 @@ button { font: inherit; color: inherit; cursor: default; }
 .items .mk { width: 18px; height: 18px; margin-top: 1px; color: var(--t4); }
 .items li.done .mk { color: var(--accent); }
 .note { margin: 12px 0 0; color: var(--t3); font-size: 12.5px; }
+.moved {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: var(--r-full);
+  background: var(--fill-mod);
+  color: var(--t2);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: .02em;
+  vertical-align: 2px;
+}
+.moved-note,
+.change {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  color: var(--t2);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.moved-note { margin: 0 0 12px; }
+.moved-note .ic, .change .ic { flex: none; width: 17px; height: 17px; margin-top: 1px; color: var(--accent-ink); }
+.change {
+  max-width: 640px;
+  margin: -12px auto 30px;
+  padding: 12px 16px;
+  border-radius: var(--r-xl);
+  background: var(--fill-subtle);
+  animation: rise .6s .38s var(--quint) both;
+}
+.change b { color: var(--t1); font-weight: 650; }
+.change a { color: var(--accent-ink); text-decoration: none; font-weight: 600; white-space: nowrap; }
+.change a:hover { color: var(--t1); }
 
 /* explainers */
 .stages { display: grid; gap: 12px; max-width: 600px; margin-top: 18px; }

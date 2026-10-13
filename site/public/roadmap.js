@@ -6,7 +6,7 @@
 
 // ── the plan (docs/PLAN.md) ──────────────────────────────────────────────
 
-/** state: done | next | planned | later; items: [done?, text] */
+/** state: done | next | planned | later; items: [done?, text]; moved: where it was planned before */
 const VERSIONS = [
   {
     v: "0.1", name: "Library", state: "done", when: "Oct 2026",
@@ -57,34 +57,20 @@ const VERSIONS = [
     ],
   },
   {
-    v: "0.5", name: "Pools", state: "next",
-    summary: "Build tournament pools.",
+    v: "0.5", name: "Discover", state: "next",
+    summary: "Find what to play next.",
     items: [
       [1, "<b>Mods in the playfield:</b> HR, EZ, HD, FI, FL and Mirror, the way lazer plays them"],
-      [0, "<b>Pool builder</b> with NM, HD, HR, DT, FM and TB slots; star rating, BPM and length per mod"],
-      [0, "Maps you don't own looked up; export to JSON, CSV, a sheet and the RPRO bot; a showcase image"],
-      [0, "<b>Similar maps:</b> a chart's fingerprint and the closest ones, to fill or replace a slot"],
+      [0, "<b>Similar maps:</b> a chart's fingerprint and the closest ones in your library"],
       [0, "Beatmap search on the mirrors, a whole search as one pack"],
     ],
     explain: [
       ["mods", "<b>Hard Rock</b> flips the playfield, shrinks the circles and makes them come in faster."],
-      ["pool", "<b>A pool fills up</b> with the numbers as each mod makes them."],
       ["similar", "<b>Similar maps:</b> the same pattern mix, star rating and speed, closest first."],
     ],
   },
   {
-    v: "0.6", name: "Tournament", state: "planned",
-    summary: "Run the tournament.",
-    items: [
-      [0, "Schedule"],
-      [0, "Match results from mp links"],
-      [0, "Picks, bans and mod strengths per player"],
-      [0, "An OBS overlay served from your PC"],
-    ],
-    explain: [["tournament", "<b>An mp link becomes the match:</b> scores per map, and who took it."]],
-  },
-  {
-    v: "0.7", name: "Practice", state: "planned",
+    v: "0.6", name: "Practice", state: "planned",
     summary: "Practise with intent.",
     items: [
       [0, "<b>Replays in the playfield:</b> lazer's own, or your score's replay from osu! when lazer doesn't have one"],
@@ -98,7 +84,7 @@ const VERSIONS = [
     ],
   },
   {
-    v: "0.8", name: "Library care", state: "planned",
+    v: "0.7", name: "Library care", state: "planned",
     summary: "Keep the library clean.",
     items: [
       [0, "Duplicates across lazer and osu!stable"],
@@ -121,7 +107,30 @@ const VERSIONS = [
     explain: [["themes", "<b>Themes and languages,</b> the same app in four looks."]],
   },
   {
-    v: "1.1", name: "Sessions", state: "later",
+    v: "1.1", name: "Pools", state: "later",
+    summary: "Build tournament pools.",
+    moved: "0.5",
+    items: [
+      [0, "<b>Pool builder</b> with NM, HD, HR, DT, FM and TB slots; star rating, BPM and length per mod"],
+      [0, "Maps you don't own looked up; export to JSON, CSV, a sheet and the RPRO bot; a showcase image"],
+      [0, "Similar maps to fill or replace a slot"],
+    ],
+    explain: [["pool", "<b>A pool fills up</b> with the numbers as each mod makes them."]],
+  },
+  {
+    v: "1.2", name: "Tournament", state: "later",
+    summary: "Run the tournament.",
+    moved: "0.6",
+    items: [
+      [0, "Schedule"],
+      [0, "Match results from mp links"],
+      [0, "Picks, bans and mod strengths per player"],
+      [0, "An OBS overlay served from your PC"],
+    ],
+    explain: [["tournament", "<b>An mp link becomes the match:</b> scores per map, and who took it."]],
+  },
+  {
+    v: "1.3", name: "Sessions", state: "later",
     summary: "Your week at a glance.",
     items: [
       [0, "Plays grouped into sittings"],
@@ -131,7 +140,7 @@ const VERSIONS = [
     explain: [["sessions", "<b>Your week:</b> when you played and what it did for your skills."]],
   },
   {
-    v: "1.2", name: "Skins", state: "later",
+    v: "1.4", name: "Skins", state: "later",
     summary: "Every skin, side by side.",
     items: [
       [0, "A skin browser on the same moment of a chart"],
@@ -141,7 +150,7 @@ const VERSIONS = [
     explain: [["skins", "<b>Mixing skins:</b> the notes of one, the keys of another, saved as your own .osk."]],
   },
   {
-    v: "1.3", name: "Presence", state: "later",
+    v: "1.5", name: "Presence", state: "later",
     summary: "Show what you're up to.",
     items: [
       [0, "Discord Rich Presence: listening, practising, building a pool"],
@@ -149,7 +158,7 @@ const VERSIONS = [
     ],
   },
   {
-    v: "1.4", name: "Everywhere", state: "later",
+    v: "1.6", name: "Everywhere", state: "later",
     summary: "Beyond one Windows PC.",
     items: [
       [0, "Linux and macOS, with lazer's library on those systems"],
@@ -157,7 +166,7 @@ const VERSIONS = [
     ],
   },
   {
-    v: "1.5", name: "Mapping lens", state: "later",
+    v: "1.7", name: "Mapping lens", state: "later",
     summary: "For mappers and pool selectors.",
     items: [
       [0, "Difficulty spikes along a chart"],
@@ -1038,11 +1047,12 @@ function versionHtml(v) {
       <div class="card">
         <button class="head" type="button" aria-expanded="false" aria-controls="${id}-body">
           <span class="v">${esc(v.v)}</span>
-          <span><span class="name">${esc(v.name)}</span><span class="summary">${esc(v.summary)}</span></span>
+          <span><span class="name">${esc(v.name)}${v.moved ? `<span class="moved">was ${esc(v.moved)}</span>` : ""}</span><span class="summary">${esc(v.summary)}</span></span>
           <span class="state">${esc(state)}</span>
           <svg class="chev"><use href="#i-chevron"/></svg>
         </button>
         <div class="body" id="${id}-body"><div class="body-in"><div class="body-pad">
+          ${v.moved ? `<p class="moved-note"><svg class="ic"><use href="#i-info"/></svg><span>Planned for ${esc(v.moved)} until 13 Oct 2026, moved after 1.0: Fumen doesn't need it before the release.</span></p>` : ""}
           <ul class="items">${items}</ul>
           ${v.note ? `<p class="note">${esc(v.note)}</p>` : ""}
           ${stagesHtml ? `<div class="stages">${stagesHtml}</div>` : ""}
@@ -1209,6 +1219,11 @@ function init() {
   const target = location.hash ? document.getElementById(location.hash.slice(1)) : null;
   const open = target?.classList.contains("ver") ? target : timeline.querySelector(".ver[data-state='next']");
   if (open) toggle(open, true);
+  // and so does following one on the page
+  addEventListener("hashchange", () => {
+    const el = document.getElementById(location.hash.slice(1));
+    if (el?.classList.contains("ver")) toggle(el, true);
+  });
 
   // the versions rise in, one after another
   if (!reduced) timeline.querySelectorAll(".ver, .era").forEach((el, i) => {
