@@ -11,6 +11,7 @@ mod hitsounds;
 mod lazer;
 mod lazer_import;
 mod mma;
+mod mods;
 mod osu;
 mod osu_auth;
 mod osu_scores;
@@ -399,15 +400,22 @@ fn chart_hash(app: &AppHandle, id: &str) -> Result<String> {
 
 /// A difficulty's chart, read from lazer's files or stable's.
 fn load_chart(app: &AppHandle, id: &str) -> Result<chart::Chart> {
+    load_chart_with(app, id, mods::Mods::NONE)
+}
+
+/// A difficulty's chart with the mods that change it (Easy, Hard Rock, Mirror).
+fn load_chart_with(app: &AppHandle, id: &str, mods: mods::Mods) -> Result<chart::Chart> {
     let hash = chart_hash(app, id)?;
-    charts::load(&app.state::<AppState>().files(), &hash)
+    charts::load_with(&app.state::<AppState>().files(), &hash, mods)
 }
 
 
-/// One difficulty's notes, timing and full analysis as raw JSON (see `charts.rs`).
+/// One difficulty's notes, timing and full analysis as raw JSON (see `charts.rs`), with the mods
+/// that change the chart itself (the playfield draws the others).
 #[tauri::command]
-async fn get_chart(app: AppHandle, id: String) -> Result<tauri::ipc::Response> {
-    tauri::async_runtime::spawn_blocking(move || charts::chart_json(&load_chart(&app, &id)?).map(tauri::ipc::Response::new))
+async fn get_chart(app: AppHandle, id: String, mods: Option<mods::Mods>) -> Result<tauri::ipc::Response> {
+    let mods = mods.unwrap_or_default();
+    tauri::async_runtime::spawn_blocking(move || charts::chart_json(&load_chart_with(&app, &id, mods)?, mods).map(tauri::ipc::Response::new))
         .await
         .map_err(|e| Error::known("internal", e.to_string()))?
 }

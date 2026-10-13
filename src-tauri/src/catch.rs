@@ -6,11 +6,14 @@
 //!     tiny droplets between them all (`SliderEventGenerator`'s events, its legacy last tick too);
 //!   - `BananaShower`: a banana every 100 ms or so;
 //!   - `CatchBeatmapProcessor`: osu!stable's random offsets for bananas and tiny droplets
-//!     (`LegacyRandom`, seed 1337), the end of every combo, and hyperdashes;
+//!     (`LegacyRandom`, seed 1337), Hard Rock's for fruits, the end of every combo, and
+//!     hyperdashes;
+//!   - the mods' difficulty (Easy, Hard Rock) and `CatchModMirror`'s flip;
 //!   - `CatchAutoGenerator`: where autoplay's catcher goes, walking, dashing or hyperdashing.
 //!
 //! Only beatmaps made for osu!catch are read (not osu! beatmaps converted).
 
+use crate::mods::Mods;
 use crate::osu::{self, Kind as OsuKind, Sounds};
 
 /// `CatchPlayfield.WIDTH`
@@ -90,11 +93,14 @@ struct LegacyRandom {
     y: u32,
     z: u32,
     w: u32,
+    /// `NextBool` takes one bit of a value at a time
+    bits: u32,
+    bit: u32,
 }
 
 impl LegacyRandom {
     fn new(seed: i32) -> Self {
-        LegacyRandom { x: seed as u32, y: 842_502_087, z: 3_579_807_591, w: 273_326_509 }
+        LegacyRandom { x: seed as u32, y: 842_502_087, z: 3_579_807_591, w: 273_326_509, bits: 0, bit: 32 }
     }
 
     fn next_uint(&mut self) -> u32 {
@@ -116,6 +122,22 @@ impl LegacyRandom {
 
     fn next_range(&mut self, lower: i32, upper: i32) -> i32 {
         (lower as f64 + self.next_double() * (upper - lower) as f64) as i32
+    }
+
+    /// `Next(double, double)`: an int all the same
+    fn next_range_f(&mut self, lower: f64, upper: f64) -> i32 {
+        (lower + self.next_double() * (upper - lower)) as i32
+    }
+
+    fn next_bool(&mut self) -> bool {
+        if self.bit == 32 {
+            self.bits = self.next_uint();
+            self.bit = 1;
+            return self.bits & 1 == 1;
+        }
+        self.bit += 1;
+        self.bits >>= 1;
+        self.bits & 1 == 1
     }
 }
 
@@ -143,6 +165,9 @@ fn difficulty_range(d: f64, min: f64, mid: f64, max: f64) -> f64 {
 /// One top-level object and what it holds (lazer's nested objects).
 struct Parent {
     banana_shower: bool,
+    start: f64,
+    /// juice streams: `OriginalX` + the last control point's X (where osu!stable thought they end)
+    stream_end: Option<f32>,
     new_combo: bool,
     last_in_combo: bool,
     /// a fruit is its own only object
@@ -153,9 +178,15 @@ struct Parent {
 
 /// An osu!catch difficulty for the playfield, `None` for other rulesets.
 pub fn parse(text: &str) -> Option<Chart> {
+    parse_with(text, Mods::NONE)
+}
+
+/// An osu!catch difficulty with the mods that change it: Easy and Hard Rock on CS and AR, Hard
+/// Rock's offsets, Mirror's flip.
+pub fn parse_with(text: &str, mods: Mods) -> Option<Chart> {
     let raw = osu::read(text, 2)?;
-    let scale = scale_from_cs(raw.cs);
-    let preempt = difficulty_range(raw.ar as f64, 1800.0, 1200.0, 450.0) as i32 as f64;
+    let scale = scale_from_cs(mods.cs(raw.cs));
+    let preempt = difficulty_range(mods.ar_od(raw.ar) as f64, 1800.0, 1200.0, 450.0) as i32 as f64;
 
     let mut parents: Vec<Parent> = Vec::with_capacity(raw.objects.len());
     for o in &raw.objects {
@@ -163,6 +194,8 @@ pub fn parse(text: &str) -> Option<Chart> {
         match o.kind {
             OsuKind::Circle => parents.push(Parent {
                 banana_shower: false,
+                start: o.time,
+                stream_end: None,
                 new_combo: o.new_combo,
                 last_in_combo: false,
                 children: vec![object(Kind::Fruit, o.time, o.sounds.first().cloned())],
@@ -170,11 +203,12 @@ pub fn parse(text: &str) -> Option<Chart> {
             }),
             OsuKind::Slider => {
                 let (children, original) = juice_stream(o, x);
-                parents.push(Parent { banana_shower: false, new_combo: o.new_combo, last_in_combo: false, children, original });
+                let stream_end = Some(x + o.slider.as_ref().map_or(0.0, |s| s.last_control.x));
+                parents.push(Parent { banana_shower: false, start: o.time, stream_end, new_combo: o.new_combo, last_in_combo: false, children, original });
             }
             OsuKind::Spinner => {
                 let (children, original) = banana_shower(o);
-                parents.push(Parent { banana_shower: true, new_combo: o.new_combo, last_in_combo: false, children, original });
+                parents.push(Parent { banana_shower: true, start: o.time, stream_end: None, new_combo: o.new_combo, last_in_combo: false, children, original });
             }
         }
     }
@@ -198,8 +232,14 @@ pub fn parse(text: &str) -> Option<Chart> {
         }
     }
 
-    offsets(&mut parents);
+    offsets(&mut parents, mods.hard_rock);
     hyperdash(&mut parents, scale);
+    // CatchModMirror: after the processor (offsets and hyperdashes), everything across the middle
+    if mods.mirror {
+        for c in parents.iter_mut().flat_map(|p| p.children.iter_mut()) {
+            c.x = WIDTH - c.x;
+        }
+    }
     let frames = autoplay(&parents, scale);
     let objects = parents.into_iter().flat_map(|p| p.children).collect();
     Some(Chart { scale, preempt, objects, frames, colours: raw.colours })
@@ -306,12 +346,28 @@ fn banana_shower(o: &osu::Object) -> (Vec<Object>, Vec<f32>) {
     (out, vec![0.0; n])
 }
 
-/// `CatchBeatmapProcessor.ApplyPositionOffsets` (without Hard Rock): bananas anywhere, tiny
-/// droplets up to 20 either way; the rest where they are.
-fn offsets(parents: &mut [Parent]) {
+/// `CatchBeatmapProcessor.ApplyPositionOffsets`: bananas anywhere, tiny droplets up to 20 either
+/// way, fruits (with Hard Rock) nudged by how far and how soon they come after the last one; the
+/// rest where they are.
+fn offsets(parents: &mut [Parent], hard_rock: bool) {
     let mut rng = LegacyRandom::new(RNG_SEED);
+    let mut last_position: Option<f32> = None;
+    let mut last_start = 0.0f64;
     for p in parents.iter_mut() {
-        let Parent { children, original, banana_shower, .. } = p;
+        let Parent { children, original, banana_shower, start, stream_end, .. } = p;
+        if let Some(end) = *stream_end {
+            // osu!stable's bugs, kept: the last control point, not the path's end; the start
+            // time, not the end
+            last_position = Some(end);
+            last_start = *start;
+        } else if !*banana_shower {
+            // a fruit of its own
+            if let (Some(c), Some(&ox)) = (children.first_mut(), original.first()) {
+                let offset = if hard_rock { hard_rock_offset(ox, *start, &mut last_position, &mut last_start, &mut rng) } else { 0.0 };
+                c.x = (ox + offset).clamp(0.0, WIDTH);
+            }
+            continue;
+        }
         for (c, &ox) in children.iter_mut().zip(original.iter()) {
             let mut offset = 0.0f32;
             if *banana_shower {
@@ -329,6 +385,44 @@ fn offsets(parents: &mut [Parent]) {
             c.x = (ox + offset).clamp(0.0, WIDTH);
         }
     }
+}
+
+/// `CatchBeatmapProcessor.applyHardRockOffset`: a fruit close after the last one in time moves
+/// further its way (or, right on it, a little either way at random). Returns the offset.
+fn hard_rock_offset(original: f32, start: f64, last_position: &mut Option<f32>, last_start: &mut f64, rng: &mut LegacyRandom) -> f32 {
+    let mut position = original;
+    // osu!stable takes a last position of 0 for none as well
+    let Some(last) = last_position.filter(|&l| l != 0.0) else {
+        *last_position = Some(position);
+        *last_start = start;
+        return 0.0;
+    };
+    let diff = position - last;
+    // whole milliseconds, as osu!stable had them
+    let time_diff = (start - *last_start) as i32;
+    if time_diff > 1000 {
+        *last_position = Some(position);
+        *last_start = start;
+        return 0.0;
+    }
+    if diff == 0.0 {
+        // applyRandomOffset (the last position stays)
+        let right = rng.next_bool();
+        let rand = (rng.next_range_f(0.0, (time_diff as f64 / 4.0).max(0.0)) as f32).min(20.0);
+        if right {
+            position += if position + rand <= WIDTH { rand } else { -rand };
+        } else {
+            position += if position - rand >= 0.0 { -rand } else { rand };
+        }
+        return position - original;
+    }
+    // applyOffset, kept inside the playfield (an int division, as in osu!stable)
+    if diff.abs() < (time_diff / 3) as f32 && ((diff > 0.0 && position + diff < WIDTH) || (diff < 0.0 && position + diff > 0.0)) {
+        position += diff;
+    }
+    *last_position = Some(position);
+    *last_start = start;
+    position - original
 }
 
 /// `CatchBeatmapProcessor.initialiseHyperDash`: a fruit or droplet is a hyperdash when the next
@@ -433,6 +527,62 @@ mod tests {
             let d = r.next_double();
             assert!((0.0..1.0).contains(&d));
         }
+    }
+
+    #[test]
+    fn next_bool_takes_one_bit_at_a_time() {
+        let mut a = LegacyRandom::new(7);
+        let mut b = LegacyRandom::new(7);
+        let word = b.next_uint();
+        for i in 0..32 {
+            assert_eq!(a.next_bool(), (word >> i) & 1 == 1, "bit {i}");
+        }
+        // then a new value
+        let next = b.next_uint();
+        assert_eq!(a.next_bool(), next & 1 == 1);
+    }
+
+    #[test]
+    fn hard_rock_offsets() {
+        // 100 ms apart, 20 px apart: Hard Rock takes the step again; right on the last one, a
+        // little either way; after more than a second, where it is
+        let text = format!("{HEAD}100,192,1000,5,0,0:0:0:0:
+120,192,1100,1,0,0:0:0:0:
+140,192,1200,1,0,0:0:0:0:
+140,192,1300,1,0,0:0:0:0:
+300,192,3000,1,0,0:0:0:0:
+");
+        let x = |c: &Chart| c.objects.iter().map(|o| o.x).collect::<Vec<_>>();
+        assert_eq!(x(&parse(&text).unwrap()), vec![100.0, 120.0, 140.0, 140.0, 300.0]);
+        let hr = parse_with(&text, Mods { hard_rock: true, ..Mods::NONE }).unwrap();
+        let v = x(&hr);
+        assert_eq!(v[..2], [100.0, 140.0]);
+        // the last position stays 140, so both random ones go from there (up to 20, as an int)
+        for &p in &v[2..4] {
+            assert!((p - 140.0).abs() <= 20.0 && p.fract() == 0.0, "{v:?}");
+        }
+        assert_eq!(v[4], 300.0);
+        // CS 4 × 1.3, AR 8 × 1.4 up to 10
+        assert!(hr.scale < parse(&text).unwrap().scale);
+        assert_eq!(hr.preempt, 450.0);
+    }
+
+    #[test]
+    fn mirror_flips_everything_after_the_offsets() {
+        let text = format!("{HEAD}20,192,1000,5,0,0:0:0:0:
+490,192,1150,1,0,0:0:0:0:
+100,192,2000,2,0,L|300:192,1,200
+256,192,4000,12,0,5000,0:0:0:0:
+");
+        let plain = parse(&text).unwrap();
+        let mr = parse_with(&text, Mods { mirror: true, ..Mods::NONE }).unwrap();
+        assert_eq!(plain.objects.len(), mr.objects.len());
+        for (a, b) in plain.objects.iter().zip(&mr.objects) {
+            assert!((a.x - (WIDTH - b.x)).abs() < 1e-3, "{} {}", a.x, b.x);
+            assert_eq!(a.hyper, b.hyper);
+        }
+        // a hyperdash either way
+        assert!(mr.objects[0].hyper);
     }
 
     #[test]

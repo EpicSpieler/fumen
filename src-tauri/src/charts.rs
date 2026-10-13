@@ -14,6 +14,7 @@ use crate::analysis::{self, Analysis};
 use crate::chart::{self, Chart};
 use crate::error::{Error, Result};
 use crate::mma::{dan, patterns};
+use crate::mods::Mods;
 use crate::paths;
 use crate::stars;
 
@@ -29,12 +30,18 @@ pub fn read(files: &paths::Files, hash: &str) -> Result<String> {
 }
 
 pub fn load(files: &paths::Files, hash: &str) -> Result<Chart> {
+    load_with(files, hash, Mods::NONE)
+}
+
+/// A difficulty with the mods that change it: the playfield's chart (osu!, osu!taiko, osu!catch)
+/// is built with them; the notes, analysis and star ratings stay the beatmap's own.
+pub fn load_with(files: &paths::Files, hash: &str, mods: Mods) -> Result<Chart> {
     let text = read(files, hash)?;
     let mut chart = chart::parse(&text);
     match chart.mode {
-        0 => chart.osu = crate::osu::parse(&text),
-        1 => chart.taiko = crate::taiko::parse(&text),
-        2 => chart.catch = crate::catch::parse(&text),
+        0 => chart.osu = crate::osu::parse_with(&text, mods),
+        1 => chart.taiko = crate::taiko::parse_with(&text, mods),
+        2 => chart.catch = crate::catch::parse_with(&text, mods),
         _ => {}
     }
     Ok(chart)
@@ -237,13 +244,17 @@ fn catch_out(c: &crate::catch::Chart) -> CatchOut {
     }
 }
 
-pub fn chart_json(chart: &Chart) -> Result<Vec<u8>> {
+/// The chart for the UI; `mods` only turn osu!mania's columns round (Mirror), the playfield
+/// charts come built with them (`load_with`).
+pub fn chart_json(chart: &Chart, mods: Mods) -> Result<Vec<u8>> {
     let analysis = analysis::analyse(chart);
     let mania = chart.mode == 3;
+    // ManiaModMirror: column n of k is column k - 1 - n
+    let lane = |l: u8| if mods.mirror && chart.keys > 0 { chart.keys.saturating_sub(1).saturating_sub(l) } else { l };
     let out = ChartOut {
         mode: chart.mode,
         keys: chart.keys,
-        notes: chart.objects.iter().flat_map(|o| [o.time, if mania { o.lane as i32 } else { o.x }, o.end - o.time]).collect(),
+        notes: chart.objects.iter().flat_map(|o| [o.time, if mania { lane(o.lane) as i32 } else { o.x }, o.end - o.time]).collect(),
         beats: chart
             .timing
             .iter()
@@ -399,6 +410,18 @@ pub fn store(conn: &mut Connection, rows: &[Summary]) -> Result<()> {
 mod tests {
     use super::*;
 
+    #[test]
+    fn mirror_turns_mania_columns_round() {
+        let text = "osu file format v14\n[General]\nMode: 3\n[Difficulty]\nCircleSize:4\nOverallDifficulty:8\n[TimingPoints]\n0,500,4,1,0,100,1,0\n[HitObjects]\n64,192,1000,1,0,0:0:0:0:\n192,192,1200,1,0,0:0:0:0:\n448,192,1400,128,0,1600:0:0:0:0:\n";
+        let chart = chart::parse(text);
+        let notes = |mods| {
+            let v: serde_json::Value = serde_json::from_slice(&chart_json(&chart, mods).unwrap()).unwrap();
+            v["notes"].as_array().unwrap().iter().map(|n| n.as_i64().unwrap()).collect::<Vec<_>>()
+        };
+        assert_eq!(notes(Mods::NONE), vec![1000, 0, 0, 1200, 1, 0, 1400, 3, 200]);
+        assert_eq!(notes(Mods { mirror: true, ..Mods::NONE }), vec![1000, 3, 0, 1200, 2, 0, 1400, 0, 200]);
+    }
+
     /// Analyses every difficulty of a real lazer install and prints what came out:
     /// `FUMEN_TEST_STORAGE=%APPDATA%/osu FUMEN_TEST_EXPORT=<fumen-realm export> cargo test real_library -- --ignored --nocapture`
     #[test]
@@ -443,7 +466,8 @@ mod tests {
     /// Chart files for the browser preview (tools/browser-preview), for every difficulty whose
     /// title contains one of the comma-separated `FUMEN_PREVIEW_TITLES` (and every one already
     /// there, refreshed). osu!mania charts also get `dans`: the dan at every rate the panel offers,
-    /// for the preview's `get_dan`:
+    /// for the preview's `get_dan`; every chart also comes with the mods that change it, as
+    /// `<id>+HR.json` and so on:
     /// `FUMEN_TEST_STORAGE=… FUMEN_TEST_EXPORT=… FUMEN_PREVIEW_TITLES="FREEDOM DiVE,Ready Steady"
     ///  FUMEN_PREVIEW_CHARTS=../tools/browser-preview/.cache/charts cargo test preview_charts -- --ignored`
     #[test]
@@ -472,7 +496,7 @@ mod tests {
                     continue;
                 }
                 let Ok(chart) = load(&paths::Files::lazer(&storage), hash) else { continue };
-                let mut v: serde_json::Value = serde_json::from_slice(&chart_json(&chart).unwrap()).unwrap();
+                let mut v: serde_json::Value = serde_json::from_slice(&chart_json(&chart, Mods::NONE).unwrap()).unwrap();
                 let read = |h: &str| paths::lazer_file(&storage, h).and_then(|p| std::fs::read(p).ok()).map(|b| String::from_utf8_lossy(&b).into_owned());
                 if let Some(osu) = read(hash) {
                     let osb = files.storyboard().and_then(read);
@@ -487,6 +511,18 @@ mod tests {
                 }
                 std::fs::write(file, serde_json::to_vec(&v).unwrap()).unwrap();
                 written += 1;
+                // the ruleset's chart mods, one at a time and Easy / Hard Rock with Mirror
+                let (ez, hr, mr) = (Mods { easy: true, ..Mods::NONE }, Mods { hard_rock: true, ..Mods::NONE }, Mods { mirror: true, ..Mods::NONE });
+                let variants: &[(&str, Mods)] = match chart.mode {
+                    0 => &[("EZ", ez), ("HR", hr), ("MR", mr), ("EZMR", Mods { mirror: true, ..ez })],
+                    1 => &[("EZ", ez), ("HR", hr)],
+                    2 => &[("EZ", ez), ("HR", hr), ("MR", mr), ("EZMR", Mods { mirror: true, ..ez }), ("HRMR", Mods { mirror: true, ..hr })],
+                    _ => &[("MR", mr)],
+                };
+                for &(key, mods) in variants {
+                    let Ok(c) = load_with(&paths::Files::lazer(&storage), hash, mods) else { continue };
+                    std::fs::write(out.join(format!("{id}+{key}.json")), chart_json(&c, mods).unwrap()).unwrap();
+                }
             }
         }
         eprintln!("wrote {written} charts to {}", out.display());
