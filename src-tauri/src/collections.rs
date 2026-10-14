@@ -115,7 +115,7 @@ fn md5s_of(conn: &Connection, map_ids: &[String]) -> Result<Vec<String>> {
     Ok(out)
 }
 
-fn insert_md5s(conn: &Connection, id: &str, md5s: &[String]) -> Result<usize> {
+pub(crate) fn insert_md5s(conn: &Connection, id: &str, md5s: &[String]) -> Result<usize> {
     let at = now_ms();
     let mut st = conn.prepare("INSERT OR IGNORE INTO collection_items (collection_id, md5, added) VALUES (?1, ?2, ?3)")?;
     let mut added = 0;
@@ -123,6 +123,15 @@ fn insert_md5s(conn: &Connection, id: &str, md5s: &[String]) -> Result<usize> {
         added += st.execute(params![id, h, at])?;
     }
     Ok(added)
+}
+
+/// Makes an empty collection inside a transaction that's already open. Returns its id.
+pub(crate) fn create_in(conn: &Connection, name: &str) -> Result<String> {
+    let name = clean_name(name)?;
+    let id = new_id();
+    let position: i64 = conn.query_row("SELECT COALESCE(MAX(position), -1) + 1 FROM collections", [], |r| r.get(0))?;
+    conn.execute("INSERT INTO collections (id, name, created, position) VALUES (?1, ?2, ?3, ?4)", params![id, name, now_ms(), position])?;
+    Ok(id)
 }
 
 /// Makes a collection, with difficulties (library ids) in it already if given. Returns its id.

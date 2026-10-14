@@ -16,6 +16,8 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ReadOnlyPaths=/home/dertesti/fumen-web
+# collections saved to the cloud (`/api/collections`)
+ReadWritePaths=/home/dertesti/fumen-web/cloud
 
 [Install]
 WantedBy=multi-user.target

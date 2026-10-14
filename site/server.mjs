@@ -16,7 +16,7 @@
 // No dependencies (Node 20+): `node --env-file=.env server.mjs`, settings as in .env.example.
 import { createReadStream } from "node:fs";
 import { createServer } from "node:http";
-import { readFile, stat } from "node:fs/promises";
+import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { extname, join, normalize, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -55,6 +55,9 @@ export function configFromEnv(env = process.env) {
     tokenUrl: env.OSU_TOKEN_URL ?? "https://osu.ppy.sh/oauth/token",
     publicDir: fileURLToPath(new URL("./public/", import.meta.url)),
     updatesDir: env.UPDATES_DIR ?? fileURLToPath(new URL("./updates/", import.meta.url)),
+    /** collections saved by players, one file per osu! user */
+    cloudDir: env.CLOUD_DIR ?? fileURLToPath(new URL("./cloud/", import.meta.url)),
+    osuApi: (env.OSU_API_URL ?? "https://osu.ppy.sh/api/v2").replace(/\/+$/, ""),
   };
 }
 
@@ -88,12 +91,12 @@ export function createSite(config) {
       { "Content-Type": TYPES[".html"], ...PAGE_HEADERS },
     );
 
-  async function body(req) {
+  async function body(req, limit = 8192) {
     let size = 0;
     const chunks = [];
     for await (const c of req) {
       size += c.length;
-      if (size > 8192) throw new Error("too large");
+      if (size > limit) throw new Error("too large");
       chunks.push(c);
     }
     return JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}");
@@ -169,6 +172,29 @@ export function createSite(config) {
     return true;
   }
 
+  /** osu! tokens already checked, to the player behind them (for a few minutes) */
+  const players = new Map();
+  /** The osu! player whose token comes with the request (asked of osu!), or null. */
+  async function osuPlayer(req) {
+    const auth = req.headers.authorization ?? "";
+    const m = /^Bearer ([A-Za-z0-9._~+/=-]{20,8192})$/.exec(auth);
+    if (!m) return null;
+    const hit = players.get(m[1]);
+    if (hit && hit.until > Date.now()) return hit.id;
+    let r;
+    try {
+      r = await fetch(`${config.osuApi}/me`, { headers: { Authorization: auth, Accept: "application/json" }, signal: AbortSignal.timeout(15_000) });
+    } catch {
+      return null;
+    }
+    if (!r.ok) return null;
+    const id = Number((await r.json().catch(() => ({}))).id);
+    if (!Number.isInteger(id) || id <= 0) return null;
+    if (players.size > 1000) players.clear();
+    players.set(m[1], { id, until: Date.now() + 10 * 60_000 });
+    return id;
+  }
+
   return async function handle(req, res) {
     const url = new URL(req.url ?? "/", "http://site");
     const { pathname } = url;
@@ -205,6 +231,30 @@ export function createSite(config) {
         }
         if (typeof input.refresh_token !== "string" || !input.refresh_token || input.refresh_token.length > 8192) return json(res, 400, { error: "bad_request", message: "No refresh token." });
         return await osuToken(res, { grant_type: "refresh_token", refresh_token: input.refresh_token });
+      }
+
+      // a player's collections, kept for their other Fumens (the same osu! login)
+      if (pathname === "/api/collections" && (req.method === "GET" || req.method === "PUT")) {
+        if (limited(req)) return json(res, 429, { error: "slow_down", message: "Too many requests. Wait a minute." });
+        const id = await osuPlayer(req);
+        if (!id) return json(res, 401, { error: "unauthorized", message: "osu! didn't accept the login. Log in again in Fumen's settings." });
+        const file = join(config.cloudDir, `${id}.json`);
+        if (req.method === "GET") {
+          const data = await readFile(file, "utf8").catch(() => null);
+          return data ? send(res, 200, data, { "Content-Type": "application/json" }) : json(res, 404, { error: "none", message: "Nothing saved in the cloud yet." });
+        }
+        let input;
+        try {
+          input = await body(req, 32 * 1024 * 1024);
+        } catch {
+          return json(res, 400, { error: "bad_request", message: "That request wasn't readable." });
+        }
+        if (!Array.isArray(input.collections)) return json(res, 400, { error: "bad_request", message: "No collections." });
+        const saved = Date.now();
+        await mkdir(config.cloudDir, { recursive: true });
+        await writeFile(`${file}.tmp`, JSON.stringify({ version: 1, user: id, saved, collections: input.collections }));
+        await rename(`${file}.tmp`, file);
+        return json(res, 200, { saved, collections: input.collections.length });
       }
 
       if ((req.method === "GET" || req.method === "HEAD") && pathname.startsWith("/updates/")) {
