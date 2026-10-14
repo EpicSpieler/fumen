@@ -28,6 +28,9 @@ database first (see [Adding beatmaps](#adding-beatmaps)).
   went into before, or lazer's of the same name, else becomes a new one; same safety as adding
   beatmaps), or Save as collection.db… for osu!stable and Collection Manager (close stable before
   replacing its own, it writes the file when it exits). Settings › Collections does all at once
+- Collections in the cloud: Settings › Collections › Save to the cloud keeps every collection
+  (Fumen's, smart ones, lazer's and stable's) on fumen.dertesti.dev under your osu! login. Get them
+  on another PC merges them in by name and downloads the sets that PC doesn't have
 - Cover grid and a list of beatmap sets that open to show their difficulties, both virtualised
   (stays smooth at 20k+ difficulties)
 - osu!-style search: `keys=7 sr>4.5 status=ranked creator=… length<2:30 grade>=A played=no`
