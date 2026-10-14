@@ -1,6 +1,7 @@
 mod analysis;
 mod catch;
 mod chart;
+mod cloud;
 mod charts;
 mod collections;
 mod db;
@@ -529,6 +530,33 @@ async fn get_history(app: AppHandle) -> Result<tauri::ipc::Response> {
         let files = state.files();
         let conn = state.db();
         osu_scores::history_json(&conn, account.as_ref(), Some(&files)).map(tauri::ipc::Response::new)
+    })
+    .await
+    .map_err(|e| Error::known("internal", e.to_string()))?
+}
+
+/// Puts every collection of the library into the cloud, under the osu! login.
+#[tauri::command]
+async fn cloud_push_collections(app: AppHandle) -> Result<cloud::PushSummary> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let cols = cloud::gather(&state.db())?;
+        cloud::push(&state.data_dir, &osu_auth::Endpoints::default(), cols)
+    })
+    .await
+    .map_err(|e| Error::known("internal", e.to_string()))?
+}
+
+/// Merges the collections saved in the cloud into this library; says which sets they want that
+/// it doesn't have.
+#[tauri::command]
+async fn cloud_pull_collections(app: AppHandle) -> Result<cloud::PullSummary> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let saved = cloud::fetch(&state.data_dir, &osu_auth::Endpoints::default())?;
+        let mut conn = state.db();
+        let summary = cloud::apply(&mut conn, &saved);
+        summary
     })
     .await
     .map_err(|e| Error::known("internal", e.to_string()))?
@@ -1258,6 +1286,8 @@ pub fn run() {
             cancel_import,
             find_played_sets,
             search_mirrors,
+            cloud_push_collections,
+            cloud_pull_collections,
             osu_account,
             osu_login,
             osu_login_cancel,
