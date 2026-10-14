@@ -298,6 +298,41 @@ export async function invoke<T>(cmd: string, args: Record<string, unknown> = {})
     case "cancel_import":
       previewImportCancel = true;
       return null as T;
+    case "search_mirrors": {
+      // the real osu.direct search, from the page (it allows that); filtered like mirror_search.rs
+      const q = args.query as { text: string; mode: number | null; keys: number[]; srMin: number | null; srMax: number | null; status: number[]; sort: string; page: number };
+      const filters = [
+        ...(q.keys.length && (q.mode === null || q.mode === 3) ? [`(${q.keys.map((k) => `beatmaps.cs = ${k}`).join(" OR ")})`] : []),
+        ...(q.srMin !== null ? [`beatmaps.difficulty_rating >= ${q.srMin}`] : []),
+        ...(q.srMax !== null ? [`beatmaps.difficulty_rating <= ${q.srMax}`] : []),
+      ];
+      const sorts: Record<string, string> = { ranked: "ranked_date:desc", plays: "play_count:desc", favourites: "favourite_count:desc", stars: "beatmaps.difficulty_rating:asc", newest: "last_updated:desc" };
+      const sort = q.sort === "relevance" ? (q.text ? "" : sorts.ranked) : sorts[q.sort];
+      const p = new URLSearchParams({ q: [q.text, filters.length ? `[${filters.join(" AND ")}]` : ""].filter(Boolean).join(" "), amount: "50", offset: String(q.page * 50) });
+      if (q.mode !== null) p.set("mode", String(q.mode));
+      if (q.status.length) p.set("status", q.status.join(","));
+      if (sort) p.set("sort", sort);
+      // localStorage "fumen-preview-mirrors" = "down": no mirror answers
+      if (localStorage.getItem("fumen-preview-mirrors") === "down") throw { code: "search-failed", message: "The mirrors couldn't search right now (osu.direct HTTP 503, catboy.best HTTP 503)" };
+      const res = await fetch(`https://osu.direct/api/v2/search?${p}`);
+      if (!res.ok) throw { code: "search-failed", message: `The mirrors couldn't search right now (osu.direct HTTP ${res.status})` };
+      const raw = (await res.json()) as Record<string, any>[];
+      const statuses: Record<string, number> = { graveyard: -2, wip: -1, pending: 0, ranked: 1, approved: 2, qualified: 3, loved: 4 };
+      const keysApply = q.keys.length > 0 && (q.mode === null || q.mode === 3);
+      const sets = raw.flatMap((s) => {
+        const status = statuses[s.status] ?? 0;
+        if (q.status.length && !q.status.includes(status)) return [];
+        const maps = (s.beatmaps as Record<string, any>[])
+          .filter((b) => q.mode === null || b.mode_int === q.mode)
+          .map((b) => ({ id: b.id, mode: b.mode_int, version: b.version, sr: b.difficulty_rating, cs: b.cs, ar: b.ar, od: b.accuracy, bpm: b.bpm, length: b.total_length,
+            matches: (!keysApply || (b.mode_int === 3 && q.keys.includes(Math.round(b.cs)))) && (q.srMin === null || b.difficulty_rating >= q.srMin - 0.005) && (q.srMax === null || b.difficulty_rating <= q.srMax + 0.005) }))
+          .sort((x, y) => x.mode - y.mode || x.sr - y.sr);
+        if (!maps.some((m) => m.matches)) return [];
+        return [{ id: s.id, title: s.title, titleUnicode: s.title_unicode !== s.title ? s.title_unicode : undefined, artist: s.artist, artistUnicode: s.artist_unicode !== s.artist ? s.artist_unicode : undefined,
+          creator: s.creator, status, ranked: s.ranked_date ? Date.parse(s.ranked_date) : undefined, plays: s.play_count ?? 0, favourites: s.favourite_count ?? 0, video: !!s.video, maps }];
+      });
+      return { sets, more: raw.length >= 50, mirror: "osu.direct", plain: false } as T;
+    }
     case "find_played_sets": {
       // localStorage "fumen-preview-osu" decides the login; real set ids, so covers load
       const ids = [1, 39804, 41823, 320118, 352570, 372245, 413674, 431271, 539697, 553734, 580215, 627629, 654936, 703008, 774965, 853167, 920979, 1010865, 1068436, 1159279];

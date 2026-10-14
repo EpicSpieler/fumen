@@ -1,19 +1,28 @@
 /* import.ts — "Add beatmaps": sets downloaded → imported into osu!lazer by lazer's own code
    (src-tauri/src/lazer_import.rs: only tested lazer versions, only while lazer is closed) → in the
-   library. The sets come from pasted osu! links, or from what the player has played (osu!'s play
-   counts and top plays, the scores in Performance) that lazer doesn't have. Downloads run a few at
+   library. The sets come from pasted osu! links, from what the player has played (osu!'s play
+   counts and top plays, the scores in Performance) that lazer doesn't have, or from Browse (the
+   mirrors' search), whose sets wait in a queue while another import runs. Downloads run a few at
    a time while lazer imports what's ready in batches; each set is a card moving along, like
    lazer's own download notifications. The dialog can be closed while an import runs; reopening
    it shows where it is. */
 import { api, asApiError, onImportProgress, onPlayedProgress } from "../lib/api";
 import { esc, num } from "../lib/format";
 import { readLinks } from "../lib/links";
-import { events, refreshStatus, reloadLibrary } from "../lib/store";
+import { Emitter, events, refreshStatus, reloadLibrary } from "../lib/store";
 import type { ImportProgress, ImportStage, ImportSummary, LazerImportStatus, OsuAccount, PlayedFound } from "../lib/types";
 import { attachSegIndicator, closeAnimated, reduceMotion, toast } from "../ui/controls";
 import { icon } from "../ui/icons";
 
 type Mode = "links" | "played";
+/** where an import's sets came from: a tab of the dialog, or Browse */
+type From = Mode | "search";
+
+interface Line {
+  link: string;
+  set?: number;
+  title?: string;
+}
 
 interface Row {
   link: string;
@@ -29,7 +38,7 @@ interface Job {
   rows: Row[];
   running: boolean;
   /** where the sets came from */
-  from: Mode;
+  from: From;
   /** Stop was pressed; the sets being imported right now still go in */
   stopping?: boolean;
   summary?: ImportSummary;
@@ -55,6 +64,51 @@ let played: Played = { state: "idle", read: 0 };
 let dialog: ImportDialog | null = null;
 /** sets an older Fumen imported without details are being finished */
 let repairing = false;
+/** sets from Browse waiting for the running import to end */
+let queued: Line[] = [];
+
+/** a set's import moved along (Browse follows its sets with it) */
+export const importEvents = new Emitter<{ set: number }>();
+/** how each set's last import ended, this session (a queued import replaces the job before) */
+const ended = new Map<number, Row>();
+
+export type SetImport = { stage: ImportStage | "waiting" | "queued"; done: number; total: number; message?: string };
+
+/** Where a set is in the running (or last) import, or the queue. */
+export function setImportState(id: number): SetImport | null {
+  if (queued.some((l) => l.set === id)) return { stage: "queued", done: 0, total: 0 };
+  const r = job?.rows.find((x) => x.set === id) ?? ended.get(id);
+  return r ? { stage: r.stage, done: r.done, total: r.total, message: r.message } : null;
+}
+
+/** Imports sets found in Browse: now, or after the import that's running. Sets already on their
+ * way are left out. */
+export function importSets(sets: { id: number; title: string }[]): "started" | "queued" | "none" {
+  const busy = (id: number) => {
+    const s = setImportState(id);
+    return !!s && (s.stage === "queued" || (job?.running === true && !FINISHED.has(s.stage as Row["stage"])));
+  };
+  const lines = sets.filter((s) => !busy(s.id)).map((s) => ({ link: `https://osu.ppy.sh/beatmapsets/${s.id}`, set: s.id, title: s.title }));
+  if (!lines.length) return "none";
+  if (job?.running) {
+    queued.push(...lines);
+    lines.forEach((l) => importEvents.emit("set", l.set));
+    events.emit("importing", true);
+    return "queued";
+  }
+  void runImport(lines, "search");
+  return "started";
+}
+
+/** sets waiting in the queue, for the sidebar */
+export const queuedCount = (): number => queued.length;
+
+/** Empties the queue (the import was stopped, or couldn't go on). */
+function dropQueue(): void {
+  const dropped = queued;
+  queued = [];
+  dropped.forEach((l) => importEvents.emit("set", l.set!));
+}
 
 const FINISHED: ReadonlySet<Row["stage"]> = new Set(["done", "skipped", "error"]);
 const ACTIVE: ReadonlySet<Row["stage"]> = new Set(["resolving", "downloading", "held", "ready", "importing"]);
@@ -65,7 +119,7 @@ export const isImporting = (): boolean => !!job?.running;
 export function importProgressText(): string | null {
   if (!job?.running) return null;
   const finished = job.rows.filter((r) => FINISHED.has(r.stage)).length;
-  return `${num(finished)} of ${num(job.rows.length)}`;
+  return `${num(finished)} of ${num(job.rows.length + queued.length)}`;
 }
 
 /** Opens the dialog; `text` (pasted links) goes into the field and starts over a finished import. */
@@ -582,8 +636,8 @@ class ImportDialog {
     if (showsRows(job)) {
       // "Add more" / "Try failed again": the failed sets go into the field; played maps go back
       // to their list (what failed or was left out is still in it)
-      if (job.from === "links") draft = job.rows.filter((r) => r.stage === "error").map((r) => r.link).join("\n");
-      mode = job.from;
+      if (job.from !== "played") draft = job.rows.filter((r) => r.stage === "error").map((r) => r.link).join("\n");
+      mode = job.from === "played" ? "played" : "links";
       job = null;
       this.render(true);
       if (mode === "links") this.input.focus();
@@ -670,6 +724,7 @@ async function findPlayed(): Promise<void> {
 async function stopImport(): Promise<void> {
   if (!job?.running || job.stopping) return;
   job.stopping = true;
+  dropQueue();
   dialog?.render();
   try {
     await api.cancelImport();
@@ -678,11 +733,12 @@ async function stopImport(): Promise<void> {
   }
 }
 
-async function runImport(lines: { link: string; set?: number; title?: string }[], from: Mode): Promise<void> {
+async function runImport(lines: Line[], from: From): Promise<void> {
   const links = lines.map((l) => l.link);
   const current: Job = { rows: lines.map((l) => ({ ...l, stage: "waiting", done: 0, total: 0 })), running: true, from };
   job = current;
   events.emit("importing", true);
+  for (const r of current.rows) if (r.set) importEvents.emit("set", r.set);
   dialog?.render();
   let lastBusy = 0;
   const stop = await onImportProgress((p: ImportProgress) => {
@@ -694,6 +750,7 @@ async function runImport(lines: { link: string; set?: number; title?: string }[]
     r.done = p.done;
     r.total = p.total;
     r.message = p.message ?? undefined;
+    if (r.set) importEvents.emit("set", r.set);
     if (job === current) {
       dialog?.renderRow(p.index, true);
       dialog?.progressed();
@@ -732,7 +789,20 @@ async function runImport(lines: { link: string; set?: number; title?: string }[]
     stop();
     current.running = false;
     current.stopping = false;
-    events.emit("importing", false);
-    dialog?.render();
+    // a failed import can't go on with the queue (osu!lazer was opened, …)
+    if (current.error || current.summary?.stopped) dropQueue();
+    for (const r of current.rows) {
+      if (!r.set) continue;
+      if (FINISHED.has(r.stage)) ended.set(r.set, { ...r });
+      importEvents.emit("set", r.set);
+    }
+    if (queued.length) {
+      const next = queued;
+      queued = [];
+      void runImport(next, "search");
+    } else {
+      events.emit("importing", false);
+      dialog?.render();
+    }
   }
 }

@@ -570,3 +570,63 @@ export interface ApiError {
   code: string;
   message: string;
 }
+
+export type MirrorSort = "relevance" | "ranked" | "plays" | "favourites" | "stars" | "newest";
+
+/** A beatmap search on the mirrors (see src-tauri/src/mirror_search.rs); unset means "any". */
+export interface MirrorQuery {
+  text: string;
+  mode: number | null;
+  keys: number[];
+  srMin: number | null;
+  srMax: number | null;
+  /** osu!'s numbers: -2 graveyard … 4 loved */
+  status: number[];
+  sort: MirrorSort;
+  /** from 0 */
+  page: number;
+}
+
+/** A difficulty of a set found on the mirrors. */
+export interface FoundMap {
+  id: number;
+  mode: number;
+  version: string;
+  sr: number;
+  cs: number;
+  ar: number;
+  od: number;
+  bpm: number;
+  /** seconds */
+  length: number;
+  /** one the search asks for */
+  matches: boolean;
+}
+
+/** A set found on the mirrors. */
+export interface FoundSet {
+  id: number;
+  title: string;
+  titleUnicode?: string;
+  artist: string;
+  artistUnicode?: string;
+  creator: string;
+  status: number;
+  /** unix ms */
+  ranked?: number;
+  plays: number;
+  favourites: number;
+  video: boolean;
+  /** the searched ruleset's difficulties (every one without), easiest first */
+  maps: FoundMap[];
+}
+
+export interface MirrorPage {
+  sets: FoundSet[];
+  /** the mirror has more */
+  more: boolean;
+  /** the mirror that answered */
+  mirror: string;
+  /** that mirror can't filter or sort on its side: the order is its own */
+  plain: boolean;
+}

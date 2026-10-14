@@ -18,6 +18,7 @@ import type {
   RepairSummary,
   LazerInstall, StableInstall,
   LibraryStatus,
+  MirrorPage, MirrorQuery,
   OsuAccount,
   ScanProgress,
   Settings,
@@ -62,6 +63,8 @@ export const api = {
   lazerImportStatus: () => invoke<LazerImportStatus>("lazer_import_status"),
   /** downloads the sets behind osu! links and imports them into lazer (progress: onImportProgress) */
   importBeatmaps: (links: string[]) => invoke<ImportSummary>("import_beatmaps", { links }),
+  /** one page of a beatmap search on the mirrors (never osu!'s servers) */
+  searchMirrors: (query: MirrorQuery) => invoke<MirrorPage>("search_mirrors", { query }),
   /** stops the running import after the sets being imported right now */
   cancelImport: () => invoke<void>("cancel_import"),
   repairLazerSets: () => invoke<RepairSummary>("repair_lazer_sets"),

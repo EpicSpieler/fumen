@@ -6,6 +6,7 @@ export type Route =
   | { name: "library" }
   | { name: "history" }
   | { name: "skills" }
+  | { name: "browse" }
   /** similar: open the difficulty's similar maps */
   | { name: "set"; id: string; map?: string; similar?: boolean }
   | { name: "collection"; id: string }
