@@ -301,6 +301,8 @@ body.dragging-maps .side-item[data-fumen], body.dragging-maps .side-box-add { ou
 .profile-text { flex: 1; min-width: 0; }
 .profile-name { font-size: var(--fs-13); font-weight: 600; color: var(--t1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .profile-sub { font-size: var(--fs-11); color: var(--t3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.profile-sub.is-link { color: var(--accent-ink); cursor: pointer; }
+.profile-sub.is-link:hover { color: var(--t1); }
 .profile-settings.active { color: var(--accent-ink); background: var(--accent-dim-hover); }
 
 /* update: a button above the profile while there's one to install */

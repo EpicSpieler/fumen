@@ -436,12 +436,15 @@ export class BrowseView {
     });
   }
 
-  private add(sets: FoundSet[]): void {
+  /** `window`: open Add beatmaps on the import (a whole search); one set just follows along here */
+  private add(sets: FoundSet[], window = false): void {
     if (!this.status?.ready) return void toast(this.lazerReason(), { kind: "danger", timeout: 3500 });
     const unicode = store.prefs.unicode;
     const how = importSets(sets.map((s) => ({ id: s.id, title: `${(unicode && s.artistUnicode) || s.artist} - ${(unicode && s.titleUnicode) || s.title}` })));
-    if (how === "queued") toast(sets.length === 1 ? "Added after the import that's running" : `${plural(sets.length, "set")} added after the import that's running`, { timeout: 2600 });
     for (const s of sets) this.renderAction(s.id);
+    if (how === "none") return;
+    if (window) openImport();
+    else if (how === "queued") toast("Added after the import that's running", { timeout: 2600 });
   }
 
   private async addAll(): Promise<void> {
@@ -454,7 +457,7 @@ export class BrowseView {
       });
       if (!ok) return;
     }
-    this.add(sets);
+    this.add(sets, true);
   }
 
   private toggle(id: number): void {

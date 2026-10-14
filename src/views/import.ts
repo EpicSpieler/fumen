@@ -94,6 +94,7 @@ export function importSets(sets: { id: number; title: string }[]): "started" | "
     queued.push(...lines);
     lines.forEach((l) => importEvents.emit("set", l.set));
     events.emit("importing", true);
+    dialog?.render();
     return "queued";
   }
   void runImport(lines, "search");
@@ -318,9 +319,11 @@ class ImportDialog {
       b.setAttribute("aria-selected", String(on));
     });
     this.subEl.textContent =
-      mode === "played" && !rows
-        ? "Every set you've played on osu! that osu!lazer doesn't have: Fumen downloads them and imports them into lazer, the way lazer itself does."
-        : "Paste links from osu.ppy.sh. Fumen downloads each set and imports it into osu!lazer, the way lazer itself does.";
+      rows && job?.from === "search"
+        ? "Sets from Browse: Fumen downloads each one from the mirrors and imports it into osu!lazer, the way lazer itself does."
+        : mode === "played" && !rows
+          ? "Every set you've played on osu! that osu!lazer doesn't have: Fumen downloads them and imports them into lazer, the way lazer itself does."
+          : "Paste links from osu.ppy.sh. Fumen downloads each set and imports it into osu!lazer, the way lazer itself does.";
     this.input.hidden = rows || mode !== "links";
     this.playedEl.hidden = rows || mode !== "played";
     this.overallEl.hidden = !rows;
@@ -486,6 +489,11 @@ class ImportDialog {
   private renderActions(): void {
     const b = this.goBtn;
     const running = !!job?.running;
+    // a running import goes on with the window closed; the sidebar shows how far (and opens it again)
+    const close = this.el.querySelector<HTMLElement>('.imp-actions [data-act="close"]')!;
+    close.textContent = running ? "Minimize" : "Close";
+    if (running) close.dataset.tip = "It keeps going; the sidebar shows how far";
+    else delete close.dataset.tip;
     this.stopBtn.hidden = !running;
     this.stopBtn.disabled = !!job?.stopping;
     this.stopBtn.textContent = job?.stopping ? "Stopping…" : "Stop";
@@ -536,6 +544,7 @@ class ImportDialog {
       const held = count(["held"]);
       const ready = count(["ready"]);
       const importing = count(["importing"]);
+      if (queued.length) meta.push([`${num(queued.length)} queued after these`]);
       if (dl) meta.push([`${num(dl)} downloading`]);
       if (held) meta.push([`${num(held)} waiting for a mirror`]);
       if (ready) meta.push([`${num(ready)} ready`]);
