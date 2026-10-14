@@ -3,13 +3,14 @@ import { getVersion } from "@tauri-apps/api/app";
 import { open } from "@tauri-apps/plugin-dialog";
 import { api, asApiError } from "../lib/api";
 import { esc, MODE_LABEL, num, relativeTime } from "../lib/format";
-import { collectionEvents, fumenCollections, putIntoLazer, saveCollectionDb } from "../lib/collections";
+import { collectionEvents, fumenCollections, loadCollections, putIntoLazer, saveCollectionDb } from "../lib/collections";
 import { syncHistory } from "../lib/history";
 import { checkForUpdate, downloadText, installUpdate, updateEvents, updateState } from "../lib/updater";
 import { describeScan, isScanning, runScan } from "../lib/scan";
 import { DEFAULT_ACCENT, events, refreshStatus, setPrefs, store } from "../lib/store";
 import type { OsuAccount } from "../lib/types";
-import { attachSegIndicator, toast } from "../ui/controls";
+import { attachSegIndicator, toast, uiConfirm } from "../ui/controls";
+import { importSets, openImport } from "./import";
 import { icon } from "../ui/icons";
 import { ACCENT_PRESETS, applyAppearance } from "../ui/theme";
 
@@ -98,6 +99,16 @@ export class SettingsView {
         <section class="settings-section">
           <div class="label-caps settings-label">Collections</div>
           <div class="setting-row" data-row="collections"></div>
+          <div class="setting-row" data-row="cloud">
+            <div class="setting-text">
+              <div class="setting-title">Collections in the cloud</div>
+              <div class="setting-desc">Every collection (Fumen's, smart ones, osu!lazer's and osu!stable's) kept on Fumen's server under your osu! login. On another PC, Get them merges them in by name and downloads the sets you don't have.</div>
+            </div>
+            <div class="setting-actions">
+              <button class="btn btn-sm s-cloud-pull" type="button">${icon("download")}Get them</button>
+              <button class="btn btn-sm s-cloud-push" type="button">${icon("arrow-up")}Save to the cloud</button>
+            </div>
+          </div>
         </section>
 
         <section class="settings-section">
@@ -249,6 +260,36 @@ export class SettingsView {
     }
   }
 
+  private async cloudPush(b: HTMLButtonElement): Promise<void> {
+    b.disabled = true;
+    try {
+      const r = await api.cloudPushCollections();
+      toast(`${num(r.collections)} ${r.collections === 1 ? "collection" : "collections"} saved to the cloud`, { kind: "success", timeout: 3000 });
+    } catch (e) {
+      toast(`Couldn't save them: ${asApiError(e).message}`, { kind: "danger", timeout: 6000 });
+    } finally {
+      b.disabled = false;
+    }
+  }
+
+  private async cloudPull(b: HTMLButtonElement): Promise<void> {
+    b.disabled = true;
+    try {
+      const r = await api.cloudPullCollections();
+      await loadCollections();
+      const words = [`${num(r.collections)} from the cloud`, r.created ? `${num(r.created)} new here` : "", r.added ? `${num(r.added)} difficulties added` : ""].filter(Boolean);
+      toast(words.join(", "), { kind: "success", timeout: 4000 });
+      if (r.missing.length) {
+        const ok = await uiConfirm(`The collections want ${num(r.missing.length)} ${r.missing.length === 1 ? "set" : "sets"} this library doesn't have. Fumen downloads them from the mirrors and puts them into osu!lazer.`, { title: "Download the missing sets?", confirmLabel: "Download them" });
+        if (ok && importSets(r.missing.map((m) => ({ id: m.id, title: `Set ${m.id}` }))) !== "none") openImport();
+      }
+    } catch (e) {
+      toast(`Couldn't get them: ${asApiError(e).message}`, { kind: "danger", timeout: 6000 });
+    } finally {
+      b.disabled = false;
+    }
+  }
+
   private renderCollections(): void {
     const row = this.el.querySelector<HTMLElement>('[data-row="collections"]');
     if (!row) return;
@@ -340,6 +381,8 @@ export class SettingsView {
       applyAppearance();
       return;
     }
+    if (t.closest(".s-cloud-push")) return void this.cloudPush(t.closest<HTMLButtonElement>(".s-cloud-push")!);
+    if (t.closest(".s-cloud-pull")) return void this.cloudPull(t.closest<HTMLButtonElement>(".s-cloud-pull")!);
     if (t.closest(".s-cols-lazer")) return void putIntoLazer(fumenCollections());
     if (t.closest(".s-cols-db")) return void saveCollectionDb(fumenCollections());
     const sw = t.closest<HTMLElement>(".swatch");
