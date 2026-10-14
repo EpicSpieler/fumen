@@ -299,6 +299,11 @@ sections below is the order of the work.
       (the "pack"). Adding goes through Add beatmaps' import; sets added while one runs wait in
       its queue (`importSets` in views/import.ts) and each row follows its set along. Covers
       come from osu!'s image CDN like Compare's
+- [x] Collections in the cloud — 0.4.16. `src-tauri/src/cloud.rs` gathers every collection (Fumen's
+      with MD5 + osu! ids, smart ones as their query, lazer's / stable's) and PUTs it to
+      `/api/collections` on the site, which checks the Bearer token against osu!'s `/me` and keeps
+      `cloud/<osu id>.json` (one file per player, replaced on each save). Getting them merges by
+      name, never takes anything out, and lists the sets it lacks for Add beatmaps' import
 
 ## v0.6 — practice
 
