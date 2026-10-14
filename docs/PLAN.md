@@ -286,9 +286,19 @@ sections below is the order of the work.
       next" adds the compared player's charts at your aim (`suggest` over their charts, your
       bests mapped through the library) and, for ones you don't have, what's like them in yours.
       Later: "replace this slot with something like it" in the pool builder (1.1)
-- [ ] Beatmap search on the mirrors: osu.direct / nerinyan / catboy search APIs (never osu!'s
-      servers), filters (ruleset, keys, SR, BPM, status, mapper), results marked "in library",
-      import through the existing pipeline; "packs": a search's results as one queued import
+- [x] Beatmap search on the mirrors — 0.4.14. `src-tauri/src/mirror_search.rs`: osu.direct's
+      `/api/v2/search` (Meilisearch: text plus `[beatmaps.cs = 4 AND beatmaps.difficulty_rating
+      >= 5]` filters, sorts on `ranked_date`, `play_count`, `favourite_count`,
+      `beatmaps.difficulty_rating`, `last_updated`; 120 requests a minute), else catboy.best's
+      (text, ruleset, one status; its own order). The filters hold per set, so every difficulty is
+      checked again and sets without one that fits all of them are left out (nerinyan was down
+      when this was built). `src/views/browse.ts` (sidebar › Browse): words, ruleset, keys,
+      status and star range (the library's controls; `src/ui/star-range.ts` shared), pages on
+      scroll, the fitting difficulties as chips, all of them on a click, previews from catboy.best
+      / osu.direct (`media-src` allows both), "In library", Add, and "Add all" for a whole search
+      (the "pack"). Adding goes through Add beatmaps' import; sets added while one runs wait in
+      its queue (`importSets` in views/import.ts) and each row follows its set along. Covers
+      come from osu!'s image CDN like Compare's
 
 ## v0.6 — practice
 

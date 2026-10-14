@@ -57,12 +57,12 @@ const VERSIONS = [
     ],
   },
   {
-    v: "0.5", name: "Discover", state: "next",
+    v: "0.5", name: "Discover", state: "done", when: "Oct 2026",
     summary: "Find what to play next.",
     items: [
       [1, "<b>Mods in the playfield:</b> HR, EZ, HD, FI, FL and Mirror, the way lazer plays them"],
       [1, "<b>Similar maps:</b> a chart's fingerprint and the closest ones in your library"],
-      [0, "Beatmap search on the mirrors, a whole search as one pack"],
+      [1, "<b>Beatmap search on the mirrors:</b> filters, previews, and a whole search as one pack"],
     ],
     explain: [
       ["mods", "<b>Hard Rock</b> flips the playfield, shrinks the circles and makes them come in faster."],
@@ -70,7 +70,7 @@ const VERSIONS = [
     ],
   },
   {
-    v: "0.6", name: "Practice", state: "planned",
+    v: "0.6", name: "Practice", state: "next",
     summary: "Practise with intent.",
     items: [
       [0, "<b>Replays in the playfield:</b> lazer's own, or your score's replay from osu! when lazer doesn't have one"],

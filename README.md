@@ -93,6 +93,11 @@ database first (see [Adding beatmaps](#adding-beatmaps)).
   ratings, length, BPM, object counts, and the ranked status from lazer's local cache of osu!'s
   beatmap data (what isn't in it, lazer looks up on its next start). Sets an older Fumen imported
   without that are finished with the next import, or with "Finish them" in Add beatmaps
+- Browse (sidebar): search osu!'s beatmaps through the mirrors (osu.direct, catboy.best when it
+  can't answer — never osu!'s servers) by words, ruleset, osu!mania keys, status and a star range,
+  sorted by match, date, plays, favourites or stars. Each set shows the difficulties that fit,
+  plays its preview from the mirrors, opens the library's copy or goes into osu!lazer in a click;
+  "Add all" takes a whole search. Sets added while an import runs wait in its queue
 - Maps you've played: logged in, Fumen finds every set you've played on osu! (play counts and top
   plays in every ruleset, plus the scores in Performance) that osu!lazer doesn't have, and
   downloads and imports all of them: three downloads at once, into lazer 20 sets at a time, each
