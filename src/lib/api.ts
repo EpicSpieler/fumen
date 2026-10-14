@@ -63,6 +63,11 @@ export const api = {
   lazerImportStatus: () => invoke<LazerImportStatus>("lazer_import_status"),
   /** downloads the sets behind osu! links and imports them into lazer (progress: onImportProgress) */
   importBeatmaps: (links: string[]) => invoke<ImportSummary>("import_beatmaps", { links }),
+  /** every collection into the cloud (fumen.dertesti.dev), under the osu! login */
+  cloudPushCollections: () => invoke<{ collections: number; saved: number }>("cloud_push_collections"),
+  /** the cloud's collections merged into this library; the sets they want that it doesn't have */
+  cloudPullCollections: () =>
+    invoke<{ collections: number; created: number; added: number; missing: { id: number; maps: number }[]; saved: number }>("cloud_pull_collections"),
   /** one page of a beatmap search on the mirrors (never osu!'s servers) */
   searchMirrors: (query: MirrorQuery) => invoke<MirrorPage>("search_mirrors", { query }),
   /** stops the running import after the sets being imported right now */
