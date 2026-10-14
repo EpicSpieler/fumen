@@ -10,6 +10,7 @@ mod goals;
 mod hitsounds;
 mod lazer;
 mod lazer_import;
+mod mirror_search;
 mod mma;
 mod mods;
 mod osu;
@@ -896,6 +897,14 @@ async fn find_played_sets(app: AppHandle) -> Result<PlayedFound> {
     .map_err(|e| Error::known("internal", e.to_string()))?
 }
 
+/// One page of a beatmap search on the mirrors (see `mirror_search.rs`; never osu!'s servers).
+#[tauri::command]
+async fn search_mirrors(query: mirror_search::Query) -> Result<mirror_search::Page> {
+    tauri::async_runtime::spawn_blocking(move || mirror_search::search(&mirror_search::Endpoints::default(), &query))
+        .await
+        .map_err(|e| Error::known("internal", e.to_string()))?
+}
+
 /// Downloads the sets behind pasted osu! links and imports them into lazer (see
 /// `lazer_import.rs` for when that's allowed), then updates Fumen's library. Emits
 /// `import-progress` per line along the way.
@@ -1248,6 +1257,7 @@ pub fn run() {
             import_beatmaps,
             cancel_import,
             find_played_sets,
+            search_mirrors,
             osu_account,
             osu_login,
             osu_login_cancel,

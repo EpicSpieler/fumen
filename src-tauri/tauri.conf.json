@@ -29,7 +29,7 @@
       "csp": {
         "default-src": "'self' ipc: http://ipc.localhost",
         "img-src": "'self' data: blob: fumen: http://fumen.localhost https://assets.ppy.sh https://a.ppy.sh",
-        "media-src": "'self' blob: fumen: http://fumen.localhost",
+        "media-src": "'self' blob: fumen: http://fumen.localhost https://catboy.best https://osu.direct",
         "style-src": "'self' 'unsafe-inline'",
         "font-src": "'self' data:",
         "connect-src": "'self' ipc: http://ipc.localhost fumen: http://fumen.localhost"
