@@ -18,8 +18,9 @@ import {
 import { events, setPrefs, store } from "../lib/store";
 import type { LibraryLayout, MapRow } from "../lib/types";
 import { player } from "../player";
-import { attachSegIndicator, createSelect, openMenu, reduceMotion, uiPrompt, updateRange, type MenuEntry } from "../ui/controls";
+import { attachSegIndicator, createSelect, openMenu, reduceMotion, uiPrompt, type MenuEntry } from "../ui/controls";
 import { icon } from "../ui/icons";
+import { starRange } from "../ui/star-range";
 import { VirtualList } from "../ui/virtual";
 import { createSmartCollection, DRAG_TYPE, updateSmartCollection } from "../lib/collections";
 import { openSet, setMenu } from "./actions";
@@ -764,50 +765,14 @@ export class LibraryView {
   /** Dual-thumb star range at the top of the filters menu. */
   private starRange(): HTMLElement {
     const f = this.filter;
-    const MAX = 10;
-    const wrap = document.createElement("div");
-    wrap.className = "sr-range";
-    wrap.innerHTML = `
-      <div class="menu-group">Star rating</div>
-      <div class="sr-range-val num"></div>
-      <div class="sr-range-track">
-        <input type="range" class="sr-lo" min="0" max="${MAX}" step="0.1" aria-label="Minimum stars" />
-        <input type="range" class="sr-hi" min="0" max="${MAX}" step="0.1" aria-label="Maximum stars" />
-      </div>`;
-    const lo = wrap.querySelector<HTMLInputElement>(".sr-lo")!;
-    const hi = wrap.querySelector<HTMLInputElement>(".sr-hi")!;
-    const val = wrap.querySelector<HTMLElement>(".sr-range-val")!;
-    lo.value = String(f.srMin);
-    hi.value = String(f.srMax === Infinity ? MAX : f.srMax);
-    const paint = () => {
-      const a = +lo.value;
-      const b = +hi.value;
-      wrap.style.setProperty("--lo", `${(a / MAX) * 100}%`);
-      wrap.style.setProperty("--hi", `${(b / MAX) * 100}%`);
-      val.textContent = b >= MAX ? (a > 0 ? `${a.toFixed(1)}+ stars` : "Any") : `${a.toFixed(1)} – ${b.toFixed(1)} stars`;
-    };
-    let t = 0;
-    const commit = () => {
-      clearTimeout(t);
-      t = window.setTimeout(() => {
-        f.srMin = +lo.value;
-        f.srMax = +hi.value >= MAX ? Infinity : +hi.value;
+    return starRange(
+      { min: f.srMin, max: f.srMax },
+      (min, max) => {
+        f.srMin = min;
+        f.srMax = max;
         this.run(true);
-      }, 60);
-    };
-    lo.addEventListener("input", () => {
-      if (+lo.value > +hi.value) lo.value = hi.value;
-      paint();
-      commit();
-    });
-    hi.addEventListener("input", () => {
-      if (+hi.value < +lo.value) hi.value = lo.value;
-      paint();
-      commit();
-    });
-    [lo, hi].forEach(updateRange);
-    paint();
-    return wrap;
+      },
+    );
   }
 
   private renderTitle(): void {

@@ -13,6 +13,7 @@ import "./styles/welcome.css";
 import "./styles/import.css";
 import "./styles/history.css";
 import "./styles/skills.css";
+import "./styles/browse.css";
 
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { api, asApiError, isTauri, onAnalysis, thumbUrl } from "./lib/api";
@@ -24,6 +25,7 @@ import { events, loadPrefs, refreshStatus, reloadLibrary, setPrefs, setSnapshot,
 import type { ScanProgress } from "./lib/types";
 import { mountPlayerBar } from "./player";
 import { openFullscreen } from "./views/fullscreen";
+import { BrowseView } from "./views/browse";
 import { importProgressText, isImporting, openImport } from "./views/import";
 import { readLinks } from "./lib/links";
 import { closeMenus, initControls, toast } from "./ui/controls";
@@ -74,6 +76,7 @@ app.innerHTML = `
       <button class="nav-item reveal" type="button" data-nav="library">${icon("library")}<span class="nav-label">Library</span></button>
       <button class="nav-item reveal" type="button" data-nav="history">${icon("clock")}<span class="nav-label">History</span></button>
       <button class="nav-item reveal" type="button" data-nav="skills">${icon("radar")}<span class="nav-label">Skills</span></button>
+      <button class="nav-item reveal" type="button" data-nav="browse">${icon("compass")}<span class="nav-label">Browse</span></button>
       <button class="nav-item reveal" type="button" data-act="import">${icon("download")}<span class="nav-label">Add beatmaps</span></button>
     </div>
     <div class="side-sep"></div>
@@ -153,6 +156,7 @@ let home: HomeView | null = null;
 let library: LibraryView | null = null;
 let history: HistoryView | null = null;
 let skillsView: SkillsView | null = null;
+let browseView: BrowseView | null = null;
 const collectionViews = new Map<string, LibraryView>();
 let active: View | null = null;
 
@@ -189,6 +193,15 @@ function ensureHistory(): HistoryView {
     content.appendChild(history.el);
   }
   return history;
+}
+
+function ensureBrowse(): BrowseView {
+  if (!browseView) {
+    browseView = new BrowseView();
+    browseView.el.hidden = true;
+    content.appendChild(browseView.el);
+  }
+  return browseView;
 }
 
 function ensureSkills(): SkillsView {
@@ -283,7 +296,7 @@ collectionEvents.on("collections", () => {
 function show(route: Route): void {
   closeMenus(true);
   // persistent views just hide; ephemeral ones are destroyed
-  const persistent = new Set<View>([...(home ? [home] : []), ...(library ? [library] : []), ...(history ? [history] : []), ...(skillsView ? [skillsView] : []), ...collectionViews.values()]);
+  const persistent = new Set<View>([...(home ? [home] : []), ...(library ? [library] : []), ...(history ? [history] : []), ...(skillsView ? [skillsView] : []), ...(browseView ? [browseView] : []), ...collectionViews.values()]);
   if (active && !persistent.has(active)) active.destroy();
   for (const v of persistent) v.el.hidden = true;
 
@@ -304,6 +317,9 @@ function show(route: Route): void {
       break;
     case "skills":
       view = ensureSkills();
+      break;
+    case "browse":
+      view = ensureBrowse();
       break;
     case "collection":
       view = collectionView(route.id) ?? ensureLibrary();
@@ -421,7 +437,7 @@ app.querySelector(".nav")!.addEventListener("click", (e) => {
   const b = (e.target as Element).closest<HTMLElement>("[data-nav]");
   if (!b) return;
   if (!store.snap) return goSection({ name: "welcome" });
-  goSection({ name: b.dataset.nav as "home" | "library" | "history" | "skills" });
+  goSection({ name: b.dataset.nav as "home" | "library" | "history" | "skills" | "browse" });
 });
 $(".profile-settings").addEventListener("click", () => goSection({ name: "settings" }));
 sideList.addEventListener("click", (e) => {

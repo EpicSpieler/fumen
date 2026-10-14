@@ -47,6 +47,7 @@ const ICONS = {
   copy: `<rect ${S} x="8.5" y="8.5" width="11" height="11" rx="2.2"/><path ${S} d="M15.5 8.5V6.6a2.1 2.1 0 0 0-2.1-2.1H6.6a2.1 2.1 0 0 0-2.1 2.1v6.8a2.1 2.1 0 0 0 2.1 2.1h1.9"/>`,
   radar: `<path ${SW} d="M12 4l6.93 4v8L12 20l-6.93-4V8z"/><path ${S} d="M12 7.4l4.6 3-1.3 4.4L12 16.8l-3.4-2.5-.9-4z"/>`,
   similar: `<rect ${D} x="4" y="9" width="11" height="11" rx="2.6"/><rect ${S} x="4" y="9" width="11" height="11" rx="2.6"/><path ${S} d="M9 9V6.6A2.6 2.6 0 0 1 11.6 4h5.8A2.6 2.6 0 0 1 20 6.6v5.8a2.6 2.6 0 0 1-2.6 2.6H15"/>`,
+  compass: `<circle ${S} cx="12" cy="12" r="8.5"/><path ${D} d="M15.6 8.4l-2.1 5.1-5.1 2.1 2.1-5.1z"/><path ${S} d="M15.6 8.4l-2.1 5.1-5.1 2.1 2.1-5.1z"/>`,
   clock: `<circle ${S} cx="12" cy="12" r="8"/><path ${S} d="M12 7.8V12l2.8 1.8"/>`,
   calendar: `<rect ${S} x="4.5" y="5.5" width="15" height="14" rx="2.2"/><path ${S} d="M4.5 10h15M8.5 3.5v4M15.5 3.5v4"/>`,
   metronome: `<path ${S} d="M9.4 3.8h5.2l3.9 16.4h-13z"/><path ${S} d="M12 15.6l4.6-8.6M6.9 14.6h10.2"/>`,
