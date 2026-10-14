@@ -674,9 +674,10 @@ function renderLibraryState(): void {
   const sub = $<HTMLElement>(".profile-sub");
   const p = store.scan;
   const importing = importProgressText();
+  sub.classList.toggle("is-link", !!importing);
   if (importing) {
     sub.textContent = `Adding beatmaps · ${importing}`;
-    sub.dataset.tip = "Downloading and importing into osu!lazer";
+    sub.dataset.tip = "Downloading and importing into osu!lazer · click to show";
   } else if (p) {
     const { label, fraction } = describeScan(p);
     sub.textContent = `Updating · ${Math.round(fraction * 100)}%`;
@@ -703,6 +704,10 @@ refreshBtn.addEventListener("click", async () => {
 events.on("scan", renderLibraryState);
 events.on("status", renderLibraryState);
 events.on("importing", renderLibraryState);
+// the import's window, minimized to the sidebar, comes back from there
+$(".profile-sub").addEventListener("click", () => {
+  if (isImporting()) openImport();
+});
 
 // ── window ─────────────────────────────────────────────────────────────────
 
