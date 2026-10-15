@@ -73,8 +73,9 @@ const VERSIONS = [
     v: "0.6", name: "Practice", state: "next",
     summary: "Practise with intent.",
     items: [
-      [1, "<b>osu!mania replays from lazer in the playfield:</b> judged as lazer does, hit errors, misses on the timeline, accuracy as it goes"],
-      [0, "Replays for osu!, osu!taiko and osu!catch, and your score's replay from osu! when lazer doesn't have one"],
+      [1, "<b>osu!mania and osu!taiko replays from lazer in the playfield:</b> judged as lazer does, hit errors, misses on the timeline, accuracy as it goes"],
+      [1, "<b>Your scores' replays from osu!</b> when lazer doesn't have one"],
+      [0, "Replays for osu! and osu!catch"],
       [1, "<b>Practice mode:</b> loop a section, a little faster every time, with a metronome"],
     ],
     explain: [

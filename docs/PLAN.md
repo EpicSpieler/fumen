@@ -325,8 +325,23 @@ sections below is the order of the work.
       Played by: one request (`/beatmaps/{id}/scores/users/{user}/all`), lazer's own left out;
       picking one downloads its replay (`/scores/{id}/download`, one at a time) into
       `<data>/replays/<id>.osr`, read from there after. Replays only, never beatmap files
-- [ ] Replays for osu!, osu!taiko and osu!catch (judged per ruleset: osu! hits / slider ends,
-      taiko, catch positions)
+- [x] osu!taiko replays — 0.5.5. `src/lib/taiko-replay.ts` judges them like lazer: TaikoHitWindows
+      (Great / Ok / Miss from OD, floored less half a millisecond), the keys from the legacy
+      buttons (FromLegacy's order), each press going to the objects earliest first the way lazer's
+      input queue does (a note in its miss window takes it, the wrong colour misses, a note pressed
+      in the frame swallows the frame's other keys), strong notes' second key within 30 ms while
+      the first is down, drum roll ticks within half their spacing (`spacing` in the chart now),
+      swells alternating from their start; Relax. Random / Swap / Simplified Rhythm / Single Tap
+      aren't replayed. Checked against 708 of the user's replays: since mid-2025, 681 of 686 come
+      out at lazer's Great / Ok / Miss exactly (the rest a note or two off), the bonus counts but
+      for a second key at exactly 30 ms. Swells now ask for the hits of the beatmap's own OD, as
+      lazer converts before Hard Rock / Easy. The playfield draws what was played (TaikoChart's
+      timeline: autoplay or the replay): the drum, hits flying up when they were hit, misses
+      scrolling on and fading, explosions and judgements per result in all three skins (legacy
+      taiko-hit100 / hit0, the "k" sprite once the second key lands), drum roll ticks in the
+      colour that hit them, pippidon failing after a miss
+- [ ] Replays for osu! and osu!catch (judged per ruleset: osu! hits / slider ends, catch
+      positions)
 - [x] Practice mode — 0.4.17. `src/views/practice.ts` beside the fullscreen playfield: a drag on
       the density graph picks the part (snapped to beats; a click still seeks), "Hardest part"
       takes the densest 16 s from a bar's start (`hardest` in lib/practice.ts; with a pattern, its
