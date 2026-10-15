@@ -91,6 +91,16 @@
 .dupe-row.off:hover { background: none; }
 .dupe-new { font-weight: 600; color: var(--accent-ink); }
 
+/* ---------- Broken files ---------- */
+.broken-line {
+  margin-top: 2px;
+  font-size: var(--fs-12);
+  color: var(--t2);
+  overflow-wrap: anywhere;
+}
+.broken-line b { font-weight: 600; color: var(--warning); }
+.broken-name { font-weight: 500; color: var(--t1); }
+
 @container (max-width: 680px) {
   .care-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

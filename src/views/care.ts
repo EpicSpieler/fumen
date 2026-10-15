@@ -1,7 +1,7 @@
 /* care.ts — library care: what the library takes on disk and where it goes (by kind of file,
  * ruleset or status), and the sets worth a look: never played, the biggest, not played in a year,
- * and duplicates (osu!stable's copies of lazer's sets, a set twice, packs sharing difficulties with
- * sets, re-uploads).
+ * duplicates (osu!stable's copies of lazer's sets, a set twice, packs sharing difficulties with
+ * sets, re-uploads), and songs or backgrounds that are missing or aren't what their name says.
  *
  * Sizes come from src-tauri/src/care.rs (lazer's files by their hash, stable's folders); whether
  * and when a set was played from the snapshot (lazer's last played, the merged scores). Fumen
@@ -10,7 +10,7 @@
 import { api, asApiError, onCareProgress, thumbUrl } from "../lib/api";
 import { bytes, displayArtist, displayTitle, esc, MODE_SHORT, num, relativeTime, statusLabel } from "../lib/format";
 import { events, store } from "../lib/store";
-import type { CareReport, DupeGroup, DupeSet } from "../lib/types";
+import type { Broken, CareReport, DupeGroup, DupeSet } from "../lib/types";
 import { attachSegIndicator, openMenu } from "../ui/controls";
 import { icon } from "../ui/icons";
 import { openSet } from "./actions";
@@ -32,7 +32,7 @@ const RULESET_NAMES = [...MODE_SHORT, "Mixed"];
 const COLOURS = ["var(--accent)", "var(--info)", "var(--success)", "var(--warning)", "var(--t3)", "var(--t4)"];
 
 type Group = "kind" | "ruleset" | "status";
-type Tab = "never" | "biggest" | "stale" | "dupes";
+type Tab = "never" | "biggest" | "stale" | "dupes" | "broken";
 
 /** What each kind of duplicate is, and what of it could go. */
 const DUPES: Record<DupeGroup["kind"], { title: string; note: (g: DupeGroup) => string }> = {
@@ -190,6 +190,7 @@ export class CareView {
           <button type="button" data-tab="biggest">Biggest</button>
           <button type="button" data-tab="stale">Not played in a year</button>
           <button type="button" data-tab="dupes">Duplicates</button>
+          <button type="button" data-tab="broken">Broken files</button>
         </div>
         <div class="care-note"></div>
         <div class="care-list"></div>
@@ -285,6 +286,7 @@ export class CareView {
     const active = tabs?.querySelector<HTMLElement>("button.active");
     if (tabs && active) tabs.scrollLeft = Math.max(0, Math.min(tabs.scrollLeft, active.offsetLeft), active.offsetLeft + active.offsetWidth - tabs.clientWidth);
     if (this.tab === "dupes") return this.renderDupes(list, note);
+    if (this.tab === "broken") return this.renderBroken(list, note);
     const now = Date.now();
     this.rows =
       this.tab === "never"
@@ -337,7 +339,7 @@ export class CareView {
       return;
     }
     const size = new Map(report.sets.map((s) => [s.id, s.size]));
-    const info = new Map(report.dupeSets.map((s) => [s.id, s]));
+    const info = new Map(report.named.map((s) => [s.id, s]));
     const could = (g: DupeGroup) =>
       g.kind === "stable-copy"
         ? g.sets.filter((id) => info.get(id)?.source === "stable").reduce((s, id) => s + (size.get(id) ?? 0), 0)
@@ -367,7 +369,27 @@ export class CareView {
       .join("");
   }
 
-  private dupeRow(s: DupeSet | undefined, size: number, newest: boolean): string {
+  /** Sets with a song or background that's missing or broken, the song ones first. */
+  private renderBroken(list: HTMLElement, note: HTMLElement): void {
+    const report = cached!;
+    const bySet = new Map<string, Broken[]>();
+    for (const b of report.broken) bySet.set(b.set, [...(bySet.get(b.set) ?? []), b]);
+    if (!bySet.size) {
+      note.textContent = "";
+      list.innerHTML = `<div class="care-none">Every song and background is there, and is what it says.</div>`;
+      return;
+    }
+    const rank = (b: Broken) => ["song", "background", "files"].indexOf(b.what);
+    const sets = [...bySet.entries()].map(([id, issues]) => [id, issues.sort((a, b) => rank(a) - rank(b))] as const);
+    sets.sort((a, b) => rank(a[1][0]) - rank(b[1][0]));
+    const songs = sets.filter(([, issues]) => issues.some((b) => b.what === "song")).length;
+    note.textContent = `${num(sets.length)} ${sets.length === 1 ? "set" : "sets"}${songs ? `, ${num(songs)} of them with a song that won't play` : ""}.`;
+    const size = new Map(report.sets.map((s) => [s.id, s.size]));
+    const info = new Map(report.named.map((s) => [s.id, s]));
+    list.innerHTML = sets.map(([id, issues]) => this.dupeRow(info.get(id), size.get(id) ?? 0, false, issues)).join("");
+  }
+
+  private dupeRow(s: DupeSet | undefined, size: number, newest: boolean, issues: Broken[] = []): string {
     if (!s) return "";
     const snap = store.snap!;
     const unicode = store.prefs.unicode;
@@ -393,7 +415,7 @@ export class CareView {
     return `
       <div class="crow dupe-row${idx === undefined ? " off" : ""}"${idx !== undefined ? ` data-set="${idx}" role="button" tabindex="0"` : ""}>
         <span class="t-art${bg ? "" : " img-missing"}">${bg ? `<img src="${thumbUrl(bg, 160)}" alt="" loading="lazy" decoding="async" />` : ""}</span>
-        <div class="prow-text"><div class="t-title">${esc(title)}</div><div class="t-sub">${sub.join(" · ")}</div></div>
+        <div class="prow-text"><div class="t-title">${esc(title)}</div><div class="t-sub">${sub.join(" · ")}</div>${issues.map((b) => `<div class="broken-line">${issue(b, s)}</div>`).join("")}</div>
         <span class="crow-video"></span>
         <b class="crow-size num">${bytes(size)}</b>
         <span class="crow-when">${when}</span>
@@ -483,6 +505,20 @@ export class CareView {
     this.offs.forEach((f) => f());
     this.el.remove();
   }
+}
+
+/** What's wrong, in a line: what the file is, its name, for how many of the set's difficulties. */
+function issue(b: Broken, s: DupeSet): string {
+  const name = b.name ? `<span class="broken-name">${esc(b.name)}</span>` : "";
+  const where = s.source === "stable" ? "the folder" : "the set";
+  const text =
+    b.what === "files"
+      ? `${num(b.count)} ${b.count === 1 ? "file is" : "files are"} missing from osu!lazer's files`
+      : b.how === "missing"
+        ? `${b.what === "song" ? "Song" : "Background"} ${name} isn't in ${where}`
+        : `${b.what === "song" ? "Song" : "Background"} ${name} isn't ${b.what === "song" ? "audio" : "an image"}`;
+  const of = b.what !== "files" && s.maps > 1 ? ` · ${b.count === s.maps ? "every difficulty" : `${num(b.count)} of ${num(s.maps)} difficulties`}` : "";
+  return `<b>${b.how === "missing" ? "Missing" : "Broken"}</b> ${text}${of}`;
 }
 
 /** A share as a whole percentage (under 1: "<1%"). */

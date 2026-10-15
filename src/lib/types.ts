@@ -366,8 +366,22 @@ export interface CareReport {
   lazerSize: number;
   stableSize: number;
   duplicates: DupeGroup[];
-  /** the sets in `duplicates` (osu!stable's copies of lazer's sets aren't in the snapshot) */
-  dupeSets: DupeSet[];
+  broken: Broken[];
+  /** the sets in `duplicates` and `broken` (osu!stable's copies of lazer's sets aren't in the snapshot) */
+  named: DupeSet[];
+}
+
+/** A set's song or background that can't be played or shown, or files it lists that are gone. */
+export interface Broken {
+  set: string;
+  /** "files": any other file osu!lazer lists for the set */
+  what: "song" | "background" | "files";
+  /** "missing": named but not there; "broken": there, but not audio / an image */
+  how: "missing" | "broken";
+  /** the file's name in the set (not for "files") */
+  name?: string | null;
+  /** the difficulties it's for ("files": how many files) */
+  count: number;
 }
 
 /** Sets that are (partly) the same: "stable-copy" osu!stable sets with every difficulty in lazer
