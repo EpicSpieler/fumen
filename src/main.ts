@@ -387,6 +387,17 @@ function renderCollections(): void {
   applySidebar();
 }
 
+// right-clicks Fumen has no menu for get none either (not the webview's Back / Refresh / Print);
+// text fields keep theirs for copy and paste, and the dev build keeps it for Inspect
+if (!import.meta.env.DEV) {
+  window.addEventListener("contextmenu", (e) => {
+    if (e.defaultPrevented) return;
+    const t = e.target as HTMLElement;
+    if (t.closest?.("input, textarea, [contenteditable='true']")) return;
+    e.preventDefault();
+  });
+}
+
 $(".side-box-add").addEventListener("click", () => void newCollection().then((id) => id && goSection({ name: "collection", id })));
 sideList.addEventListener("contextmenu", (e) => {
   const b = (e.target as Element).closest<HTMLElement>(".side-item");
