@@ -1,11 +1,13 @@
 /* chart.ts — an osu!catch chart as the playfield reads it (src-tauri/src/catch.rs builds it the
- * way lazer does, MIT, ppy Pty Ltd), and what autoplay's catcher does with it:
+ * way lazer does, MIT, ppy Pty Ltd), and what the catcher (autoplay's, or a replay's) does with it:
  *
  *  - where the catcher is (CatchFramedReplayInputHandler: straight between replay frames), which
  *    way it faces (CatcherArea.SetCatcherPosition), when it dashes and hyperdashes
- *    (Catcher.OnNewResult / SetHyperDashState);
+ *    (Catcher.OnNewResult / SetHyperDashState: a hyper fruit caught);
  *  - what lands on its plate and where (Catcher.computePositionInStack), until the combo ends and
- *    it all flies off (Catcher.Explode); droplets fly off as they're caught;
+ *    it all flies off (Catcher.Explode) or, if the combo's last was missed, falls off
+ *    (Catcher.Drop); droplets fly off as they're caught;
+ *  - how it looks: failing after a fruit or droplet is missed, until the next is caught;
  *  - the random looks lazer gives every object (StatelessRNG, seeded by its time).
  */
 import type { CatchChartData, ChartData } from "../../lib/types";
@@ -97,8 +99,12 @@ export class CatchChart {
   readonly index: Int32Array;
   readonly banana: Int32Array;
   readonly kiai: Uint8Array;
-  /** combo before it was caught (ComboAtJudgement) */
-  readonly combo: Int32Array;
+  /** combo before it was judged (ComboAtJudgement) */
+  combo = new Int32Array(0);
+  /** caught (autoplay: everything) */
+  caught: Uint8Array = new Uint8Array(0);
+  /** fruits and droplets (what changes the catcher's look), by time */
+  private comboObjects = new Int32Array(0);
   /** StatelessRNG.NextSingle(seed, 1 / 2 / 3) */
   readonly r1: Float32Array;
   readonly r2: Float32Array;
@@ -107,25 +113,28 @@ export class CatchChart {
   readonly bananaColour: Uint8Array;
 
   /** where it sits on the plate, from the catcher (osu!pixels), and how it's shown there */
-  readonly plateX: Float32Array;
-  readonly plateY: Float32Array;
-  /** when it leaves the plate (droplets: right away; Infinity: never) and the catcher's x then */
-  readonly clearAt: Float64Array;
-  readonly clearX: Float32Array;
+  plateX = new Float32Array(0);
+  plateY = new Float32Array(0);
+  /** when it leaves the plate (droplets: right away; Infinity: never), the catcher's x then, and
+   * whether it falls off (Drop) rather than flying off (Explode) */
+  clearAt = new Float64Array(0);
+  clearX = new Float32Array(0);
+  dropped = new Uint8Array(0);
 
   readonly scale: number;
   readonly catcherScale: number;
   readonly preempt: number;
   readonly colours: [number, number, number][];
 
-  private readonly fTime: Float64Array;
-  private readonly fX: Float32Array;
-  private readonly fDash: Uint8Array;
+  private readonly autoplay: number[];
+  private fTime = new Float64Array(0);
+  private fX = new Float32Array(0);
+  private fDash = new Uint8Array(0);
   /** which way the catcher faces from each frame on (1 right, -1 left) */
-  private readonly fDir: Int8Array;
+  private fDir = new Int8Array(0);
   /** hyperdashes: [start, end) */
-  readonly hyperStart: Float64Array;
-  readonly hyperEnd: Float64Array;
+  hyperStart = new Float64Array(0);
+  hyperEnd = new Float64Array(0);
 
   constructor(d: ChartData) {
     const c = d.catch as CatchChartData;
@@ -157,23 +166,7 @@ export class CatchChart {
       this.banana[i] = o[b + 5];
     });
 
-    const f = c.frames;
-    const nf = f.length / 3;
-    this.fTime = new Float64Array(nf);
-    this.fX = new Float32Array(nf);
-    this.fDash = new Uint8Array(nf);
-    this.fDir = new Int8Array(nf);
-    let dir = 1;
-    for (let k = 0; k < nf; k++) {
-      this.fTime[k] = f[k * 3];
-      this.fX[k] = f[k * 3 + 1];
-      this.fDash[k] = f[k * 3 + 2];
-    }
-    for (let k = 0; k < nf; k++) {
-      // the way it moves until the next frame (or kept, standing still)
-      if (k + 1 < nf && this.fX[k + 1] !== this.fX[k]) dir = this.fX[k + 1] > this.fX[k] ? 1 : -1;
-      this.fDir[k] = dir;
-    }
+    this.autoplay = c.frames;
 
     // the random looks (DrawableCatchHitObject.RandomSingle; seeded by the start time as an int)
     this.r1 = new Float32Array(n);
@@ -192,16 +185,48 @@ export class CatchChart {
 
     const kiai = d.kiai;
     this.kiai = new Uint8Array(n);
-    this.combo = new Int32Array(n);
-    let combo = 0;
     let s = 0;
+    const comboObjects: number[] = [];
     for (let i = 0; i < n; i++) {
       // HitObject.Kiai: the effect point just after its start
       const t = this.time[i] + 1;
       while (s + 2 < kiai.length && kiai[s + 1] <= t) s += 2;
       this.kiai[i] = s + 1 < kiai.length && kiai[s] <= t && t < kiai[s + 1] ? 1 : 0;
+      if (this.kind[i] === FRUIT || this.kind[i] === DROPLET) comboObjects.push(i);
+    }
+    this.comboObjects = Int32Array.from(comboObjects);
+    this.setPlay(null, null);
+  }
+
+  /** Whose catcher it is: a replay's frames ([time, x, dash]) and what it caught, or autoplay's
+   * (null: everything caught). */
+  setPlay(frames: readonly number[] | null, caught: Uint8Array | null): void {
+    const n = this.n;
+    this.caught = caught ?? new Uint8Array(n).fill(1);
+    const f = frames ?? this.autoplay;
+    const nf = Math.floor(f.length / 3);
+    this.fTime = new Float64Array(nf);
+    this.fX = new Float32Array(nf);
+    this.fDash = new Uint8Array(nf);
+    this.fDir = new Int8Array(nf);
+    let dir = 1;
+    for (let k = 0; k < nf; k++) {
+      this.fTime[k] = f[k * 3];
+      this.fX[k] = f[k * 3 + 1];
+      this.fDash[k] = f[k * 3 + 2];
+    }
+    for (let k = 0; k < nf; k++) {
+      // the way it moves until the next frame (or kept, standing still)
+      if (k + 1 < nf && this.fX[k + 1] !== this.fX[k]) dir = this.fX[k + 1] > this.fX[k] ? 1 : -1;
+      this.fDir[k] = dir;
+    }
+
+    // the combo: fruits and droplets caught add to it, missed ones break it
+    this.combo = new Int32Array(n);
+    let combo = 0;
+    for (let i = 0; i < n; i++) {
       this.combo[i] = combo;
-      if (this.kind[i] === FRUIT || this.kind[i] === DROPLET) combo++;
+      if (this.kind[i] === FRUIT || this.kind[i] === DROPLET) combo = this.caught[i] ? combo + 1 : 0;
     }
 
     // hyperdashes: from catching a hyper fruit until the next catch that isn't a tiny droplet,
@@ -209,7 +234,7 @@ export class CatchChart {
     const hs: number[] = [];
     const he: number[] = [];
     for (let i = 0; i < n; i++) {
-      if (!this.hyper[i] || this.kind[i] === TINY || this.kind[i] === BANANA) continue;
+      if (!this.hyper[i] || !this.caught[i] || this.kind[i] === TINY || this.kind[i] === BANANA) continue;
       let j = i + 1;
       while (j < n && this.kind[j] !== FRUIT && this.kind[j] !== DROPLET) j++;
       if (j >= n) continue;
@@ -229,6 +254,7 @@ export class CatchChart {
     this.plateY = new Float32Array(n);
     this.clearAt = new Float64Array(n).fill(Infinity);
     this.clearX = new Float32Array(n);
+    this.dropped = new Uint8Array(n);
     const rand = mulberry(n * 7919 + Math.trunc(this.time[0] ?? 0));
     let plate: number[] = [];
     for (let i = 0; i < n; i++) {
@@ -246,16 +272,20 @@ export class CatchChart {
       this.plateX[i] = px;
       this.plateY[i] = py;
       const k = this.kind[i];
-      if (k === FRUIT || k === BANANA) plate.push(i);
+      if (!this.caught[i]) {
+        // missed: nothing lands
+      } else if (k === FRUIT || k === BANANA) plate.push(i);
       else {
         // CaughtDroplet doesn't stay on the plate
         this.clearAt[i] = t;
         this.clearX[i] = cx;
       }
       if (this.lastInCombo[i]) {
+        // caught, it all flies off; missed, it falls off
         for (const p of plate) {
           this.clearAt[p] = t;
           this.clearX[p] = cx;
+          this.dropped[p] = this.caught[i] ? 0 : 1;
         }
         plate = [];
       }
@@ -346,8 +376,19 @@ export class CatchChart {
     return k === 0 || this.hyperEnd[k - 1] < this.hyperStart[k];
   }
 
-  /** The last object caught by `t` (-1 for none yet). */
-  lastCaught(t: number): number {
-    return upper(this.time, t) - 1;
+  /** How the catcher looks at `t` (Catcher.OnNewResult): after the last fruit or droplet, failing
+   * if it was missed, cheering in kiai. */
+  stateAt(t: number): "idle" | "fail" | "kiai" {
+    const c = this.comboObjects;
+    let lo = 0;
+    let hi = c.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (this.time[c[mid]] <= t) lo = mid + 1;
+      else hi = mid;
+    }
+    if (lo === 0) return "idle";
+    const i = c[lo - 1];
+    return !this.caught[i] ? "fail" : this.kiai[i] ? "kiai" : "idle";
   }
 }
