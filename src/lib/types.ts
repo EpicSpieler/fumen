@@ -350,6 +350,23 @@ export interface LibraryStatus {
   };
 }
 
+/** Library care (src-tauri/src/care.rs): a set on disk, bytes in all and by kind of file (the
+ * song, videos, images, hitsounds, other). */
+export interface CareSet {
+  id: string;
+  size: number;
+  kinds: [number, number, number, number, number];
+  /** files it lists that aren't on disk */
+  missing?: number;
+}
+
+export interface CareReport {
+  sets: CareSet[];
+  /** lazer's beatmap files, each counted once */
+  lazerSize: number;
+  stableSize: number;
+}
+
 export interface ScanProgress {
   stage: "copy" | "sets" | "scores" | "collections" | "import" | string;
   done: number;

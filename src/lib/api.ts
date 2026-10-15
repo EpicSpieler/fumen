@@ -5,7 +5,7 @@ import type { Comparison } from "./compare";
 import type { Goal } from "./goals";
 import type { ChartMods } from "./mods";
 import type {
-  ApiError,
+  CareReport, ApiError,
   ChartData,
   ChartSounds,
   OnlineReplayEntry,
@@ -38,6 +38,7 @@ export const api = {
   inspectLazerPath: (path: string) => invoke<LazerInstall | null>("inspect_lazer_path", { path }),
   inspectStablePath: (path: string) => invoke<StableInstall | null>("inspect_stable_path", { path }),
   libraryStatus: () => invoke<LibraryStatus>("library_status"),
+  libraryCare: () => invoke<CareReport>("library_care"),
   scanLibrary: () => invoke<{ sets: number; maps: number; scores: number; collections: number }>("scan_library"),
   async getLibrary(): Promise<Snapshot> {
     // raw JSON bytes (tauri::ipc::Response) — parse here, it's ~7 MB for a large library
@@ -139,6 +140,10 @@ export function onScanProgress(cb: (p: ScanProgress) => void): Promise<UnlistenF
 }
 
 /** The plays changed (sync, login, logout); `library`: the library's best scores may have too. */
+export function onCareProgress(cb: (p: { done: number; total: number }) => void): Promise<UnlistenFn> {
+  return listen<{ done: number; total: number }>("care-progress", (e) => cb(e.payload));
+}
+
 export function onHistoryChanged(cb: (library: boolean) => void): Promise<UnlistenFn> {
   return listen<boolean>("history-changed", (e) => cb(e.payload));
 }

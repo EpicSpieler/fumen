@@ -12,6 +12,7 @@ import "./styles/settings.css";
 import "./styles/welcome.css";
 import "./styles/import.css";
 import "./styles/history.css";
+import "./styles/care.css";
 import "./styles/skills.css";
 import "./styles/browse.css";
 
@@ -26,6 +27,7 @@ import type { ScanProgress } from "./lib/types";
 import { mountPlayerBar } from "./player";
 import { openFullscreen } from "./views/fullscreen";
 import { BrowseView } from "./views/browse";
+import { CareView } from "./views/care";
 import { importProgressText, isImporting, openImport } from "./views/import";
 import { readLinks } from "./lib/links";
 import { closeMenus, initControls, toast } from "./ui/controls";
@@ -77,6 +79,7 @@ app.innerHTML = `
       <button class="nav-item reveal" type="button" data-nav="history">${icon("clock")}<span class="nav-label">History</span></button>
       <button class="nav-item reveal" type="button" data-nav="skills">${icon("radar")}<span class="nav-label">Skills</span></button>
       <button class="nav-item reveal" type="button" data-nav="browse">${icon("compass")}<span class="nav-label">Browse</span></button>
+      <button class="nav-item reveal" type="button" data-nav="care">${icon("drive")}<span class="nav-label">Library care</span></button>
       <button class="nav-item reveal" type="button" data-act="import">${icon("download")}<span class="nav-label">Add beatmaps</span></button>
     </div>
     <div class="side-sep"></div>
@@ -157,6 +160,7 @@ let library: LibraryView | null = null;
 let history: HistoryView | null = null;
 let skillsView: SkillsView | null = null;
 let browseView: BrowseView | null = null;
+let careView: CareView | null = null;
 const collectionViews = new Map<string, LibraryView>();
 let active: View | null = null;
 
@@ -193,6 +197,15 @@ function ensureHistory(): HistoryView {
     content.appendChild(history.el);
   }
   return history;
+}
+
+function ensureCare(): CareView {
+  if (!careView) {
+    careView = new CareView();
+    careView.el.hidden = true;
+    content.appendChild(careView.el);
+  }
+  return careView;
 }
 
 function ensureBrowse(): BrowseView {
@@ -296,7 +309,7 @@ collectionEvents.on("collections", () => {
 function show(route: Route): void {
   closeMenus(true);
   // persistent views just hide; ephemeral ones are destroyed
-  const persistent = new Set<View>([...(home ? [home] : []), ...(library ? [library] : []), ...(history ? [history] : []), ...(skillsView ? [skillsView] : []), ...(browseView ? [browseView] : []), ...collectionViews.values()]);
+  const persistent = new Set<View>([...(home ? [home] : []), ...(library ? [library] : []), ...(history ? [history] : []), ...(skillsView ? [skillsView] : []), ...(browseView ? [browseView] : []), ...(careView ? [careView] : []), ...collectionViews.values()]);
   if (active && !persistent.has(active)) active.destroy();
   for (const v of persistent) v.el.hidden = true;
 
@@ -320,6 +333,9 @@ function show(route: Route): void {
       break;
     case "browse":
       view = ensureBrowse();
+      break;
+    case "care":
+      view = ensureCare();
       break;
     case "collection":
       view = collectionView(route.id) ?? ensureLibrary();
@@ -448,7 +464,7 @@ app.querySelector(".nav")!.addEventListener("click", (e) => {
   const b = (e.target as Element).closest<HTMLElement>("[data-nav]");
   if (!b) return;
   if (!store.snap) return goSection({ name: "welcome" });
-  goSection({ name: b.dataset.nav as "home" | "library" | "history" | "skills" | "browse" });
+  goSection({ name: b.dataset.nav as "home" | "library" | "history" | "skills" | "browse" | "care" });
 });
 $(".profile-settings").addEventListener("click", () => goSection({ name: "settings" }));
 sideList.addEventListener("click", (e) => {

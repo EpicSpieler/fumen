@@ -95,6 +95,18 @@ export async function invoke<T>(cmd: string, args: Record<string, unknown> = {})
       if (!skin) throw { code: "skin-missing", message: "This skin isn't in the preview data." };
       return skin.files as T;
     }
+    case "library_care": {
+      // measuring the files, the first time
+      const first = !sessionStorage.getItem("fumen-preview-care");
+      if (first) {
+        for (let i = 0; i <= 10; i++) {
+          emit("care-progress", { done: i * 9800, total: 98000 });
+          await new Promise((r) => setTimeout(r, 120));
+        }
+        sessionStorage.setItem("fumen-preview-care", "1");
+      }
+      return (await (await fetch("/__fumen/care")).json()) as T;
+    }
     case "scan_library": {
       const stages: [string, number][] = [["copy", 1], ["sets", 4505], ["scores", 1430], ["collections", 5], ["import", 1]];
       for (const [stage, total] of stages) {
