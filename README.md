@@ -80,7 +80,9 @@ database first (see [Adding beatmaps](#adding-beatmaps)).
 - Replays in the playfield (osu!mania): "Played by" picks one of lazer's scores on the difficulty
   that has a replay instead of autoplay. Judged the way lazer judges it now (hit windows, holds,
   Hold Off), with every judgement on the playfield, the accuracy and counts so far, an error bar
-  with lazer's windows, and the misses on the density graph, a click away each
+  with lazer's windows, and the misses on the density graph, a click away each. Logged in, "Find
+  your replays on osu!" adds your scores from osu! that lazer has no replay of (downloaded when
+  picked, one at a time, and kept)
 - Practice mode beside the playfield: drag across the density graph to loop a part (on the beat),
   or loop the hardest part; Speed up starts it 0.20× slower and adds 0.05× each time round, a
   metronome ticks on the timing points. The part is remembered per difficulty. Right-click any

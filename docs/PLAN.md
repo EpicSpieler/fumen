@@ -321,10 +321,12 @@ sections below is the order of the work.
       `src/views/replay-panel.ts`: "Played by" picks one (its rate and drawn mods with it); the
       accuracy and counts so far, an error bar with lazer's windows, misses on the density graph
       and a jump to each
+- [x] The player's scores on osu! when lazer has no replay — 0.5.4. "Find your replays on osu!" in
+      Played by: one request (`/beatmaps/{id}/scores/users/{user}/all`), lazer's own left out;
+      picking one downloads its replay (`/scores/{id}/download`, one at a time) into
+      `<data>/replays/<id>.osr`, read from there after. Replays only, never beatmap files
 - [ ] Replays for osu!, osu!taiko and osu!catch (judged per ruleset: osu! hits / slider ends,
-      taiko, catch positions), and the player's global score when lazer has no replay (API v2
-      `/beatmaps/{id}/scores/users/{user}`, then the replay download — only when asked, one at a
-      time, cached; replays, never beatmap files)
+      taiko, catch positions)
 - [x] Practice mode — 0.4.17. `src/views/practice.ts` beside the fullscreen playfield: a drag on
       the density graph picks the part (snapped to beats; a click still seeks), "Hardest part"
       takes the densest 16 s from a bar's start (`hardest` in lib/practice.ts; with a pattern, its
