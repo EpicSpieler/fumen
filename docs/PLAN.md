@@ -414,7 +414,17 @@ sections below is the order of the work.
       `client.realm` backup). Verified on a copy of the user's library (`verify_installed_lazer`
       step 5): the sets leave the export at once; lazer's RealmAccess removes them and their files
       for good the next time the database is opened (no undo — lazer's own restore only works
-      within its session), and every score stays. osu!stable's sets are never picked
+      within its session), and every score stays. osu!stable's sets are never picked.
+      0.7.1: everything goes through one delete window (`src/views/delete-window.ts`: the sets,
+      their size from the shared care report `lib/care-data.ts`, lazer's state polled, a note on
+      what lazer will do); afterwards the rows turn to white smoke in a wave (`ui/dissolve.ts`:
+      a left-to-right mask wipe per row with particles rising off its edge, on a canvas over the
+      window; reduced motion just fades) and what happened shows where they were — the window
+      never changes size. Ways in: Library care's Clean up menu (every set of a ruleset or status,
+      never played, not played in a year, duplicates' older copies), the trash button on a
+      ruleset's or status's part of "Where it goes", the picked sets, the library's "sets shown
+      here" menu (whatever the filters and search show; also Add all to a collection) and a set's
+      own menu
 - [x] osu!stable's `scores.db` into the play history — 0.7.0. `stable::read_scores_db` (versions with
       4- and 8-byte score ids, target practice's extra value); each play goes into `scores` as lazer
       would keep it (id "st-<replay md5>", accuracy and grade by stable's rules per ruleset, silver
