@@ -468,6 +468,25 @@ async fn get_replay(app: AppHandle, id: String) -> Result<replay::Replay> {
     .map_err(|e| Error::known("internal", e.to_string()))?
 }
 
+/// The player's scores on osu! for a library difficulty (asked for by the player).
+#[tauri::command]
+async fn online_replays_for_map(app: AppHandle, id: String) -> Result<Vec<replay::OnlineEntry>> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        replay::online_list(|| state.db(), &state.data_dir, &osu_auth::Endpoints::default(), &id)
+    })
+    .await
+    .map_err(|e| Error::known("internal", e.to_string()))?
+}
+
+/// A score's replay from osu!, downloaded once and kept.
+#[tauri::command]
+async fn get_online_replay(app: AppHandle, id: i64) -> Result<replay::Replay> {
+    tauri::async_runtime::spawn_blocking(move || replay::online_load(&app.state::<AppState>().data_dir, &osu_auth::Endpoints::default(), id))
+        .await
+        .map_err(|e| Error::known("internal", e.to_string()))?
+}
+
 // ── osu! account ────────────────────────────────────────────────────────────
 
 /// The logged-in osu! account as last seen, without asking osu!.
@@ -1312,6 +1331,8 @@ pub fn run() {
             search_mirrors,
             replays_for_map,
             get_replay,
+            online_replays_for_map,
+            get_online_replay,
             cloud_push_collections,
             cloud_pull_collections,
             osu_account,
