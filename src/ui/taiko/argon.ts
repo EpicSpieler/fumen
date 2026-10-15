@@ -5,14 +5,15 @@
  *    glow), ArgonHitTarget, ArgonBarLine;
  *  - ArgonCirclePiece (centre / rim / elongated / swell): a dark disc inside two gradient rings,
  *    a chevron (an asterisk on swells), a flash when hit and on kiai beats;
- *  - ArgonHitExplosion, ArgonTickPiece, ArgonJudgementPiece ("GREAT" with rings; argon pro shows
- *    none for great hits). No kiai explosions. The swell is the default one around argon's disc.
+ *  - ArgonHitExplosion (dimmer and shorter for Ok, none for a miss), ArgonTickPiece,
+ *    ArgonJudgementPiece (the result with rings, a miss dropping; argon pro shows none for great
+ *    hits). No kiai explosions. The swell is the default one around argon's disc.
  */
 import { seeded } from "../mania/argon";
 import { css, ease, rgb, tween, type Colour } from "../mania/draw";
-import { BASE_HEIGHT, DEFAULT_SIZE, HIT_X, INPUT_DRUM_WIDTH, LEFT_CENTRE, LEFT_RIM, RIGHT_CENTRE, RIGHT_RIM, STRONG_SCALE } from "./chart";
+import { BASE_HEIGHT, DEFAULT_SIZE, GREAT, HIT_X, INPUT_DRUM_WIDTH, LEFT_CENTRE, LEFT_RIM, MISSED, RIGHT_CENTRE, RIGHT_RIM, STRONG_SCALE } from "./chart";
 import type { HitEvent, HitPiece, RollPiece, SwellPiece, TaikoFrame, TickPiece } from "./playfield";
-import { asterisk, C, drumPress, pill, TrianglesRenderer } from "./triangles";
+import { asterisk, drumPress, missMotion, pill, RESULT_COLOURS, RESULT_TEXT, secondHit, TrianglesRenderer } from "./triangles";
 
 /** ArgonCirclePiece.ICON_SIZE */
 const ICON_SIZE = 20 / 70;
@@ -159,15 +160,20 @@ export class ArgonTaikoRenderer extends TrianglesRenderer {
   // ── judged hits ───────────────────────────────────────────────────────
 
   override explosion(f: TaikoFrame, e: HitEvent): void {
-    // ArgonHitExplosion: in over 30 ms, out over 450 (OutQuint); a gradient disc, a white one
-    // inside it with a glow; strong hits grow the outer disc in 500 ms
+    // ArgonHitExplosion: in over 30 ms, out over 450 (OutQuint) — for Ok only to 0.2 and out over
+    // 200, for a miss nothing; a gradient disc, a white one inside it with a glow; a strong
+    // note's second key grows the outer disc in 500 ms
+    if (e.result === MISSED) return;
     const el = (f.t - e.at) / f.rate;
-    if (el < 0 || el >= 480) return;
-    const alpha = el < 30 ? ease.in(el / 30) : 1 - ease.outQuint((el - 30) / 450);
+    const great = e.result === GREAT;
+    const out = great ? 450 : 200;
+    if (el < 0 || el >= 30 + out) return;
+    const peak = great ? 1 : 0.2;
+    const alpha = el < 30 ? peak * ease.in(el / 30) : peak * (1 - ease.outQuint((el - 30) / out));
     if (alpha <= 0) return;
     const ctx = f.ctx;
     const base = BASE_HEIGHT * DEFAULT_SIZE;
-    const outer = base * (e.strong ? tween(el, 1, STRONG_SCALE, 500, ease.outQuint) : 1);
+    const outer = base * (1 + (STRONG_SCALE - 1) * secondHit(f, e, 500, ease.outQuint));
     const x = HIT_X;
     const y = BASE_HEIGHT / 2;
     ctx.save();
@@ -193,14 +199,31 @@ export class ArgonTaikoRenderer extends TrianglesRenderer {
 
   override judgement(f: TaikoFrame, e: HitEvent): void {
     // argon pro shows nothing for great hits
-    if (this.pro) return;
+    if (this.pro && e.result === GREAT) return;
     const el = (f.t - e.at) / f.rate;
     if (el < 0 || el >= 1000) return;
     const ctx = f.ctx;
-    const blue = C.blue;
+    const colour = RESULT_COLOURS[e.result];
     const fade = 1 - ease.outQuint(Math.min(1, el / 800));
+    const text = () => {
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = css(colour);
+      ctx.font = `400 20px "Instrument Sans", system-ui, sans-serif`;
+      ctx.letterSpacing = "10px";
+      ctx.fillText(RESULT_TEXT[e.result], 5, 0);
+    };
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
+    if (e.result === MISSED) {
+      // dropping from the hit target, turning
+      if (fade > 0) {
+        ctx.globalAlpha = fade;
+        missMotion(ctx, el, text);
+      }
+      ctx.restore();
+      return;
+    }
     // the text: from 0.6 to 1.0 of the strip's height above its centre, growing to 1.4×
     if (fade > 0) {
       const y = BASE_HEIGHT / 2 + BASE_HEIGHT * tween(el, -0.6, -1, 800, ease.outQuint);
@@ -209,25 +232,22 @@ export class ArgonTaikoRenderer extends TrianglesRenderer {
       ctx.globalAlpha = fade;
       ctx.translate(HIT_X, y);
       ctx.scale(s, s);
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillStyle = css(blue);
-      ctx.font = `400 20px "Instrument Sans", system-ui, sans-serif`;
-      ctx.letterSpacing = "10px";
-      ctx.fillText("GREAT", 5, 0);
+      text();
       ctx.restore();
     }
-    // the rings, flying out of the hit target
+    // the rings, flying out of the hit target: 4 small and 4 large for Great, 4 small not as far
+    // for Ok
     const ringFade = fade * (1 - ease.outQuint(Math.min(1, el / 1000)));
     if (ringFade > 0) {
       const rand = seeded(e.at + e.i);
+      const travel = e.result === GREAT ? 58 : 58 * 0.6;
       ctx.globalAlpha = ringFade;
-      ctx.strokeStyle = css(blue);
+      ctx.strokeStyle = css(colour);
       ctx.lineWidth = 4;
-      for (let k = 0; k < 8; k++) {
+      for (let k = 0; k < (e.result === GREAT ? 8 : 4); k++) {
         const size = k < 4 ? 9 : 14;
         const dir = rand() * 360;
-        const dist = 29 + rand() * 29;
+        const dist = travel / 2 + (rand() * travel) / 2;
         const r = tween(el, dist * 0.6, dist, 600, ease.outQuint);
         ctx.beginPath();
         ctx.arc(HIT_X + Math.cos(dir) * r, BASE_HEIGHT / 2 + Math.sin(dir) * r, size / 2 - 2, 0, Math.PI * 2);

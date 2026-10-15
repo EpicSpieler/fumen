@@ -10,7 +10,7 @@
 import { tex, type TexRef } from "../../lib/skin/skins";
 import { css, ease, mix, rgb, tinted, tween, type Colour } from "../mania/draw";
 import { seeded } from "../mania/argon";
-import { BASE_HEIGHT, DEFAULT_SIZE, HIT_X, INPUT_DRUM_WIDTH, KEYS, LEFT_CENTRE, LEFT_RIM, RIGHT_CENTRE, RIGHT_RIM, STRONG_SCALE, type TaikoChart } from "./chart";
+import { BASE_HEIGHT, DEFAULT_SIZE, HIT_X, INPUT_DRUM_WIDTH, KEYS, LEFT_CENTRE, LEFT_RIM, MISSED, RIGHT_CENTRE, RIGHT_RIM, STRONG_SCALE, type HitResult, type TaikoChart } from "./chart";
 import type { HitEvent, HitPiece, RollPiece, SwellPiece, TaikoFrame, TaikoRenderer, TickPiece } from "./playfield";
 
 /** OsuColour */
@@ -25,6 +25,27 @@ export const C = {
   yellowDark: rgb("#eeaa00"),
   yellowDarker: rgb("#cc6600"),
 };
+/** OsuColour.ForHitResult: Great, Ok, Miss */
+export const RESULT_COLOURS: Record<HitResult, Colour> = [rgb("#66ccff"), rgb("#88b300"), rgb("#ed1121")];
+export const RESULT_TEXT: Record<HitResult, string> = ["GREAT", "OK", "MISS"];
+
+/** How far a strong note's explosion has grown since its second key: 0 → 1 over `ms`. */
+export function secondHit(f: TaikoFrame, e: HitEvent, ms: number, curve = ease.none): number {
+  return Number.isNaN(e.strongAt) ? 0 : tween((f.t - e.strongAt) / f.rate, 0, 1, ms, curve);
+}
+
+/**
+ * DefaultJudgementPiece's miss: from 1.6× to 1 in 100 ms, falling 100 units and turning 40° over
+ * 800 ms (InQuint). Runs `draw` around the piece's centre; false once it's over.
+ */
+export function missMotion(ctx: CanvasRenderingContext2D, el: number, draw: () => void): void {
+  const s = tween(el, 1.6, 1, 100, ease.in);
+  ctx.translate(HIT_X, BASE_HEIGHT / 2 + tween(el, 0, 100, 800, ease.inQuint));
+  ctx.rotate((tween(el, 0, 40, 800, ease.inQuint) * Math.PI) / 180);
+  ctx.scale(s, s);
+  draw();
+}
+
 /** Hit.COLOUR_CENTRE / COLOUR_RIM */
 export const COLOUR_CENTRE = rgb("#bb1177");
 export const COLOUR_RIM = rgb("#2299bb");
@@ -202,17 +223,19 @@ export class TrianglesRenderer implements TaikoRenderer {
   // ── judged hits ───────────────────────────────────────────────────────
 
   explosion(f: TaikoFrame, e: HitEvent): void {
-    // DefaultHitExplosion: a circle at 15% (additive) growing to 3× in 1 s, gone in 500 ms
+    // DefaultHitExplosion: a circle at 15% (additive) growing to 3× in 1 s, gone in 500 ms (a
+    // miss's is only its white edge); a strong note's second key takes it to the strong size in
+    // 50 ms
     const el = (f.t - e.at) / f.rate;
     if (el < 0 || el >= 500) return;
     const ctx = f.ctx;
-    const size = BASE_HEIGHT * DEFAULT_SIZE * (e.strong ? STRONG_SCALE : 1) * tween(el, 1, 3, 1000, ease.outQuint);
+    const size = BASE_HEIGHT * DEFAULT_SIZE * (1 + (STRONG_SCALE - 1) * secondHit(f, e, 50)) * tween(el, 1, 3, 1000, ease.outQuint);
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
     ctx.globalAlpha = 0.15 * (1 - el / 500);
     pill(ctx, HIT_X, BASE_HEIGHT / 2, size, size);
     ctx.fillStyle = css(e.rim ? C.blueDarker : C.pinkDarker);
-    ctx.fill();
+    if (e.result !== MISSED) ctx.fill();
     ctx.strokeStyle = "#fff";
     ctx.lineWidth = 1;
     ctx.stroke();
@@ -242,22 +265,34 @@ export class TrianglesRenderer implements TaikoRenderer {
   }
 
   judgement(f: TaikoFrame, e: HitEvent): void {
-    // DefaultJudgementPiece (taiko): "GREAT" rising from above the strip, fading over 800 ms
+    // DefaultJudgementPiece (taiko): the result rising from above the strip, fading over 800 ms;
+    // a miss drops from the hit target instead, turning
     const el = (f.t - e.at) / f.rate;
     if (el < 0 || el >= 800) return;
     const ctx = f.ctx;
-    const y = BASE_HEIGHT / 2 + BASE_HEIGHT * tween(el, -0.6, -1.5, 500);
-    const s = tween(el, 0.9, 1, 500, ease.outElastic);
+    const text = () => {
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = css(RESULT_COLOURS[e.result]);
+      ctx.font = `700 20px "Instrument Sans", system-ui, sans-serif`;
+      ctx.letterSpacing = "2px";
+      ctx.fillText(RESULT_TEXT[e.result], 1, 0);
+    };
     ctx.save();
-    ctx.globalAlpha = 1 - ease.outQuint(el / 800);
-    ctx.translate(HIT_X, y);
-    ctx.scale(s * 0.85, s);
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillStyle = css(C.blue);
-    ctx.font = `700 20px "Instrument Sans", system-ui, sans-serif`;
-    ctx.letterSpacing = "2px";
-    ctx.fillText("GREAT", 1, 0);
+    if (e.result === MISSED) {
+      ctx.globalAlpha = 1 - el / 800;
+      missMotion(ctx, el, () => {
+        ctx.scale(0.85, 1);
+        text();
+      });
+    } else {
+      const y = BASE_HEIGHT / 2 + BASE_HEIGHT * tween(el, -0.6, -1.5, 500);
+      const s = tween(el, 0.9, 1, 500, ease.outElastic);
+      ctx.globalAlpha = 1 - ease.outQuint(el / 800);
+      ctx.translate(HIT_X, y);
+      ctx.scale(s * 0.85, s);
+      text();
+    }
     ctx.restore();
   }
 

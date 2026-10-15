@@ -182,6 +182,8 @@ export interface TaikoChartData {
   objects: number[];
   /** every drum roll's ticks, roll after roll */
   ticks: number[];
+  /** every drum roll's time between ticks, roll after roll (charts from before 0.6 lack it) */
+  spacing?: number[];
   /** [time, multiplier] scroll speed changes */
   scroll: number[];
   /** [time, major] bar lines */

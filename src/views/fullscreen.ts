@@ -9,8 +9,9 @@
  *    matters while you watch it: notes per second right now, the pattern of this second, BPM,
  *    notes so far, and the density graph. The numbers about the whole chart stay in the set
  *    page's panel. Practice mode (./practice) loops a part of it, a little faster each time
- *    round, with a metronome. osu!mania can be played by one of lazer's replays instead of
- *    autoplay (./replay-panel), judged as lazer does, with the accuracy and hit errors as it goes.
+ *    round, with a metronome. osu!mania and osu!taiko can be played by one of lazer's replays
+ *    instead of autoplay (./replay-panel), judged as lazer does, with the accuracy and hit errors
+ *    as it goes.
  *
  * Esc leaves; Space plays/pauses; ←/→ seek 5 s; F3/F4 lower/raise the scroll speed as in lazer.
  * Nothing animates while the song is paused.
