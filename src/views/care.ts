@@ -1,5 +1,7 @@
 /* care.ts — library care: what the library takes on disk and where it goes (by kind of file,
- * ruleset or status), and the sets worth a look: never played, the biggest, not played in a year.
+ * ruleset or status), and the sets worth a look: never played, the biggest, not played in a year,
+ * and duplicates (osu!stable's copies of lazer's sets, a set twice, packs sharing difficulties with
+ * sets, re-uploads).
  *
  * Sizes come from src-tauri/src/care.rs (lazer's files by their hash, stable's folders); whether
  * and when a set was played from the snapshot (lazer's last played, the merged scores). Fumen
@@ -8,7 +10,7 @@
 import { api, asApiError, onCareProgress, thumbUrl } from "../lib/api";
 import { bytes, displayArtist, displayTitle, esc, MODE_SHORT, num, relativeTime, statusLabel } from "../lib/format";
 import { events, store } from "../lib/store";
-import type { CareReport } from "../lib/types";
+import type { CareReport, DupeGroup, DupeSet } from "../lib/types";
 import { attachSegIndicator, openMenu } from "../ui/controls";
 import { icon } from "../ui/icons";
 import { openSet } from "./actions";
@@ -30,7 +32,15 @@ const RULESET_NAMES = [...MODE_SHORT, "Mixed"];
 const COLOURS = ["var(--accent)", "var(--info)", "var(--success)", "var(--warning)", "var(--t3)", "var(--t4)"];
 
 type Group = "kind" | "ruleset" | "status";
-type Tab = "never" | "biggest" | "stale";
+type Tab = "never" | "biggest" | "stale" | "dupes";
+
+/** What each kind of duplicate is, and what of it could go. */
+const DUPES: Record<DupeGroup["kind"], { title: string; note: (g: DupeGroup) => string }> = {
+  "stable-copy": { title: "In osu!stable and osu!lazer", note: () => "Every difficulty of the osu!stable copy is in osu!lazer too." },
+  "same-set": { title: "The same beatmap set more than once", note: () => "One set on osu!, newest first." },
+  shared: { title: "Difficulties in common", note: (g) => `${num(g.shared)} ${g.shared === 1 ? "difficulty is" : "difficulties are"} in more than one of these sets, like a pack and a set.` },
+  reupload: { title: "Most likely a re-upload", note: () => "The same title by the same mapper, with the same song file." },
+};
 
 /** A set as library care sees it. */
 interface Entry {
@@ -179,6 +189,7 @@ export class CareView {
           <button type="button" data-tab="never">Never played</button>
           <button type="button" data-tab="biggest">Biggest</button>
           <button type="button" data-tab="stale">Not played in a year</button>
+          <button type="button" data-tab="dupes">Duplicates</button>
         </div>
         <div class="care-note"></div>
         <div class="care-list"></div>
@@ -269,6 +280,11 @@ export class CareView {
     const note = this.el.querySelector<HTMLElement>(".care-note");
     if (!list || !note) return;
     this.el.querySelectorAll<HTMLElement>(".care-tabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === this.tab));
+    // narrow, the tabs scroll: the chosen one in sight
+    const tabs = this.el.querySelector<HTMLElement>(".care-tabs");
+    const active = tabs?.querySelector<HTMLElement>("button.active");
+    if (tabs && active) tabs.scrollLeft = Math.max(0, Math.min(tabs.scrollLeft, active.offsetLeft), active.offsetLeft + active.offsetWidth - tabs.clientWidth);
+    if (this.tab === "dupes") return this.renderDupes(list, note);
     const now = Date.now();
     this.rows =
       this.tab === "never"
@@ -311,6 +327,87 @@ export class CareView {
       </div>`;
   }
 
+  /** The duplicates, group by group: what they are, the sets (newest first), what could go. */
+  private renderDupes(list: HTMLElement, note: HTMLElement): void {
+    const report = cached!;
+    const groups = report.duplicates;
+    if (!groups.length) {
+      note.textContent = "";
+      list.innerHTML = `<div class="care-none">No duplicates: every set in your library is there once.</div>`;
+      return;
+    }
+    const size = new Map(report.sets.map((s) => [s.id, s.size]));
+    const info = new Map(report.dupeSets.map((s) => [s.id, s]));
+    const could = (g: DupeGroup) =>
+      g.kind === "stable-copy"
+        ? g.sets.filter((id) => info.get(id)?.source === "stable").reduce((s, id) => s + (size.get(id) ?? 0), 0)
+        : g.kind === "same-set" || g.kind === "reupload"
+          ? g.sets.slice(1).reduce((s, id) => s + (size.get(id) ?? 0), 0)
+          : 0;
+    const total = groups.reduce((s, g) => s + could(g), 0);
+    const sets = groups.reduce((s, g) => s + g.sets.length, 0);
+    note.textContent = `${num(sets)} sets in ${num(groups.length)} ${groups.length === 1 ? "group" : "groups"}${total ? `; up to ${bytes(total)} could go` : ""}.`;
+    // the ones that free the most first
+    const order = [...groups].sort((a, b) => could(b) - could(a));
+    list.innerHTML = order
+      .map((g) => {
+        const d = DUPES[g.kind];
+        const c = could(g);
+        const what = g.kind === "stable-copy" ? "osu!stable's copy" : "all but the newest";
+        return `
+        <div class="dupe">
+          <div class="dupe-head">
+            <div class="dupe-title">${d.title}</div>
+            <div class="dupe-note">${esc(d.note(g))}</div>
+            ${c ? `<div class="dupe-save num">${what}: ${bytes(c)}</div>` : ""}
+          </div>
+          ${g.sets.map((id, k) => this.dupeRow(info.get(id), size.get(id) ?? 0, k === 0 && g.kind !== "stable-copy" && g.kind !== "shared")).join("")}
+        </div>`;
+      })
+      .join("");
+  }
+
+  private dupeRow(s: DupeSet | undefined, size: number, newest: boolean): string {
+    if (!s) return "";
+    const snap = store.snap!;
+    const unicode = store.prefs.unicode;
+    const idx = this.setIndex(s.id);
+    const set = idx !== undefined ? snap.sets[idx] : undefined;
+    let played = 0;
+    for (const m of set?.maps ?? []) {
+      const map = snap.maps[m];
+      played = Math.max(played, map.played ?? 0, map.best?.last ?? 0, map.best?.plays ? 1 : 0);
+    }
+    const sub = [
+      s.source === "stable" ? "osu!stable" : "osu!lazer",
+      `${num(s.maps)} ${s.maps === 1 ? "difficulty" : "difficulties"}`,
+      s.creator,
+      s.source === "stable" && s.folder ? `Songs/${s.folder}` : "",
+    ]
+      .filter(Boolean)
+      .map(esc);
+    if (newest) sub.unshift(`<b class="dupe-new">Newest</b>`);
+    const when = played > 1 ? `played ${relativeTime(played)}` : set && played ? "played" : s.added ? `added ${relativeTime(s.added)}` : "";
+    const title = set ? displayTitle(set, unicode) : s.title;
+    const bg = set?.bg ?? s.bg;
+    return `
+      <div class="crow dupe-row${idx === undefined ? " off" : ""}"${idx !== undefined ? ` data-set="${idx}" role="button" tabindex="0"` : ""}>
+        <span class="t-art${bg ? "" : " img-missing"}">${bg ? `<img src="${thumbUrl(bg, 160)}" alt="" loading="lazy" decoding="async" />` : ""}</span>
+        <div class="prow-text"><div class="t-title">${esc(title)}</div><div class="t-sub">${sub.join(" · ")}</div></div>
+        <span class="crow-video"></span>
+        <b class="crow-size num">${bytes(size)}</b>
+        <span class="crow-when">${when}</span>
+      </div>`;
+  }
+
+  private setIndex(id: string): number | undefined {
+    const snap = store.snap;
+    if (!snap) return undefined;
+    const i = snap.sets.findIndex((s) => s.id === id);
+    // stable sets the library leaves out (all theirs is lazer's) have no difficulties left
+    return i >= 0 && snap.sets[i].maps.length ? i : undefined;
+  }
+
   // ── actions ───────────────────────────────────────────────────────────
 
   private open(i: number): void {
@@ -338,6 +435,8 @@ export class CareView {
         this.shownRows += PAGE;
         return this.renderList();
       }
+      const dupe = t.closest<HTMLElement>(".crow[data-set]");
+      if (dupe) return openSet(+dupe.dataset.set!);
       const row = t.closest<HTMLElement>(".crow[data-i]");
       if (row) this.open(+row.dataset.i!);
     });
@@ -349,6 +448,11 @@ export class CareView {
       openMenu({ x: e.clientX, y: e.clientY }, [{ label: "Open beatmap set", icon: "library", action: () => this.open(i) }]);
     });
     this.el.addEventListener("keydown", (e) => {
+      const dupe = (e.target as Element).closest<HTMLElement>(".crow[data-set]");
+      if (dupe && (e.key === "Enter" || e.key === " ")) {
+        e.preventDefault();
+        return openSet(+dupe.dataset.set!);
+      }
       const row = (e.target as Element).closest<HTMLElement>(".crow[data-i]");
       if (row && (e.key === "Enter" || e.key === " ")) {
         e.preventDefault();
