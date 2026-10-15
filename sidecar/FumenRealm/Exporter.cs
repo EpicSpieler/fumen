@@ -54,6 +54,17 @@ internal static class Exporter
             }
             w.WriteEndArray();
 
+            // every file, as [filename, hash] pairs: what the set takes on disk (library care)
+            w.WriteStartArray("files");
+            foreach (var (name, hash) in files)
+            {
+                w.WriteStartArray();
+                w.WriteStringValue(name);
+                w.WriteStringValue(hash);
+                w.WriteEndArray();
+            }
+            w.WriteEndArray();
+
             w.WriteEndObject();
             setCount++;
         }
