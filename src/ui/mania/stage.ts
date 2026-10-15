@@ -1,7 +1,7 @@
 /* stage.ts — what every skin renderer shares: lazer's stage geometry (columns, hit position,
  * padding), its scroll maths, bar lines, and the per-frame state handed to the renderers. */
 import type { ChartData } from "../../lib/types";
-import { Autoplay } from "./autoplay";
+import { Autoplay, type ManiaPlay } from "./autoplay";
 import type { View } from "./draw";
 
 /** lazer's playfield is laid out 768 units tall (DrawSizePreservingFillContainer, 1024 × 768). */
@@ -91,7 +91,8 @@ export interface Frame {
   /** stage left edge, in units */
   x0: number;
   geo: StageGeometry;
-  auto: Autoplay;
+  /** what's played: autoplay or a replay */
+  auto: ManiaPlay;
   data: ChartData;
   bars: BarLine[];
   /** ms of song time from the top of the scroll area to the hit position */

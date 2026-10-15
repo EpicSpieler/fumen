@@ -40,12 +40,15 @@ export function argonColour(col: number, keys: number): Colour {
 
 /** OsuColour.ForHitResult(Perfect) */
 export const PERFECT_COLOUR = rgb("#99eeff");
+/** OsuColour.ForHitResult, Perfect … Miss */
+export const RESULT_COLOURS = ["#99eeff", "#66ccff", "#b3d944", "#88b300", "#ffcc22", "#ed1121"].map((c) => rgb(c));
+const RESULT_TEXT = ["PERFECT", "GREAT", "GOOD", "OK", "MEH", "MISS"];
 
 /**
  * The alpha of a lit-on-press overlay (Default/ArgonColumnBackground): up to 1 in 50 ms, down to 0.5
  * over 250 ms while held, out over 250 ms after release (OutQuint, game clock).
  */
-export function pressOverlay(auto: Autoplay, col: number, t: number, rate: number): number {
+export function pressOverlay(auto: Frame["auto"], col: number, t: number, rate: number): number {
   const k = auto.key(col, t);
   const held = (since: number, from: number) => (since < 50 ? tween(since, from, 1, 50, ease.outQuint) : tween(since - 50, 1, 0.5, 250, ease.outQuint));
   const fade = (since: number, from: number) => tween(since, from, 0, 250, ease.outQuint);
@@ -138,7 +141,7 @@ export class ArgonRenderer implements Renderer {
       for (let j = to - 3; j >= from; j -= 3) {
         const col = n[j + 1];
         if (col < 0 || col >= keys) continue;
-        this.drawObject(f, col, n[j], n[j + 2]);
+        this.drawObject(f, col, n[j], n[j + 2], j / 3);
       }
     });
 
@@ -167,7 +170,7 @@ export class ArgonRenderer implements Renderer {
     if (!this.pro) drawTextJudgement(f, hitD + 180, "argon");
   }
 
-  private drawObject(f: Frame, col: number, start: number, len: number): void {
+  private drawObject(f: Frame, col: number, start: number, len: number, obj: number): void {
     const { v, t } = f;
     const box = f.geo.columns[col];
     const x = f.x0 + box.x;
@@ -175,17 +178,17 @@ export class ArgonRenderer implements Renderer {
     const accent = this.colours[col];
     const pos = f.posD(start);
     if (!(len > 0)) {
-      if (t >= start || pos > v.S) return;
+      if (t >= f.auto.gone(obj) || pos > v.S) return;
       this.notePiece(v, x, w, pos, accent, "note");
       return;
     }
     const end = start + len;
-    if (t >= end) return;
+    if (t >= f.auto.gone(obj)) return;
     const endPos = f.posD(end);
     if (pos - NOTE_HEIGHT > v.S) return;
     const ctx = v.ctx;
-    const sizingBottom = t >= start ? f.hitD : pos;
-    const holding = t >= start && t < end;
+    const holding = f.auto.held(obj, t);
+    const sizingBottom = holding ? f.hitD : pos;
     ctx.save();
     v.clip(x, w, sizingBottom + NOTE_HEIGHT / 2, Math.max(sizingBottom + NOTE_HEIGHT / 2, endPos + NOTE_HEIGHT));
     // body: half under the head to half under the tail
@@ -398,12 +401,16 @@ export function drawDefaultBarLines(f: Frame): void {
 
 /**
  * The text judgements of argon ("PERFECT", rings flying out) and triangles ("PERFECT", popping in).
- * Autoplay only ever gets perfect.
+ * Autoplay only ever gets perfect; a replay gets them all.
  */
 export function drawTextJudgement(f: Frame, centre: number, style: "argon" | "triangles"): void {
   const { v, t, x0, geo } = f;
   const ctx = v.ctx;
-  const hit = f.auto.lastHit(t);
+  const j = f.auto.judgement(t);
+  if (!j) return;
+  const hit = j.time;
+  const colour = RESULT_COLOURS[j.result] ?? PERFECT_COLOUR;
+  const text = RESULT_TEXT[j.result] ?? "PERFECT";
   const e = t - hit;
   const life = style === "argon" ? 1800 : 300;
   if (!(e >= 0 && e < life)) return;
@@ -421,16 +428,16 @@ export function drawTextJudgement(f: Frame, centre: number, style: "argon" | "tr
       const s = tween(e, 1, 1.4, 1800, ease.outQuint);
       ctx.save();
       ctx.scale(s, s);
-      ctx.fillStyle = css(PERFECT_COLOUR);
+      ctx.fillStyle = css(colour);
       ctx.font = `400 28px "Instrument Sans", system-ui, sans-serif`;
       ctx.letterSpacing = "10px";
-      ctx.fillText("PERFECT", 5, 0);
+      ctx.fillText(text, 5, 0);
       ctx.restore();
-      // the rings
+      // the rings (hits only)
       const rand = seeded(hit + 1);
-      const ringAlpha = 1 - ease.outQuint(Math.min(1, e / 1000));
+      const ringAlpha = j.result === 5 ? 0 : 1 - ease.outQuint(Math.min(1, e / 1000));
       ctx.globalAlpha = alpha * ringAlpha;
-      ctx.strokeStyle = css(PERFECT_COLOUR);
+      ctx.strokeStyle = css(colour);
       ctx.lineWidth = 4;
       for (let i = 0; i < 8; i++) {
         const size = i < 4 ? 9 : 14;
@@ -447,10 +454,10 @@ export function drawTextJudgement(f: Frame, centre: number, style: "argon" | "tr
     const s = e < 50 ? tween(e, 0.8, 1, 250, ease.outElastic) : tween(e - 50, tween(50, 0.8, 1, 250, ease.outElastic), 0.75, 250);
     ctx.globalAlpha = e < 50 ? 1 : Math.max(0, 1 - (e - 50) / 200);
     ctx.scale(s * 0.85, s);
-    ctx.fillStyle = css(PERFECT_COLOUR);
+    ctx.fillStyle = css(colour);
     ctx.font = `700 25px "Instrument Sans", system-ui, sans-serif`;
     ctx.letterSpacing = "2px";
-    ctx.fillText("PERFECT", 1, 0);
+    ctx.fillText(text, 1, 0);
   }
   ctx.restore();
 }

@@ -8,6 +8,8 @@ import type {
   ApiError,
   ChartData,
   ChartSounds,
+  ReplayData,
+  ReplayEntry,
   DanRating,
   CollectionPick, FumenCollection,
   History,
@@ -52,6 +54,10 @@ export const api = {
   getDan: (id: string, rate: number) => invoke<DanRating | null>("get_dan", { id, rate }),
   /** an osu!mania difficulty's hitsounds */
   getHitsounds: (id: string) => invoke<ChartSounds>("get_hitsounds", { id }),
+  /** lazer's scores on a difficulty that come with a replay, best first */
+  replaysForMap: (id: string) => invoke<ReplayEntry[]>("replays_for_map", { id }),
+  /** a lazer score's replay frames ([time, x, y, buttons] each) */
+  getReplay: (id: string) => invoke<ReplayData>("get_replay", { id }),
   getSkins: () => invoke<SkinList>("get_skins"),
   /** [filename, sha256] per file */
   async getSkinFiles(id: string): Promise<[string, string][]> {
