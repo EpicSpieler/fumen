@@ -173,7 +173,8 @@ export function playWhen(ms: number): string {
 /** Tooltip for when a play was: the time, and where Fumen knows it from. */
 export function playWhenTip(p: Play): string {
   const where = p.source === "osu" ? " · from osu!" : p.source === "lazer" ? " · this computer only" : "";
-  return esc(`${dtf.format(new Date(p.date))}${where}`);
+  const client = p.stable ? " · osu!stable" : "";
+  return esc(`${dtf.format(new Date(p.date))}${client}${where}`);
 }
 
 /** Tooltip for a play's grade: score, combo and judgements. */

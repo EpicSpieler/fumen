@@ -346,7 +346,7 @@ export class SettingsView {
     const on = store.settings?.useStable !== false;
     const sc = sst?.counts;
     const where = sst?.install
-      ? `<span class="setting-path">${esc(sst.install.path)}</span>${sc && sst.scannedAt ? `<br>${num(sc.sets)} sets, ${num(sc.maps)} difficulties. Ones lazer has too show once.` : on ? "<br>Its beatmaps come in with the next import." : ""}`
+      ? `<span class="setting-path">${esc(sst.install.path)}</span>${sc && sst.scannedAt ? `<br>${num(sc.sets)} sets, ${num(sc.maps)} difficulties${sc.scores ? `, ${num(sc.scores)} ${sc.scores === 1 ? "play" : "plays"}` : ""}. Ones lazer has too show once.` : on ? "<br>Its beatmaps come in with the next import." : ""}`
       : on
         ? `<span class="is-missing">Not found${stableCustom ? " in the chosen folder" : sst?.defaultPath ? ` in ${esc(sst.defaultPath)}` : ""}</span>`
         : "Off: only osu!lazer's beatmaps are in the library.";

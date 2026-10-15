@@ -346,7 +346,7 @@ export interface LibraryStatus {
     defaultPath: string | null;
     enabled: boolean;
     scannedAt: number | null;
-    counts: { sets: number; maps: number; collections: number } | null;
+    counts: { sets: number; maps: number; collections: number; scores?: number } | null;
   };
 }
 
@@ -498,6 +498,8 @@ export interface Play {
   failed?: boolean;
   /** "lazer": only on this computer · "osu": only on osu! · "both" */
   source: "lazer" | "osu" | "both";
+  /** played in osu!stable (its scores.db) */
+  stable?: boolean;
   /** position in osu!'s top plays for its ruleset */
   top?: number;
   /** osu!'s score id */
