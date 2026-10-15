@@ -1068,6 +1068,12 @@ pub struct Report {
     pub sv_amount: f32,
     /// up to three clusters per core pattern, most important first
     pub clusters: Vec<Cluster>,
+    /// what each second from `start` is (an index into `labels`, -1 for nothing)
+    pub seconds: Vec<i16>,
+    /// the names in `seconds`: a specific pattern ("Jumpstream") or a core pattern ("Stream")
+    pub labels: Vec<String>,
+    /// the first row's time, ms
+    pub start: f32,
 }
 
 impl Report {
@@ -1123,13 +1129,57 @@ pub fn report(chart: &Chart) -> Option<Report> {
     let mut top: Vec<Cluster> = CORES.iter().flat_map(|&core| kept.iter().filter(move |c| c.pattern == core).take(3).map(|c| (*c).clone())).collect();
     top.sort_by(|a, b| b.importance().total_cmp(&a.importance()));
 
+    let (labels, seconds) = timeline(&found, mode, first, last);
     Some(Report {
         category: categorise(&top),
         mode,
         ln_ratio: ln_ratio as f32,
         sv_amount: sv_time(&timing, first, last) as f32,
         clusters: top,
+        seconds,
+        labels,
+        start: first as f32,
     })
+}
+
+/// What each second of the chart is, from the same matches as the report: per second, every
+/// match counts with the time it covers there, weighted the way the report weighs clusters
+/// (the pattern's rating in this kind of chart, times its speed); the heaviest name wins.
+fn timeline(found: &[Found], mode: Mode, first: f64, last: f64) -> (Vec<String>, Vec<i16>) {
+    let n = ((last - first) / 1000.0).floor().max(0.0) as usize + 1;
+    let mut labels: Vec<String> = Vec::new();
+    let mut weight: Vec<Vec<(usize, f64)>> = vec![Vec::new(); n];
+    for p in found {
+        let name = p.specific.map(str::to_owned).unwrap_or_else(|| format!("{:?}", p.core));
+        let li = match labels.iter().position(|l| *l == name) {
+            Some(i) => i,
+            None => {
+                labels.push(name);
+                labels.len() - 1
+            }
+        };
+        let speed = if p.mspb > 0.0 { 60000.0 / p.mspb } else { 100.0 };
+        let w = rating_multiplier(p.core, p.specific, mode) * speed;
+        let (s, e) = (p.start - first, (p.end - first).max(p.start - first));
+        let (i0, i1) = ((s / 1000.0).floor().max(0.0) as usize, ((e / 1000.0).floor().max(0.0) as usize).min(n - 1));
+        for (i, bin) in weight.iter_mut().enumerate().take(i1 + 1).skip(i0) {
+            let (b0, b1) = (i as f64 * 1000.0, i as f64 * 1000.0 + 1000.0);
+            // a match without length counts as one ms
+            let cover = (e.min(b1) - s.max(b0)).max(if e <= s { 1.0 } else { 0.0 });
+            if cover <= 0.0 {
+                continue;
+            }
+            match bin.iter_mut().find(|(l, _)| *l == li) {
+                Some(x) => x.1 += cover * w,
+                None => bin.push((li, cover * w)),
+            }
+        }
+    }
+    let seconds = weight
+        .iter()
+        .map(|bin| bin.iter().filter(|x| x.1 > 0.0).max_by(|a, b| a.1.total_cmp(&b.1)).map_or(-1, |x| x.0 as i16))
+        .collect();
+    (labels, seconds)
 }
 
 fn categorise(clusters: &[Cluster]) -> String {
@@ -1278,5 +1328,32 @@ mod tests {
         assert_eq!(sv_time(&t, 0.0, 10_000.0), 0.0);
         t.sv.extend([(5000.0, 2.0), (8000.0, 1.0)]);
         assert_eq!(sv_time(&t, 0.0, 10_000.0), 5000.0);
+    }
+}
+
+#[cfg(test)]
+mod timeline_real {
+    /// Prints the report's category next to how its seconds are named, for some real charts
+    /// (run by hand; reads the library and lazer's files only).
+    #[test]
+    #[ignore]
+    fn timeline_on_real_charts() {
+        let data = std::path::PathBuf::from(std::env::var("APPDATA").unwrap());
+        let conn = rusqlite::Connection::open_with_flags(data.join("dev.fumen.app").join("library.db"), rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
+        let files = crate::paths::Files::lazer(data.join("osu"));
+        let mut st = conn.prepare("SELECT hash, version FROM maps WHERE ruleset_id = 3 AND hash IS NOT NULL ORDER BY random() LIMIT 14").unwrap();
+        let rows: Vec<(String, String)> = st.query_map([], |r| Ok((r.get(0)?, r.get(1)?))).unwrap().collect::<rusqlite::Result<_>>().unwrap();
+        for (hash, version) in rows {
+            let Ok(chart) = crate::charts::load(&files, &hash) else { continue };
+            let Some(r) = super::report(&chart) else { continue };
+            let mut count = vec![0usize; r.labels.len()];
+            let mut none = 0;
+            for &s in &r.seconds {
+                if s < 0 { none += 1 } else { count[s as usize] += 1 }
+            }
+            let mut named: Vec<(String, usize)> = r.labels.iter().cloned().zip(count).filter(|x| x.1 > 0).collect();
+            named.sort_by(|a, b| b.1.cmp(&a.1));
+            println!("{version:30} | {:28} | none {none:3} | {:?}", r.category, &named[..named.len().min(4)]);
+        }
     }
 }
