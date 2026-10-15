@@ -272,7 +272,7 @@ pub fn import(conn: &mut Connection, json: &Path, install: &LazerInstall) -> Res
     let tx = conn.transaction()?;
     tx.execute_batch(
         "DELETE FROM lazer_collections WHERE source = 'lazer';
-         DELETE FROM scores;
+         DELETE FROM scores WHERE id NOT LIKE 'st-%';
          DELETE FROM sets WHERE source = 'lazer';
          DELETE FROM skins;",
     )?;

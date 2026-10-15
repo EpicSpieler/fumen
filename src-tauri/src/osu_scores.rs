@@ -4,7 +4,9 @@
 //! A sync reads osu!'s side into its own tables (`osu_scores`, `osu_beatmaps`, `osu_playcounts`,
 //! meta `osu.stats`), which a library rescan never touches. `merge` puts both sides together: a
 //! local score osu! also has is one play (same online id; for scores from stable, which lazer
-//! keeps without one: same difficulty, ruleset, time and accuracy).
+//! keeps without one: same difficulty, ruleset, time and accuracy). osu!stable's own plays
+//! (scores.db, ids "st-…") count as local too, unless lazer has the same play (it imports
+//! stable's scores when asked): same difficulty and time.
 
 use std::collections::HashMap;
 
@@ -22,6 +24,8 @@ pub const RULESETS: [&str; 4] = ["osu", "taiko", "fruits", "mania"];
 const TOP_PAGES: usize = 2;
 /// how far apart a local and an online copy of the same play may be dated
 const SAME_PLAY_MS: i64 = 120_000;
+/// …and lazer's copy of an osu!stable play (lazer keeps the replay's time)
+const STABLE_COPY_MS: i64 = 2_000;
 /// the judgements a play's hit counts show
 const JUDGEMENTS: [&str; 10] =
     ["perfect", "great", "good", "ok", "meh", "miss", "large_tick_hit", "large_tick_miss", "small_tick_hit", "small_tick_miss"];
@@ -660,7 +664,8 @@ impl Player {
     /// The condition on `scores` for this player, with `?1` as its parameter.
     fn sql(&self) -> &'static str {
         match self {
-            Player::Id(_) => "user_id = ?1",
+            // osu!stable's plays only have the name: the one this account plays under in lazer
+            Player::Id(_) => "(user_id = ?1 OR (user_id IS NULL AND id LIKE 'st-%' AND user IN (SELECT user FROM scores WHERE user_id = ?1)))",
             Player::Name(_) => "user = ?1",
             Player::Anyone => "?1 IS NULL",
         }
@@ -711,6 +716,9 @@ pub struct Play {
     pub failed: bool,
     /// "lazer" (only on this computer), "osu" (only on osu!), "both"
     pub source: &'static str,
+    /// played in osu!stable (its scores.db)
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub stable: bool,
     /// position in osu!'s top plays for its ruleset
     #[serde(skip_serializing_if = "Option::is_none")]
     pub top: Option<i64>,
@@ -899,8 +907,10 @@ fn merge(conn: &Connection) -> Result<Merged> {
     let mut by_map: HashMap<String, Vec<usize>> = HashMap::new();
 
     let mut st = conn.prepare(&format!(
-        "SELECT map_md5, ruleset, total_score, accuracy, max_combo, rank, pp, date, mods, statistics, online_id
-         FROM scores WHERE {} ORDER BY date DESC",
+        "SELECT map_md5, ruleset, total_score, accuracy, max_combo, rank, pp, date, mods, statistics, online_id, id LIKE 'st-%'
+         FROM scores WHERE {} AND NOT (id LIKE 'st-%' AND EXISTS (
+             SELECT 1 FROM scores l WHERE l.id NOT LIKE 'st-%' AND l.map_md5 = scores.map_md5 AND ABS(l.date - scores.date) <= {STABLE_COPY_MS}))
+         ORDER BY date DESC",
         player.sql()
     ))?;
     let mut rows = st.query([player.param()])?;
@@ -935,6 +945,7 @@ fn merge(conn: &Connection) -> Result<Merged> {
             hits: hits_of(&r.get::<_, Option<String>>(9)?.unwrap_or_default()),
             failed: rank < 0,
             source: "lazer",
+            stable: r.get(11)?,
             top: None,
             id: None,
             sr: None,
@@ -998,6 +1009,7 @@ fn merge(conn: &Connection) -> Result<Merged> {
                 hits: hits_of(&r.get::<_, String>(11)?),
                 failed: !r.get::<_, bool>(8)? || rank < 0,
                 source: "osu",
+                stable: false,
                 top,
                 id: Some(id),
                 sr: None,
@@ -1370,6 +1382,26 @@ mod tests {
         let plays = merge(&conn).unwrap().plays;
         assert_eq!(sr(&plays, 0.9), Some(want));
         assert_eq!(sr(&plays, 1.5), None);
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn stable_plays_in_the_history() {
+        let (dir, conn) = temp_db("stable");
+        conn.execute_batch(
+            "DELETE FROM scores;
+             INSERT INTO scores (id, map_md5, ruleset, accuracy, date, user, user_id) VALUES
+                ('lazer-1', 'abc', 'mania', 0.9, 1000000, 'Me', 42),
+                -- the same play: lazer imported it from stable
+                ('st-r1', 'abc', 'mania', 0.9, 1000500, 'Me', NULL),
+                ('st-r2', 'abc', 'mania', 0.8, 5000000, 'Me', NULL),
+                -- someone else on this computer
+                ('st-r3', 'abc', 'mania', 0.7, 6000000, 'Sibling', NULL);",
+        )
+        .unwrap();
+        let plays = merge(&conn).unwrap().plays;
+        assert_eq!(plays.iter().map(|p| (p.acc, p.stable)).collect::<Vec<_>>(), [(0.8, true), (0.9, false)]);
         drop(conn);
         let _ = std::fs::remove_dir_all(&dir);
     }
