@@ -438,6 +438,44 @@ pub fn put_collections(
         .collect())
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Deleted {
+    /// lazer's id
+    pub set: String,
+    pub done: bool,
+    /// why not: "gone", "protected" (one of lazer's own), "unchanged" (already deleted)
+    pub reason: Option<String>,
+}
+
+/// Deletes sets in lazer exactly as lazer's own Delete does (marked deleted; lazer removes them
+/// and their files for good the next time it opens its database, their scores stay), with the
+/// same checks as an import. Fumen itself deletes nothing.
+pub fn delete_sets(storage: &Path, cache: &Path, backups: &Path, ids: &[String], compat: &Compat) -> Result<Vec<Deleted>> {
+    let st = status(Some(storage), compat);
+    if let Some(reason) = st.reason {
+        return Err(Error::known(error_code(reason), st.message.unwrap_or_default()));
+    }
+    let lazer = installed().ok_or_else(|| Error::known("lazer-not-installed", "osu!lazer's installation wasn't found."))?;
+    let host = host_dir(cache, &lazer)?;
+    backup(storage, backups)?;
+
+    let json = cache.join(format!("delete-{}.json", crate::lazer::now_ms()));
+    std::fs::write(&json, serde_json::to_vec(ids)?)?;
+    let result = run(&host, &["delete".as_ref(), storage.as_os_str(), json.as_os_str()]);
+    let _ = std::fs::remove_file(&json);
+    let (code, lines) = result?;
+    if code != 0 {
+        return Err(importer_error(code, &lines, "Deleting in lazer"));
+    }
+    Ok(lines
+        .iter()
+        .filter_map(|l| {
+            Some(Deleted { set: l.get("set")?.as_str()?.to_string(), done: l["done"].as_bool()?, reason: l["reason"].as_str().map(str::to_string) })
+        })
+        .collect())
+}
+
 /// Copies `client.realm` to `backups/client-<unix ms>.realm`, keeping the newest five.
 pub fn backup(storage: &Path, backups: &Path) -> Result<PathBuf> {
     std::fs::create_dir_all(backups)?;
@@ -742,6 +780,40 @@ mod tests {
         assert_eq!(put(false), new_id, "writing again made another collection");
         assert_eq!(by_id(&export(&realm, &work.join("cols2.json"))).len(), now.len());
         println!("collections: one made, one changed, written again without a copy, nothing else touched");
+
+        // 5. deleting (lazer's soft delete): the test set and a set with scores
+        let base = export(&realm, &work.join("del-base.json"));
+        let scored = base["scores"].as_array().unwrap().iter().find_map(|sc| {
+            let map = sc["mapId"].as_str()?;
+            base["sets"].as_array().unwrap().iter().find(|s| s["maps"].as_array().unwrap().iter().any(|m| m["id"] == map)).map(|s| s["id"].as_str().unwrap().to_string())
+        });
+        let mut ids = vec![id.clone()];
+        ids.extend(scored.clone());
+        let json = work.join("delete.json");
+        std::fs::write(&json, serde_json::to_vec(&ids).unwrap()).unwrap();
+        let mark = |cmd: &str| {
+            let (code, out) = importer(&host, &[cmd, real.to_str().unwrap(), json.to_str().unwrap()]);
+            assert_eq!(code, 0, "{cmd}: {out:?}");
+            assert_eq!(out.len(), ids.len(), "{cmd}: {out:?}");
+            out
+        };
+        let scores_of = |e: &serde_json::Value| e["scores"].as_array().unwrap().len();
+        let out = mark("delete");
+        assert!(out.iter().all(|l| l["done"] == true), "delete: {out:?}");
+        let deleted = export(&realm, &work.join("del.json"));
+        let sets = sets_by_id(&deleted);
+        assert!(ids.iter().all(|i| !sets.contains_key(i)), "deleted sets are still listed");
+        assert_eq!(sets.len(), sets_by_id(&base).len() - ids.len(), "sets after deleting");
+        for part in ["collections", "skins", "rulesetSettings"] {
+            assert_eq!(base[part], deleted[part], "{part} changed by deleting");
+        }
+        // lazer's database removes them for good when it's opened next (here: deleting again)
+        let out = mark("delete");
+        assert!(out.iter().all(|l| l["done"] == false && l["reason"] == "gone"), "deleting again: {out:?}");
+        let purged = export(&realm, &work.join("purged.json"));
+        assert_eq!(sets_by_id(&purged).len(), sets.len(), "sets after lazer removed the deleted ones");
+        assert_eq!(scores_of(&purged), scores_of(&base), "scores on deleted sets are gone");
+        println!("delete: {} sets deleted, gone for good once lazer's database is opened again; all {} scores stay", ids.len(), scores_of(&base));
 
         let _ = std::fs::remove_dir_all(&work);
         if write {

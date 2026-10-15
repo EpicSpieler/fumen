@@ -15,6 +15,8 @@ namespace FumenImport;
 ///                                                   --repair first finishes sets imported earlier
 ///                                                   without their details (see Lazer.Process)
 ///   fumen-import collections <data-dir> <json>      collections into lazer's (lazer must be closed)
+///   fumen-import delete <data-dir> <json>           sets deleted the way lazer's Delete does (lazer
+///                                                   must be closed)
 ///   fumen-import selftest <empty-dir> <archive>     into a fresh library, twice
 ///
 /// Output for Fumen: lines starting with "@fumen " followed by JSON (anything else is lazer's
@@ -36,6 +38,7 @@ internal static class Program
                 ["import", var dir, "--repair", .. var files] => Import(dir, files, repair: true),
                 ["import", var dir, .. var files] when files.Length > 0 => Import(dir, files, repair: false),
                 ["collections", var dir, var json] => Collections(dir, json),
+                ["delete", var dir, var json] => Delete(dir, json),
                 ["selftest", var dir, var file] => SelfTest(dir, file),
                 _ => Usage(),
             };
@@ -55,7 +58,7 @@ internal static class Program
 
     private static int Usage()
     {
-        Console.Error.WriteLine("usage: fumen-import info | import <data-dir> [--repair] <archive>... | collections <data-dir> <json> | selftest <empty-dir> <archive>");
+        Console.Error.WriteLine("usage: fumen-import info | import <data-dir> [--repair] <archive>... | collections <data-dir> <json> | delete <data-dir> <json> | selftest <empty-dir> <archive>");
         return 2;
     }
 
@@ -171,6 +174,25 @@ internal static class Program
         using var lazer = Lazer.Open(dataDir);
         foreach (var (c, id, created) in lazer.PutCollections(wanted))
             Emit(new { key = c.Key, id, created });
+        return 0;
+    }
+
+    /// Marks sets deleted exactly as lazer's own Delete does (ModelManager.Delete: the set's
+    /// DeletePending, nothing else). lazer's database removes them for good, and their files, the
+    /// next time it's opened (RealmAccess, on lazer's start or this program's next run); their
+    /// scores stay. `json`: a file with lazer's set IDs. One line per set: { set, done, reason? }
+    /// (reason "gone", "protected" or "unchanged": already deleted).
+    private static int Delete(string dataDir, string json)
+    {
+        var realmFile = Path.Combine(dataDir, Lazer.ClientDatabase);
+        if (!File.Exists(realmFile))
+            throw new FileNotFoundException($"No lazer database at {realmFile}");
+        Lazer.CheckSchema(realmFile);
+        var ids = JsonSerializer.Deserialize<List<Guid>>(File.ReadAllText(json)) ?? throw new InvalidDataException("no sets given");
+
+        using var lazer = Lazer.Open(dataDir);
+        foreach (var (id, done, reason) in lazer.MarkDeleted(ids))
+            Emit(new { set = id, done, reason });
         return 0;
     }
 
@@ -420,6 +442,35 @@ internal sealed class Lazer : IDisposable
             }
         });
         return found;
+    }
+
+    /// Sets `DeletePending` on these sets (lazer's protected ones stay), in one write.
+    public List<(Guid Id, bool Done, string? Reason)> MarkDeleted(IReadOnlyList<Guid> ids)
+    {
+        var setType = T(Game, "osu.Game.Beatmaps.BeatmapSetInfo");
+        var pending = setType.GetProperty("DeletePending") ?? throw new MissingMemberException("BeatmapSetInfo.DeletePending is gone (lazer changed?)");
+        var protect = setType.GetProperty("Protected") ?? throw new MissingMemberException("BeatmapSetInfo.Protected is gone (lazer changed?)");
+        var done = new List<(Guid, bool, string?)>();
+        InWrite(realm =>
+        {
+            done.Clear();
+            foreach (var id in ids.Distinct())
+            {
+                var set = Find(realm, setType, id);
+                if (set == null)
+                    done.Add((id, false, "gone"));
+                else if ((bool)protect.GetValue(set)!)
+                    done.Add((id, false, "protected"));
+                else if ((bool)pending.GetValue(set)!)
+                    done.Add((id, false, "unchanged"));
+                else
+                {
+                    pending.SetValue(set, true);
+                    done.Add((id, true, null));
+                }
+            }
+        });
+        return done;
     }
 
     /// lazer's metadata lookup, with an empty source in place of osu!'s API, and its local cache
