@@ -86,7 +86,7 @@ const VERSIONS = [
     v: "0.7", name: "Library care", state: "next",
     summary: "Keep the library clean.",
     items: [
-      [0, "Duplicates across lazer and osu!stable"],
+      [1, "<b>Duplicates:</b> osu!stable's copies of lazer's sets, a set twice, packs and re-uploads"],
       [0, "Missing or broken audio and backgrounds"],
       [1, "<b>What takes the space:</b> by kind of file, ruleset and status, and the biggest sets you never play"],
       [0, "osu!stable's scores in your history"],

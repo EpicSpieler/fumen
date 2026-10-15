@@ -390,7 +390,13 @@ sections below is the order of the work.
       (`src/views/care.ts`): on disk (shared files once), never played, videos, not played in a
       year; where it goes by kind of file, ruleset or status; the sets never played, the biggest
       and those not played in a year, biggest first. On the user's library: 39.1 GB, 13.8 GB of it videos
-- [ ] Duplicates: the same MD5 in lazer and stable, the same set twice, re-uploads under new ids
+- [x] Duplicates — 0.6.2. `care::duplicates` links sets (union–find) by a difficulty they share
+      (its MD5), their osu! id, or the same mapper + title + song file (lazer's song hash; stable's
+      files go by path, so only lazer's compare). Each group is named by its closest link:
+      osu!stable's copy of lazer's sets (every stable MD5 in lazer too), the same set more than
+      once, difficulties in common (a pack and a set), or a re-upload. The Duplicates tab shows
+      the groups newest first, sorted by what could go (stable's copy, or all but the newest).
+      On the user's library: 2 stable copies, 1 pack, 2 re-uploads
 - [ ] Missing or broken audio / backgrounds
 - [ ] "Clean up" lists that hand the deletion to lazer (never deleting itself)
 - [ ] osu!stable's `scores.db` into the play history
