@@ -188,6 +188,21 @@
   cursor: pointer;
 }
 .fs-graph canvas { display: block; width: 100%; height: 100%; }
+.fs-graph { touch-action: none; }
+/* the part practice mode loops */
+.fs-graph-loop {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: var(--accent);
+  opacity: .2;
+  border-radius: 3px;
+  pointer-events: none;
+}
+.fs-graph-loop[hidden] { display: none; }
+.fs-pr-ctl { display: flex; flex-wrap: wrap; gap: 6px; }
+.fs-pr-ctl .ic { width: 14px; height: 14px; }
+.fs-pr-sub { font-size: var(--fs-12); color: var(--t3); font-variant-numeric: tabular-nums; }
 .fs-axis { display: flex; justify-content: space-between; gap: 12px; margin-top: -10px; font-size: var(--fs-11); color: var(--t3); }
 
 .fs-setting { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; }

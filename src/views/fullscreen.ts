@@ -8,7 +8,8 @@
  *    (its own samples first, then the skin's; only here, at their own volume), next to what
  *    matters while you watch it: notes per second right now, the pattern of this second, BPM,
  *    notes so far, and the density graph. The numbers about the whole chart stay in the set
- *    page's panel.
+ *    page's panel. Practice mode (./practice) loops a part of it, a little faster each time
+ *    round, with a metronome.
  *
  * Esc leaves; Space plays/pauses; ←/→ seek 5 s; F3/F4 lower/raise the scroll speed as in lazer.
  * Nothing animates while the song is paused.
@@ -36,6 +37,8 @@ import { CatchPlayfield, type CatchRenderer } from "../ui/catch/playfield";
 import { createCatchRenderer } from "../ui/catch/renderers";
 import { AccentColors, drawDensity, fitCanvas } from "../ui/playfield";
 import { rateClick, rateControlHtml, starsAtRate, syncRateControl } from "../ui/rate";
+import type { PatternName } from "../lib/types";
+import { PracticePanel } from "./practice";
 
 export type FullscreenMode = "visual" | "field";
 
@@ -79,9 +82,15 @@ class Fullscreen {
   private graphDrawn = "";
   /** last text written per live field, so frames only touch the DOM when something changed */
   private live = new Map<Element, string>();
+  private practice!: PracticePanel;
 
   get open(): boolean {
     return this.isOpen;
+  }
+
+  askPractice(mapId: string, pattern?: PatternName | null): void {
+    this.mount();
+    this.practice.ask({ mapId, pattern });
   }
 
   show(mode?: FullscreenMode): void {
@@ -169,9 +178,11 @@ class Fullscreen {
             </div>
             <div class="fs-graph">
               <canvas aria-label="Note density"></canvas>
+              <div class="fs-graph-loop" hidden></div>
               <div class="graph-head"></div>
             </div>
             <div class="fs-axis num"><span>0:00</span><span>Notes per second</span><span data-live="graph-end"></span></div>
+            ${PracticePanel.html()}
             <div class="fs-setting fs-setting-speed">
               <span class="fs-k">Scroll speed</span>
               <div class="fs-speed">
@@ -224,6 +235,7 @@ class Fullscreen {
       </footer>`;
     document.body.appendChild(el);
     this.el = el;
+    this.practice = new PracticePanel(el, () => this.kick());
     attachSegIndicator(el.querySelector(".fs-modes")!);
     attachSegIndicator(el.querySelector(".rate-presets")!);
     el.querySelectorAll("img").forEach((img) => {
@@ -307,6 +319,7 @@ class Fullscreen {
     this.renderSpeed();
     this.renderSkin();
     this.renderHitsounds();
+    this.practice.render();
     this.live.clear();
     this.kick();
   }
@@ -375,6 +388,7 @@ class Fullscreen {
       this.data = null;
       this.field = null;
       hitsounds.clear();
+      this.practice.chart("", null);
       this.syncSounds();
       this.renderHitsounds();
       this.showEmpty(map.mode);
@@ -391,6 +405,7 @@ class Fullscreen {
       this.data = null;
       this.field = null;
       hitsounds.clear();
+      this.practice.chart(map.id, null);
       this.syncSounds();
       this.renderHitsounds();
       this.showEmpty(null, "Loading the chart…");
@@ -410,6 +425,7 @@ class Fullscreen {
             ? new TaikoPlayfield(canvas, d, renderer as TaikoRenderer)
             : new ManiaPlayfield(canvas, d, renderer as Renderer);
         this.field.setMods(activeMods(player.mods, map.mode));
+        this.practice.chart(map.id, d);
         this.renderSpeed();
         this.showEmpty(null);
         this.syncSounds();
@@ -477,7 +493,9 @@ class Fullscreen {
 
   /** Hitsounds play while the playfield shows a chart. */
   private syncSounds(): void {
-    hitsounds.setActive(this.isOpen && this.mode === "field" && !!this.field);
+    const on = this.isOpen && this.mode === "field" && !!this.field;
+    hitsounds.setActive(on);
+    this.practice?.setActive(on);
   }
 
   /** The playing chart's hitsounds, with the playfield skin's samples. */
@@ -705,6 +723,7 @@ class Fullscreen {
     const d = this.data;
     const field = this.field;
     if (!d || !field) return;
+    this.practice.frame(player.audio.currentTime * 1000);
     const r = player.rate;
     const t = player.audio.currentTime * 1000;
 
@@ -753,6 +772,7 @@ class Fullscreen {
       if (t.closest(".fs-play")) return player.toggle();
       if (t.closest(".fs-prev")) return player.prev();
       if (t.closest(".fs-next")) return player.next();
+      if (this.practice.click(t)) return;
       if (rateClick(t)) return;
       const mod = t.closest<HTMLElement>(".fs-mod[data-mod]");
       if (mod) return this.clickMod(mod.dataset.mod as Mod);
@@ -808,10 +828,7 @@ class Fullscreen {
       tip.style.setProperty("--x", `${e.clientX - r.left}px`);
     });
     const graph = el.querySelector<HTMLElement>(".fs-graph")!;
-    graph.addEventListener("pointerdown", (e) => {
-      if (!this.data || e.button !== 0) return;
-      const r = graph.getBoundingClientRect();
-      const ms = ((e.clientX - r.left) / r.width) * (this.data.analysis.end + 1000);
+    this.practice.bindGraph(graph, (ms) => {
       player.audio.currentTime = Math.max(0, ms / 1000);
       this.kick();
     });
@@ -879,4 +896,16 @@ const fullscreen = new Fullscreen();
 /** Opens the fullscreen player (in `mode`, or the one used last). */
 export function openFullscreen(mode?: FullscreenMode): void {
   fullscreen.show(mode);
+}
+
+/** Plays a difficulty in the fullscreen playfield looping its hardest part (of `pattern`, osu!mania), at `rate`. */
+export function practiceChart(mapIdx: number, opts: { rate?: number; pattern?: PatternName | null } = {}): void {
+  const snap = store.snap;
+  const m = snap?.maps[mapIdx];
+  if (!m) return;
+  fullscreen.askPractice(m.id, opts.pattern);
+  if (player.now?.set === m.set) player.selectMap(mapIdx);
+  else player.playSet(m.set, mapIdx);
+  if (opts.rate) player.setRate(opts.rate);
+  openFullscreen("field");
 }
