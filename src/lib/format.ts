@@ -33,6 +33,17 @@ export function duration(ms: number): string {
 
 export const bpm = (v: number): string => (Math.abs(v - Math.round(v)) < 0.05 ? String(Math.round(v)) : v.toFixed(1));
 export const stars = (sr: number): string => sr.toFixed(2);
+/** A size in bytes: 812 KB, 4.6 MB, 39.1 GB (in thousands). */
+export function bytes(n: number): string {
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let v = n;
+  let u = 0;
+  while (v >= 1000 && u < units.length - 1) {
+    v /= 1000;
+    u++;
+  }
+  return `${u === 0 || v >= 100 ? Math.round(v) : v.toFixed(1)} ${units[u]}`;
+}
 export const pct = (v: number, digits = 2): string => `${(v * 100).toFixed(digits)}%`;
 
 /** "7K" for mania, the ruleset name otherwise. */
