@@ -250,6 +250,16 @@ const MIGRATIONS: &[&str] = &[
         size INTEGER NOT NULL
     );
     "#,
+    // 16 — library care: the song and background a difficulty names (its .osu's), found or not,
+    //      and what lazer's files are by their first bytes (by hash, like their sizes)
+    r#"
+    ALTER TABLE maps ADD COLUMN audio_file TEXT;
+    ALTER TABLE maps ADD COLUMN bg_file TEXT;
+    CREATE TABLE file_formats (
+        hash   TEXT PRIMARY KEY,
+        format TEXT NOT NULL
+    );
+    "#,
 ];
 
 pub fn open(path: &Path) -> Result<Connection> {
