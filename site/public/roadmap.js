@@ -88,7 +88,7 @@ const VERSIONS = [
     items: [
       [0, "Duplicates across lazer and osu!stable"],
       [0, "Missing or broken audio and backgrounds"],
-      [0, "What takes the most space and never gets played"],
+      [1, "<b>What takes the space:</b> by kind of file, ruleset and status, and the biggest sets you never play"],
       [0, "osu!stable's scores in your history"],
     ],
     note: "Fumen points things out; deleting stays with lazer.",

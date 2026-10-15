@@ -381,9 +381,18 @@ sections below is the order of the work.
 
 ## v0.7 — library care
 
-- [ ] Duplicates (the same MD5 in lazer and stable, the same set twice, re-uploads under new ids),
-      missing or broken audio / backgrounds, sets never played that take the most space; storage
-      by ruleset / status; "clean up" lists that hand the deletion to lazer (never deleting itself)
+- [x] What the library takes on disk — 0.6.1. The realm export lists every file of a set ([name,
+      hash], `sets.files`, migration 15, with lazer's set hash); `src-tauri/src/care.rs` adds up
+      their sizes (each hash stat'ed once and kept in `file_sizes`: lazer's files are
+      content-addressed, so a size never goes stale — 98k files take 3 s the first time, then
+      0.25 s) by kind (the song a difficulty plays, videos, images, hitsounds, other); stable's
+      sets are their folders in Songs (`sets.folder`), walked each time. The Library care page
+      (`src/views/care.ts`): on disk (shared files once), never played, videos, not played in a
+      year; where it goes by kind of file, ruleset or status; the sets never played, the biggest
+      and those not played in a year, biggest first. On the user's library: 39.1 GB, 13.8 GB of it videos
+- [ ] Duplicates: the same MD5 in lazer and stable, the same set twice, re-uploads under new ids
+- [ ] Missing or broken audio / backgrounds
+- [ ] "Clean up" lists that hand the deletion to lazer (never deleting itself)
 - [ ] osu!stable's `scores.db` into the play history
 
 ## After 1.0
