@@ -4,9 +4,10 @@
  *
  *  - LegacyTaikoScroller (taiko-slider above the strip), TaikoLegacyPlayfieldBackgroundRight
  *    (taiko-bar-right, its kiai glow), LegacyInputDrum (taiko-bar-left, drum halves lit on
- *    presses), DrawableTaikoMascot (pippidon: idle / kiai on the beat, clear every 50 combo);
- *  - LegacyKiaiGlow, TaikoLegacyHitTarget, LegacyHitExplosion (taiko-hit300 / 300k; judgements
- *    stay hidden), LegacyBarLine;
+ *    presses), DrawableTaikoMascot (pippidon: idle / kiai on the beat, fail after a miss, clear
+ *    every 50 combo);
+ *  - LegacyKiaiGlow, TaikoLegacyHitTarget, LegacyHitExplosion (taiko-hit300 / 100 / 0, the "k"
+ *    sprite once a strong note's second key lands; judgements stay hidden), LegacyBarLine;
  *  - LegacyHit / LegacyCirclePiece (taikohitcircle / taikobigcircle tinted, the overlay on top,
  *    flashing on kiai beats), LegacyDrumRoll, sliderscorepoint ticks, LegacySwell.
  */
@@ -38,6 +39,7 @@ const visible = (c: Colour): Colour => (c[3] === 0 ? [c[0], c[1], c[2], 1] : c);
 interface Mascot {
   idle: TexRef[];
   kiai: TexRef[];
+  fail: TexRef[];
   clear: TexRef[];
 }
 
@@ -46,14 +48,16 @@ export class LegacyTaikoRenderer implements TaikoRenderer {
   private readonly version: number;
   private readonly t: Record<string, TexRef | null> = {};
   private hitCircle: Record<"normal" | "big", { circle: Anim | null; overlay: Anim | null }> = { normal: { circle: null, overlay: null }, big: { circle: null, overlay: null } };
-  private hitAnim: Anim | null = null;
-  private hitAnimStrong: Anim | null = null;
-  private mascotFrames: Mascot = { idle: [], kiai: [], clear: [] };
+  /** per result (Great, Ok, Miss): taiko-hit300 / 100 / 0, and the strong ("k") ones */
+  private hitAnim: [Anim | null, Anim | null, Anim | null] = [null, null, null];
+  private hitAnimStrong: [Anim | null, Anim | null, Anim | null] = [null, null, null];
+  private mascotFrames: Mascot = { idle: [], kiai: [], fail: [], clear: [] };
   private digits: (TexRef | null)[] = [];
   private scoreOverlap = 0;
   /** combo-affecting judgements' times (hits, cleared swells), and when pippidon cheers */
   private clears: number[] = [];
   private clearsFor: TaikoChart | null = null;
+  private clearsVersion = -1;
 
   private constructor(skin: LoadedSkin) {
     this.chain = new TextureChain(skin.chain);
@@ -95,8 +99,8 @@ export class LegacyTaikoRenderer implements TaikoRenderer {
       normal: { circle: circle("circle", false, false), overlay: circle("circleoverlay", true, false) },
       big: { circle: circle("circle", false, true), overlay: circle("circleoverlay", true, true) },
     };
-    r.hitAnim = c.animation("taiko-hit300", true, false);
-    r.hitAnimStrong = r.hitAnim ? c.animation("taiko-hit300k", true, false) : null;
+    r.hitAnim = [c.animation("taiko-hit300", true, false), c.animation("taiko-hit100", true, false), c.animation("taiko-hit0", true, false)];
+    r.hitAnimStrong = [r.hitAnim[0] ? c.animation("taiko-hit300k", true, false) : null, r.hitAnim[1] ? c.animation("taiko-hit100k", true, false) : null, null];
     // pippidon: each state from the first skin that has it
     const frames = (state: string, order?: number[]): TexRef[] => {
       const source = skin.chain.find((s) => s.texture(`pippidon${state}0`) ?? s.texture(`pippidon${state}`));
@@ -110,9 +114,10 @@ export class LegacyTaikoRenderer implements TaikoRenderer {
       }
       return out;
     };
-    r.mascotFrames = { idle: frames("idle"), kiai: frames("kiai"), clear: frames("clear", CLEAR_FRAMES) };
-    const anims = [r.hitCircle.normal.circle, r.hitCircle.normal.overlay, r.hitCircle.big.circle, r.hitCircle.big.overlay, r.hitAnim, r.hitAnimStrong];
-    await preload([...Object.values(r.t), ...anims, ...r.mascotFrames.idle, ...r.mascotFrames.kiai, ...r.mascotFrames.clear, ...r.digits]);
+    r.mascotFrames = { idle: frames("idle"), kiai: frames("kiai"), fail: frames("fail"), clear: frames("clear", CLEAR_FRAMES) };
+    const anims = [r.hitCircle.normal.circle, r.hitCircle.normal.overlay, r.hitCircle.big.circle, r.hitCircle.big.overlay, ...r.hitAnim, ...r.hitAnimStrong];
+    const m = r.mascotFrames;
+    await preload([...Object.values(r.t), ...anims, ...m.idle, ...m.kiai, ...m.fail, ...m.clear, ...r.digits]);
     return r;
   }
 
@@ -203,7 +208,8 @@ export class LegacyTaikoRenderer implements TaikoRenderer {
       if (i < m.clear.length) frame = m.clear[i];
     }
     if (!frame) {
-      const list = f.chart.inKiai(t) && m.kiai.length ? m.kiai : m.idle;
+      // after a miss it fails until the next hit
+      const list = f.chart.missedLast(t) && m.fail.length ? m.fail : f.chart.inKiai(t) && m.kiai.length ? m.kiai : m.idle;
       if (!list.length) return;
       // one frame per beat
       const beat = f.chart.beatAt(t);
@@ -238,8 +244,8 @@ export class LegacyTaikoRenderer implements TaikoRenderer {
 
   explosion(f: TaikoFrame, e: HitEvent): void {
     // LegacyHitExplosion: in over 120 ms, out over 180; a single sprite pops 0.6 → 1.1 → 0.9 → 1;
-    // strong hits swap to the "k" sprite
-    const anim = e.strong && this.hitAnimStrong ? this.hitAnimStrong : this.hitAnim;
+    // a strong note's second key crossfades to the "k" sprite in 50 ms
+    const anim = this.hitAnim[e.result];
     if (!anim) return;
     const el = (f.t - e.at) / f.rate;
     if (el < 0 || el >= 300) return;
@@ -250,15 +256,21 @@ export class LegacyTaikoRenderer implements TaikoRenderer {
       else if (el < 144) scale = tween(el - 96, 1.1, 0.9, 48);
       else scale = tween(el - 144, 0.9, 1, 24);
     }
-    const img = tex(frameAt(anim, el));
-    if (!img) return;
+    const strong = this.hitAnimStrong[e.result];
+    const k = strong && !Number.isNaN(e.strongAt) ? ease.outQuint(Math.min(1, (f.t - e.strongAt) / f.rate / 50)) : 0;
     const ctx = f.ctx;
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    const w = img.w * scale;
-    const h = img.h * scale;
-    ctx.drawImage(img.img, HIT_X - w / 2, BASE_HEIGHT / 2 - h / 2, w, h);
-    ctx.restore();
+    const draw = (a: Anim, opacity: number) => {
+      const img = tex(frameAt(a, el));
+      if (!img || opacity <= 0) return;
+      ctx.save();
+      ctx.globalAlpha = alpha * opacity;
+      const w = img.w * scale;
+      const h = img.h * scale;
+      ctx.drawImage(img.img, HIT_X - w / 2, BASE_HEIGHT / 2 - h / 2, w, h);
+      ctx.restore();
+    };
+    draw(anim, 1 - k);
+    if (strong) draw(strong, k);
   }
 
   hitTarget(f: TaikoFrame): void {
@@ -485,22 +497,27 @@ export class LegacyTaikoRenderer implements TaikoRenderer {
 
   /** When pippidon cheers: every 50th combo-affecting hit, and every cleared swell. */
   private prepareClears(ch: TaikoChart): void {
-    if (this.clearsFor === ch) return;
-    const judged: [number, boolean][] = [];
+    if (this.clearsFor === ch && this.clearsVersion === ch.version) return;
+    // [time, a cleared swell, a miss]
+    const judged: [number, boolean, boolean][] = [];
     for (let i = 0; i < ch.n; i++) {
       const k = ch.kind[i];
       if (k === ROLL) continue;
       if (k === SWELL) {
-        if (ch.swellHits(i, ch.judged[i]) >= ch.hits[i]) judged.push([ch.judged[i], true]);
-      } else judged.push([ch.time[i], false]);
+        if (ch.swellHits(i, ch.judged[i]) >= ch.hits[i]) judged.push([ch.judged[i], true, false]);
+      } else if (!Number.isNaN(ch.hitAt[i])) judged.push([ch.hitAt[i], false, false]);
+      else if (!Number.isNaN(ch.missAt[i])) judged.push([ch.missAt[i], false, true]);
     }
     judged.sort((a, b) => a[0] - b[0]);
     const out: number[] = [];
-    judged.forEach(([time, swell], k) => {
-      if (swell || (k + 1) % 50 === 0) out.push(time);
-    });
+    let combo = 0;
+    for (const [time, swell, miss] of judged) {
+      combo = miss ? 0 : combo + 1;
+      if (swell || (!miss && combo % 50 === 0)) out.push(time);
+    }
     this.clears = out;
     this.clearsFor = ch;
+    this.clearsVersion = ch.version;
   }
 }
 

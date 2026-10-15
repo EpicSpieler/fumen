@@ -1,7 +1,7 @@
-/* replay-panel.ts — replays beside the fullscreen playfield (osu!mania): who plays it (autoplay,
- * or one of lazer's scores on the difficulty that has a replay), and while a replay plays, how
- * it's going: the accuracy so far, the judgements so far, the latest hits on an error bar with
- * lazer's windows, and the misses — marked on the density graph, one click away each.
+/* replay-panel.ts — replays beside the fullscreen playfield (osu!mania, osu!taiko): who plays it
+ * (autoplay, or one of lazer's scores on the difficulty that has a replay), and while a replay
+ * plays, how it's going: the accuracy so far, the judgements so far, the latest hits on an error
+ * bar with lazer's windows, and the misses — marked on the density graph, one click away each.
  *
  * Logged in, the menu also finds the player's own scores on osu! (one request, when asked): their
  * replays come from osu! when picked, one at a time, and stay on this PC. Replays only, never
@@ -13,6 +13,7 @@
 import { api, asApiError } from "../lib/api";
 import { date, num, pct } from "../lib/format";
 import { maniaWindows, ManiaReplay, MISS, playedNotes, unreplayed } from "../lib/replay";
+import { TaikoReplay, taikoOd, taikoUnreplayed } from "../lib/taiko-replay";
 import { store } from "../lib/store";
 import type { ChartData, OnlineReplayEntry, ReplayEntry } from "../lib/types";
 import type { Mod } from "../lib/mods";
@@ -21,8 +22,12 @@ import { openMenu, toast, type MenuEntry } from "../ui/controls";
 import { icon } from "../ui/icons";
 import { fitCanvas } from "../ui/playfield";
 import { ManiaPlayfield } from "../ui/mania/playfield";
+import { TaikoPlayfield } from "../ui/taiko/playfield";
 
 const DRAWN: readonly string[] = ["EZ", "HR", "HD", "FI", "FL", "MR"];
+/** the rulesets it replays: osu!taiko, osu!mania */
+const TAIKO = 1;
+const MANIA = 3;
 const NAMES = ["Perfect", "Great", "Good", "Ok", "Meh", "Miss"];
 /** OsuColour.ForHitResult */
 const COLOURS = ["#99eeff", "#66ccff", "#b3d944", "#88b300", "#ffcc22", "#ed1121"];
@@ -47,7 +52,7 @@ export class ReplayPanel {
   private online: OnlineReplayEntry[] | null = null;
   private asking = false;
   private playing: Playing | null = null;
-  private replay: ManiaReplay | null = null;
+  private replay: ManiaReplay | TaikoReplay | null = null;
   private misses: number[] = [];
   /** last text per field, so frames only touch the DOM on changes */
   private shown = new Map<string, string>();
@@ -72,7 +77,7 @@ export class ReplayPanel {
     return `
       <div class="fs-replay" hidden>
         <div class="fs-replay-top">
-          <div class="fs-stat fs-acc" data-tip="Judged the way osu!lazer judges osu!mania now. Scores from before mid-2025 were judged with older hit windows, so they can come out a little different here."><span class="fs-k">Accuracy so far</span><b class="num" data-r="acc">–</b><span class="fs-s num" data-r="acc-sub"></span></div>
+          <div class="fs-stat fs-acc" data-tip="Judged the way osu!lazer judges it now. Scores from before mid-2025 were judged with older hit windows, so they can come out a little different here."><span class="fs-k">Accuracy so far</span><b class="num" data-r="acc">–</b><span class="fs-s num" data-r="acc-sub"></span></div>
           <div class="fs-counts num" data-r="counts"></div>
         </div>
         <div class="fs-errors-box">
@@ -100,7 +105,7 @@ export class ReplayPanel {
       if (mapId) void this.loadList(mapId);
     }
     this.data = d;
-    this.root.querySelector<HTMLElement>(".fs-replay-set")!.hidden = !(d && d.mode === 3 && d.keys > 0);
+    this.root.querySelector<HTMLElement>(".fs-replay-set")!.hidden = !(d && ((d.mode === MANIA && d.keys > 0) || (d.mode === TAIKO && d.taiko)));
     if (d && this.playing) this.apply();
     this.render();
   }
@@ -114,7 +119,7 @@ export class ReplayPanel {
     this.set("acc-sub", s.judged ? `${num(s.judged)} judged` : "nothing judged yet");
     this.set(
       "counts",
-      s.counts.map((n, i) => `<span style="--c:${COLOURS[i]}"><i>${NAMES[i]}</i><b>${num(n)}</b></span>`).join(""),
+      r.results.map((i) => `<span style="--c:${COLOURS[i]}"><i>${NAMES[i]}</i><b>${num(s.counts[i])}</b></span>`).join(""),
       true,
     );
     const before = this.misses.filter((m) => m <= t).length;
@@ -165,7 +170,7 @@ export class ReplayPanel {
         hint: e.date ? date(e.date) : undefined,
         checked: this.playing?.entry.id === e.id,
         radio: "replay",
-        disabled: unreplayed(e.mods).length > 0,
+        disabled: this.blocked(e.mods),
         action: () => void this.start(e),
       });
     }
@@ -188,11 +193,16 @@ export class ReplayPanel {
         hint: o.hasReplay ? (o.cached ? date(o.date) : `${date(o.date)} · download`) : "no replay on osu!",
         checked: this.playing?.entry.id === e.id,
         radio: "replay",
-        disabled: !o.hasReplay || unreplayed(o.mods).length > 0,
+        disabled: !o.hasReplay || this.blocked(o.mods),
         action: () => void this.start(e),
       });
     }
     openMenu(anchor, entries, { minWidth: 340 });
+  }
+
+  /** Whether a score's mods keep it from being replayed here. */
+  private blocked(mods: string[]): boolean {
+    return (this.data?.mode === TAIKO ? taikoUnreplayed(mods) : unreplayed(mods)).length > 0;
   }
 
   /** The player's scores on osu! for this difficulty, then the menu again. */
@@ -222,7 +232,7 @@ export class ReplayPanel {
         const o = this.online?.find((x) => x.id === e.scoreId);
         if (o) o.cached = true;
       }
-      if (r.mode !== 3) throw new Error("This replay isn't osu!mania.");
+      if (r.mode !== this.data?.mode) throw new Error("This replay is of another ruleset.");
       frames = r.frames;
     } catch (err) {
       toast(`Couldn't read the replay: ${asApiError(err).message}`, { kind: "danger", timeout: 5000 });
@@ -245,10 +255,17 @@ export class ReplayPanel {
     const p = this.playing;
     const field = this.field();
     const map = store.snap?.maps.find((m) => m.id === this.mapId);
-    if (!d || !p || !map || !(field instanceof ManiaPlayfield)) return;
-    const notes = playedNotes(d.notes, p.entry.mods);
-    this.replay = new ManiaReplay(notes, d.keys, p.frames, maniaWindows(map.od, p.entry.mods, p.entry.rate ?? 1));
-    field.setPlay(this.replay, notes);
+    if (!d || !p || !map) return;
+    if (field instanceof ManiaPlayfield) {
+      const notes = playedNotes(d.notes, p.entry.mods);
+      const replay = new ManiaReplay(notes, d.keys, p.frames, maniaWindows(map.od, p.entry.mods, p.entry.rate ?? 1));
+      field.setPlay(replay, notes);
+      this.replay = replay;
+    } else if (field instanceof TaikoPlayfield && d.taiko) {
+      const replay = new TaikoReplay(d.taiko, p.frames, taikoOd(map.od, p.entry.mods), p.entry.mods);
+      field.setPlay(replay);
+      this.replay = replay;
+    } else return;
     this.misses = this.replay.judgements.filter((j) => j.result === MISS).map((j) => j.time);
     this.shown.clear();
     this.renderMarks();
@@ -262,7 +279,7 @@ export class ReplayPanel {
     this.replay = null;
     this.misses = [];
     const field = this.field();
-    if (field instanceof ManiaPlayfield) field.setPlay(null);
+    if (field instanceof ManiaPlayfield || field instanceof TaikoPlayfield) field.setPlay(null);
     this.renderMarks();
     if (redraw) {
       this.render();
@@ -300,21 +317,21 @@ export class ReplayPanel {
     else node.textContent = text;
   }
 
-  /** The latest hits against lazer's windows (Perfect in the middle, Meh at the ends). */
-  private drawErrors(r: ManiaReplay, t: number): void {
+  /** The latest hits against lazer's windows (the best in the middle, the widest hit at the ends). */
+  private drawErrors(r: ManiaReplay | TaikoReplay, t: number): void {
     const c = this.root.querySelector<HTMLCanvasElement>(".fs-errors")!;
     const fit = fitCanvas(c);
     if (!fit) return;
     const { ctx, w, h } = fit;
-    const W = r.windows;
-    const edge = W[4];
+    const windows = r.barWindows();
+    const edge = windows[0][1];
     const mid = w / 2;
     const x = (off: number) => mid + (Math.max(-edge, Math.min(edge, off)) / edge) * (mid - 2);
     // the windows, widest first
-    for (let i = 4; i >= 0; i--) {
-      ctx.fillStyle = COLOURS[i];
+    for (const [result, window] of windows) {
+      ctx.fillStyle = COLOURS[result];
       ctx.globalAlpha = 0.22;
-      const half = (W[i] / edge) * (mid - 2);
+      const half = (window / edge) * (mid - 2);
       ctx.fillRect(mid - half, h / 2 - 2, half * 2, 4);
     }
     ctx.globalAlpha = 1;

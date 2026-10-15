@@ -1,6 +1,8 @@
 /* chart.ts — an osu!taiko chart for the playfield (built in src-tauri/src/taiko.rs the way lazer
- * builds it), with what lazer's autoplay does over it as a timeline: when each drum key is hit,
- * when each object is judged, how far each swell has got. The skins animate from it. */
+ * builds it), with what's played over it as a timeline — lazer's autoplay, or a replay judged by
+ * lib/taiko-replay: when each drum key is hit, when and how each object is judged, how far each
+ * swell has got. The skins animate from it. */
+import type { TaikoReplay } from "../../lib/taiko-replay";
 import type { ChartData } from "../../lib/types";
 
 export const CENTRE = 0;
@@ -14,6 +16,12 @@ export const RIGHT_CENTRE = 2;
 export const LEFT_RIM = 4;
 export const RIGHT_RIM = 8;
 export const KEYS = [LEFT_CENTRE, RIGHT_CENTRE, LEFT_RIM, RIGHT_RIM] as const;
+
+/** a note's result */
+export const GREAT = 0;
+export const OK = 1;
+export const MISSED = 2;
+export type HitResult = typeof GREAT | typeof OK | typeof MISSED;
 
 /** TaikoHitObject.DEFAULT_SIZE: a hit's size, of the playfield's height */
 export const DEFAULT_SIZE = 0.475;
@@ -76,14 +84,27 @@ export class TaikoChart {
   readonly barTime: Float64Array;
   readonly barMajor: Uint8Array;
   /** per key (KEYS order): press times */
-  readonly keyPresses: Float64Array[];
-  /** every press, sorted, with its object */
-  readonly pressTime: Float64Array;
-  readonly pressObject: Uint32Array;
+  keyPresses: Float64Array[] = [];
+  /** notes: when they were hit, NaN if they weren't */
+  hitAt: Float64Array = new Float64Array(0);
+  /** notes: when they were missed, NaN if they weren't */
+  missAt: Float64Array = new Float64Array(0);
+  /** notes: their result once judged (GREAT, OK, MISSED), -1 for the rest */
+  result: Int8Array = new Int8Array(0);
+  /** strong notes: when the second key landed, NaN if it didn't */
+  strongAt: Float64Array = new Float64Array(0);
+  /** drum roll ticks: when they were hit or missed (NaN if they weren't), and whether a rim key hit them */
+  tickAt: Float64Array = new Float64Array(0);
+  tickMissAt: Float64Array = new Float64Array(0);
+  tickRim: Uint8Array = new Uint8Array(0);
   /** swells: when they're cleared (or missed, at their end); NaN for others */
-  readonly judged: Float64Array;
-  /** hits (centre / rim) judged so far, by time: for combo-based things */
-  readonly hitTimes: Float64Array;
+  judged: Float64Array = new Float64Array(0);
+  /** hits (centre / rim) that kept the combo going, and misses that broke it, by time */
+  hitTimes: Float64Array = new Float64Array(0);
+  missTimes: Float64Array = new Float64Array(0);
+  /** goes up whenever what's played changes (renderers keep things worked out from it) */
+  version = 0;
+  private swellPresses = new Map<number, number[]>();
   /** the furthest any object scrolls into view ahead of its time, as a share of the time range */
   readonly maxAhead: number;
   private readonly beats: number[];
@@ -133,35 +154,8 @@ export class TaikoChart {
       this.barMajor[i / 2] = b[i + 1];
     }
 
-    const p = t.presses;
-    const keys: number[][] = [[], [], [], []];
-    const swellPresses = new Map<number, number[]>();
-    this.pressTime = new Float64Array(p.length / 3);
-    this.pressObject = new Uint32Array(p.length / 3);
-    for (let i = 0; i < p.length; i += 3) {
-      const time = p[i];
-      const k = p[i + 1];
-      const obj = p[i + 2];
-      this.pressTime[i / 3] = time;
-      this.pressObject[i / 3] = obj;
-      KEYS.forEach((key, j) => k & key && keys[j].push(time));
-      if (this.kind[obj] === SWELL) {
-        let list = swellPresses.get(obj);
-        if (!list) swellPresses.set(obj, (list = []));
-        list.push(time);
-      }
-    }
-    this.keyPresses = keys.map((k) => Float64Array.from(k));
-    this.swellPresses = swellPresses;
-    this.judged = new Float64Array(n).fill(NaN);
-    for (let i = 0; i < n; i++) {
-      if (this.kind[i] !== SWELL) continue;
-      const list = swellPresses.get(i) ?? [];
-      this.judged[i] = list.length >= this.hits[i] && list.length ? list[list.length - 1] : this.end[i];
-    }
-    const hitTimes: number[] = [];
-    for (let i = 0; i < n; i++) if (this.kind[i] <= RIM) hitTimes.push(this.time[i]);
-    this.hitTimes = Float64Array.from(hitTimes);
+    this.autoplay = t.presses;
+    this.setPlay(null);
 
     let ahead = 1;
     for (let i = 0; i < n; i++) ahead = Math.max(ahead, 1 / Math.max(1e-3, this.multiplier(this.time[i])));
@@ -170,7 +164,74 @@ export class TaikoChart {
     this.kiaiSections = d.kiai;
   }
 
-  private readonly swellPresses: Map<number, number[]>;
+  /** autoplay: [time, keys, object] */
+  private readonly autoplay: number[];
+
+  /** Plays a judged replay over the chart, or autoplay again (null). */
+  setPlay(r: TaikoReplay | null): void {
+    const n = this.n;
+    this.version++;
+    if (r) {
+      this.keyPresses = r.keyPresses;
+      this.hitAt = r.hitAt;
+      this.missAt = r.missAt;
+      // the replay's results are lazer's (Great 1, Ok 3, Miss 5)
+      this.result = Int8Array.from(r.result, (v) => (v < 0 ? -1 : v === 1 ? GREAT : v === 3 ? OK : MISSED));
+      this.strongAt = r.strongAt;
+      this.tickAt = r.tickAt;
+      this.tickMissAt = r.tickMissAt;
+      this.tickRim = r.tickRim;
+      this.swellPresses = new Map();
+      this.judged = new Float64Array(n).fill(NaN);
+      for (let i = 0; i < n; i++) {
+        if (this.kind[i] !== SWELL) continue;
+        this.swellPresses.set(i, r.swellPressTimes(i));
+        this.judged[i] = r.swellAt[i];
+      }
+    } else {
+      // autoplay hits everything on time, both keys on strong notes
+      const p = this.autoplay;
+      const keys: number[][] = [[], [], [], []];
+      this.swellPresses = new Map();
+      for (let i = 0; i < p.length; i += 3) {
+        const time = p[i];
+        const obj = p[i + 2];
+        KEYS.forEach((key, j) => p[i + 1] & key && keys[j].push(time));
+        if (this.kind[obj] === SWELL) {
+          let list = this.swellPresses.get(obj);
+          if (!list) this.swellPresses.set(obj, (list = []));
+          list.push(time);
+        }
+      }
+      this.keyPresses = keys.map((k) => Float64Array.from(k));
+      this.hitAt = new Float64Array(n).fill(NaN);
+      this.missAt = new Float64Array(n).fill(NaN);
+      this.result = new Int8Array(n).fill(-1);
+      this.strongAt = new Float64Array(n).fill(NaN);
+      this.judged = new Float64Array(n).fill(NaN);
+      for (let i = 0; i < n; i++) {
+        if (this.kind[i] <= RIM) {
+          this.hitAt[i] = this.time[i];
+          this.result[i] = GREAT;
+          if (this.strong[i]) this.strongAt[i] = this.time[i];
+        } else if (this.kind[i] === SWELL) {
+          const list = this.swellPresses.get(i) ?? [];
+          this.judged[i] = list.length >= this.hits[i] && list.length ? list[list.length - 1] : this.end[i];
+        }
+      }
+      this.tickAt = Float64Array.from(this.ticks);
+      this.tickMissAt = new Float64Array(this.ticks.length).fill(NaN);
+      this.tickRim = new Uint8Array(this.ticks.length);
+    }
+    const hits: number[] = [];
+    const misses: number[] = [];
+    for (let i = 0; i < n; i++) {
+      if (!Number.isNaN(this.hitAt[i])) hits.push(this.hitAt[i]);
+      else if (!Number.isNaN(this.missAt[i])) misses.push(this.missAt[i]);
+    }
+    this.hitTimes = Float64Array.from(hits).sort();
+    this.missTimes = Float64Array.from(misses).sort();
+  }
 
   /** The scroll multiplier in effect at a time (the first one before any). */
   multiplier(time: number): number {
@@ -221,8 +282,17 @@ export class TaikoChart {
     return { time: start + index * length, index, length, meter };
   }
 
-  /** Hits judged by `t` (lazer's combo counts hits only). */
+  /** The combo at `t`: hits since the last miss (lazer's combo counts notes only). */
   combo(t: number): number {
-    return upper(this.hitTimes, t);
+    const miss = upper(this.missTimes, t) - 1;
+    return upper(this.hitTimes, t) - (miss < 0 ? 0 : upper(this.hitTimes, this.missTimes[miss]));
+  }
+
+  /** Whether the latest note judged by `t` was a miss. */
+  missedLast(t: number): boolean {
+    const miss = upper(this.missTimes, t) - 1;
+    if (miss < 0) return false;
+    const hit = upper(this.hitTimes, t) - 1;
+    return hit < 0 || this.hitTimes[hit] <= this.missTimes[miss];
   }
 }

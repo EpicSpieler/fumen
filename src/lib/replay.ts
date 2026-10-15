@@ -88,6 +88,48 @@ export interface Judgement {
   tail: boolean;
 }
 
+/** The running counts and accuracy of a replay's judgements (sorted by time). */
+export class Tally {
+  private readonly times: Float64Array;
+  private readonly counts: Uint32Array;
+  private readonly scores: Float64Array;
+
+  /** `score`: each result's base score, `max` the best one's */
+  constructor(
+    judgements: readonly Judgement[],
+    private readonly score: readonly number[],
+    private readonly max: number,
+  ) {
+    this.times = Float64Array.from(judgements.map((j) => j.time));
+    this.counts = new Uint32Array((judgements.length + 1) * 6);
+    this.scores = new Float64Array(judgements.length + 1);
+    judgements.forEach((j, i) => {
+      for (let r = 0; r < 6; r++) this.counts[(i + 1) * 6 + r] = this.counts[i * 6 + r];
+      this.counts[(i + 1) * 6 + j.result]++;
+      this.scores[i + 1] = this.scores[i] + this.score[j.result];
+    });
+  }
+
+  /** How many judgements happened by `t`. */
+  upTo(t: number): number {
+    let lo = 0;
+    let hi = this.times.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (this.times[mid] <= t) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo;
+  }
+
+  /** The counts per result, the accuracy (0–1) and how many were judged, by `t`. */
+  stats(t: number): { counts: number[]; accuracy: number; judged: number } {
+    const i = this.upTo(t);
+    const counts = Array.from(this.counts.subarray(i * 6, i * 6 + 6));
+    return { counts, accuracy: i ? this.scores[i] / (i * this.max) : 1, judged: i };
+  }
+}
+
 /**
  * A mania replay, judged: the timeline the playfield draws (keys, hits, what's gone) and the
  * judgements. `notes` is the chart's [time, column, length] per object; `frames` the replay's
@@ -101,14 +143,13 @@ export class ManiaReplay {
   readonly allHits: Float64Array;
   /** every judgement, by time */
   readonly judgements: Judgement[];
-  private readonly times: Float64Array;
+  /** the results it judges with, best first */
+  readonly results: readonly Result[] = [0, 1, 2, 3, 4, 5];
+  private readonly tally: Tally;
   /** per object: when it's gone (hit), Infinity when it scrolls on (missed) */
   private readonly goneAt: Float64Array;
   /** per object: [from, to] while held, flat */
   private readonly holding: Map<number, number[]>;
-  /** running counts per result, and score, after each judgement */
-  private readonly counts: Uint32Array;
-  private readonly scores: Float64Array;
 
   constructor(
     notes: ArrayLike<number>,
@@ -229,28 +270,14 @@ export class ManiaReplay {
     this.hits = hits.map((h) => Float64Array.from(h));
     this.allHits = Float64Array.from(judgements.filter((j) => j.result !== MISS).map((j) => j.time));
     this.judgements = judgements;
-    this.times = Float64Array.from(judgements.map((j) => j.time));
     this.goneAt = goneAt;
     this.holding = holding;
-    this.counts = new Uint32Array((judgements.length + 1) * 6);
-    this.scores = new Float64Array(judgements.length + 1);
-    judgements.forEach((j, i) => {
-      for (let r = 0; r < 6; r++) this.counts[(i + 1) * 6 + r] = this.counts[i * 6 + r];
-      this.counts[(i + 1) * 6 + j.result]++;
-      this.scores[i + 1] = this.scores[i] + SCORE[j.result];
-    });
+    this.tally = new Tally(judgements, SCORE, SCORE[0]);
   }
 
-  /** How many judgements happened by `t`. */
-  private upTo(t: number): number {
-    let lo = 0;
-    let hi = this.times.length;
-    while (lo < hi) {
-      const mid = (lo + hi) >> 1;
-      if (this.times[mid] <= t) lo = mid + 1;
-      else hi = mid;
-    }
-    return lo;
+  /** The windows on the error bar, widest first: [result, window]. */
+  barWindows(): [Result, number][] {
+    return ([4, 3, 2, 1, 0] as Result[]).map((r) => [r, this.windows[r]]);
   }
 
   /** The column's key at `t`: down or not, and when it last went down / up. */
@@ -277,7 +304,7 @@ export class ManiaReplay {
 
   /** The latest judgement at or before `t`. */
   judgement(t: number): { time: number; result: Result } | null {
-    const i = this.upTo(t);
+    const i = this.tally.upTo(t);
     return i > 0 ? this.judgements[i - 1] : null;
   }
 
@@ -296,8 +323,6 @@ export class ManiaReplay {
 
   /** The counts per result, the accuracy (0–1) and how many were judged, by `t`. */
   stats(t: number): { counts: number[]; accuracy: number; judged: number } {
-    const i = this.upTo(t);
-    const counts = Array.from(this.counts.subarray(i * 6, i * 6 + 6));
-    return { counts, accuracy: i ? this.scores[i] / (i * 305) : 1, judged: i };
+    return this.tally.stats(t);
   }
 }
