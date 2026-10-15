@@ -47,8 +47,11 @@ fn route(app: &AppHandle, req: &Request<Vec<u8>>) -> Result<Response<Vec<u8>>, S
             if !source.is_file() {
                 return Err(StatusCode::NOT_FOUND);
             }
-            let thumb = thumbs::get_or_create(&state.thumbs_dir(), &source, hash, width)
-                .map_err(|_| StatusCode::UNPROCESSABLE_ENTITY)?;
+            // dropped for newer requests: 503, and the card asks again if it's still shown
+            let thumb = thumbs::get_or_create(&state.thumbs_dir(), &source, hash, width).map_err(|e| match e {
+                crate::error::Error::Known("busy", _) => StatusCode::SERVICE_UNAVAILABLE,
+                _ => StatusCode::UNPROCESSABLE_ENTITY,
+            })?;
             serve_file(&thumb, req)
         }
         _ => Err(StatusCode::NOT_FOUND),
