@@ -11,6 +11,7 @@ import { store } from "../lib/store";
 import { player } from "../player";
 import { openMenu, toast, uiConfirm, uiPrompt, type MenuEntry } from "../ui/controls";
 import type { PatternName } from "../lib/types";
+import { openDeleteWindow } from "./delete-window";
 import { practiceChart } from "./fullscreen";
 
 export function openSet(setIdx: number, mapIdx?: number, opts: { similar?: boolean } = {}): void {
@@ -75,6 +76,14 @@ export function setMenu(
     );
   } else {
     entries.push({ label: "Not submitted to osu!", icon: "external", disabled: true });
+  }
+  if (set.from !== "stable" && !set.protected) {
+    entries.push("sep", {
+      label: "Delete in osu!lazer…",
+      icon: "trash",
+      danger: true,
+      action: () => openDeleteWindow({ what: "sets", sets: [setIdx] }),
+    });
   }
   if (opts.onSearch) {
     const search = opts.onSearch;

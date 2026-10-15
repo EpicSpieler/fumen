@@ -6,7 +6,8 @@
 
 .care-head { padding: 22px 0 14px; }
 .care-head-text { min-width: 0; }
-.care-refresh { flex: none; }
+.care-head-tools { flex: none; display: flex; align-items: center; gap: 6px; }
+.care-clean .ic:last-child { width: 14px; height: 14px; margin-right: -4px; color: var(--t3); }
 
 .care-loading { display: grid; gap: 14px; padding-top: 6px; }
 .care-progress { color: var(--t3); }
@@ -45,6 +46,23 @@
 .care-leg-name { color: var(--t2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .care-leg > b { color: var(--t1); font-weight: 600; }
 .care-leg-sub { grid-column: 2 / 4; font-size: var(--fs-11); color: var(--t3); }
+/* a ruleset's or a status's sets, deleted at once: the button shows on hover */
+.care-leg.can-delete { position: relative; padding-right: 30px; }
+.care-leg-del {
+  position: absolute;
+  top: 50%;
+  right: -4px;
+  width: 28px;
+  height: 28px;
+  transform: translateY(-50%);
+  color: var(--t3);
+  opacity: 0;
+  transition: opacity .12s var(--ease-std), color .12s var(--ease-std), background .12s var(--ease-std);
+}
+.care-leg-del .ic { width: 15px; height: 15px; }
+.care-leg.can-delete:hover .care-leg-del, .care-leg-del:focus-visible { opacity: 1; }
+.care-leg-del:hover { color: var(--danger); background: var(--danger-soft); }
+@media (hover: none) { .care-leg-del { opacity: 1; } }
 
 /* ---------- Lists ---------- */
 .care-lists { margin-top: 26px; }
@@ -138,6 +156,10 @@
 .broken-line b { font-weight: 600; color: var(--warning); }
 .broken-name { font-weight: 500; color: var(--t1); }
 
+@container (max-width: 560px) {
+  .care-head { flex-wrap: wrap; align-items: flex-start; }
+  .care-head-text { flex: 1 1 100%; }
+}
 @container (max-width: 680px) {
   .care-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

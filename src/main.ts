@@ -13,6 +13,7 @@ import "./styles/welcome.css";
 import "./styles/import.css";
 import "./styles/history.css";
 import "./styles/care.css";
+import "./styles/delete.css";
 import "./styles/skills.css";
 import "./styles/browse.css";
 
