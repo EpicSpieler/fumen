@@ -77,6 +77,10 @@ database first (see [Adding beatmaps](#adding-beatmaps)).
   osu! in all of them too (circles, sliders snaking in and out, spinners, follow points, the cursor
   and its trail; slider slides and spinner spins as looping sounds), and osu!catch (fruits,
   droplets and bananas, the catcher with its plate, dash and hyperdash trails, hit explosions)
+- Replays in the playfield (osu!mania): "Played by" picks one of lazer's scores on the difficulty
+  that has a replay instead of autoplay. Judged the way lazer judges it now (hit windows, holds,
+  Hold Off), with every judgement on the playfield, the accuracy and counts so far, an error bar
+  with lazer's windows, and the misses on the density graph, a click away each
 - Practice mode beside the playfield: drag across the density graph to loop a part (on the beat),
   or loop the hardest part; Speed up starts it 0.20× slower and adds 0.05× each time round, a
   metronome ticks on the timing points. The part is remembered per difficulty. Right-click any

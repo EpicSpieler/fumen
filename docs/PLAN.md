@@ -307,13 +307,24 @@ sections below is the order of the work.
 
 ## v0.6 — practice
 
-- [ ] Replays in the playfield instead of autoplay: lazer's own replays (the score's `.osr` in
-      lazer's files, via the sidecar export), else the player's global score on that difficulty
-      from osu! (API v2 `/beatmaps/{id}/scores/users/{user}`, then the replay download — only when
-      asked, one at a time, cached; replays, never beatmap files). `.osr` read in Rust (LZMA frames),
-      judged per ruleset with lazer's hit windows (mania, osu! hits / slider ends, taiko, catch
-      positions); hit errors and misses on the timeline, jump to each; accuracy so far beside the
-      playfield
+- [x] osu!mania replays from lazer in the playfield — 0.5.2. The sidecar exports each score's
+      replay file (its hash in lazer's files/; `scores.replay`, migration 14). `src-tauri/src/replay.rs`
+      lists a difficulty's scores with one and reads the `.osr` (header, LZMA frames via lzma-rs,
+      frames as lazer's LegacyScoreDecoder reads them). `src/lib/replay.ts` judges it like lazer:
+      ManiaHitWindows (OD range or Classic, × rate, ÷ 1.4 with HR), notes in order per column,
+      holds by DrawableHoldNote (head, hold, tail by release ÷ 1.5, Meh cap after a miss or
+      break, passive misses), Hold Off; Random / Invert / key mods aren't replayed. Checked against
+      675 of the user's replays: scores since lazer's 2025 window change come out at lazer's counts
+      (exactly or within a judgement or two of rounding), older ones were judged with older windows.
+      The playfield takes a `ManiaPlay` (autoplay or the replay): keys, explosions, what's gone,
+      what's held, and the judgement (all six results, argon / triangles text, legacy hit0–hit300g).
+      `src/views/replay-panel.ts`: "Played by" picks one (its rate and drawn mods with it); the
+      accuracy and counts so far, an error bar with lazer's windows, misses on the density graph
+      and a jump to each
+- [ ] Replays for osu!, osu!taiko and osu!catch (judged per ruleset: osu! hits / slider ends,
+      taiko, catch positions), and the player's global score when lazer has no replay (API v2
+      `/beatmaps/{id}/scores/users/{user}`, then the replay download — only when asked, one at a
+      time, cached; replays, never beatmap files)
 - [x] Practice mode — 0.4.17. `src/views/practice.ts` beside the fullscreen playfield: a drag on
       the density graph picks the part (snapped to beats; a click still seeks), "Hardest part"
       takes the densest 16 s from a bar's start (`hardest` in lib/practice.ts; with a pattern, its
