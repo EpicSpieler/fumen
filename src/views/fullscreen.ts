@@ -40,6 +40,8 @@ import { AccentColors, drawDensity, fitCanvas } from "../ui/playfield";
 import { rateClick, rateControlHtml, starsAtRate, syncRateControl } from "../ui/rate";
 import type { PatternName } from "../lib/types";
 import { PracticePanel } from "./practice";
+import { CORE_PATTERNS } from "../lib/dan";
+import type { CorePattern } from "../lib/types";
 import { ReplayPanel } from "./replay-panel";
 
 export type FullscreenMode = "visual" | "field";
@@ -751,10 +753,20 @@ class Fullscreen {
     const nps = (lowerBound(n, t + half) - lowerBound(n, t - half)) / 3;
     this.set("nps", nps.toFixed(0));
     this.set("peak", `peak ${(a.npsPeak * r).toFixed(1)}`);
-    const sec = Math.floor((t - a.start) / 1000);
-    const label = t < a.start ? "Intro" : t > a.end ? "Outro" : (a.windows?.[sec] ? PATTERNS[a.windows[sec]!].label : "Light");
+    // ManiaMapAnalyser's pattern of this second (its report names the chart the same way)
+    const rep = d.report;
+    let win: string | null = null;
+    if (rep?.seconds && rep.labels) {
+      const i = rep.seconds[Math.floor((t - (rep.start ?? a.start)) / 1000)] ?? -1;
+      const name = i >= 0 ? rep.labels[i] : null;
+      win = name ? (CORE_PATTERNS[name as CorePattern]?.label ?? name) : null;
+    } else {
+      const sec = Math.floor((t - a.start) / 1000);
+      win = a.windows?.[sec] ? PATTERNS[a.windows[sec]!].label : null;
+    }
+    const label = t < a.start ? "Intro" : t > a.end ? "Outro" : (win ?? "Light");
     this.set("pattern", label);
-    this.set("pattern-sub", t < a.start || t > a.end ? "no notes" : a.windows?.[sec] ? "pattern" : "not much going on");
+    this.set("pattern-sub", t < a.start || t > a.end ? "no notes" : win ? "ManiaMapAnalyser" : "not much going on");
     const beat = bpmAt(d.beats, t) * r;
     this.set("bpm", beat ? bpm(beat) : "–");
     this.set("bpm-sub", r === 1 ? "" : `${bpm(beat / r)} × ${r.toFixed(2)}`);

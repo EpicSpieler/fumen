@@ -698,8 +698,19 @@ export class LibraryView {
     this.body.addEventListener(
       "error",
       (e) => {
-        const img = e.target as HTMLElement;
-        if (img.tagName === "IMG") img.parentElement?.classList.add("img-missing");
+        const img = e.target as HTMLImageElement;
+        if (img.tagName !== "IMG") return;
+        // a thumbnail dropped for newer ones (scrolled past while it waited): ask again if the
+        // card is still here
+        const tries = Number(img.dataset.retry ?? 0);
+        if (img.src.includes("/thumb/") && tries < 3) {
+          img.dataset.retry = String(tries + 1);
+          setTimeout(() => {
+            if (img.isConnected) img.src = `${img.src.replace(/\?.*$/, "")}?r=${tries + 1}`;
+          }, 300 * (tries + 1));
+          return;
+        }
+        img.parentElement?.classList.add("img-missing");
       },
       true,
     );
