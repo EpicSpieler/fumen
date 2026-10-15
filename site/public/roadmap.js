@@ -75,7 +75,7 @@ const VERSIONS = [
     items: [
       [0, "<b>Replays in the playfield:</b> lazer's own, or your score's replay from osu! when lazer doesn't have one"],
       [0, "Hit errors and misses on the timeline, accuracy as it goes"],
-      [0, "<b>Practice mode:</b> loop a section, a little faster every time, with a metronome"],
+      [1, "<b>Practice mode:</b> loop a section, a little faster every time, with a metronome"],
       [0, "Chart numbers for osu!, osu!taiko and osu!catch"],
     ],
     explain: [
