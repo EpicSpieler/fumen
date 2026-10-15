@@ -335,6 +335,29 @@ pub fn api_get(ep: &Endpoints, access: &str, path: &str) -> Result<serde_json::V
     serde_json::from_str(&text).map_err(|e| Error::known("osu-unreachable", format!("osu!'s answer wasn't readable ({e}).")))
 }
 
+/// A file from osu!'s API (a replay), as bytes; the same answers as `api_get`.
+pub fn api_get_bytes(ep: &Endpoints, access: &str, path: &str) -> Result<Vec<u8>> {
+    let mut res = agent()
+        .get(&format!("{}/api/v2/{path}", ep.osu))
+        .header("Authorization", &format!("Bearer {access}"))
+        .header("x-api-version", API_VERSION)
+        .call()
+        .map_err(|e| unreachable("osu-unreachable", "osu!", &ep.osu, &e))?;
+    match res.status().as_u16() {
+        200 => {}
+        401 => return Err(Error::known("osu-logged-out", "Your osu! login has run out. Log in again.")),
+        403 => return Err(Error::known("osu-forbidden", "osu! doesn't let Fumen download this replay.")),
+        404 => return Err(Error::known("osu-not-found", "osu! doesn't have this replay.")),
+        429 => return Err(Error::known("osu-busy", "osu! asked Fumen to slow down. Try again in a minute.")),
+        s => return Err(Error::known("osu-unreachable", format!("osu! said {s}."))),
+    }
+    res.body_mut()
+        .with_config()
+        .limit(32 * 1024 * 1024)
+        .read_to_vec()
+        .map_err(|e| Error::known("osu-unreachable", format!("osu! didn't answer fully ({e}).")))
+}
+
 fn fetch_account(ep: &Endpoints, access: &str) -> Result<Account> {
     let me: Me = serde_json::from_value(api_get(ep, access, "me")?)
         .map_err(|e| Error::known("osu-unreachable", format!("osu!'s answer wasn't readable ({e}).")))?;

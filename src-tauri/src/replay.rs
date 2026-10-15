@@ -58,6 +58,102 @@ pub fn list(conn: &Connection, map_id: &str) -> Result<Vec<ReplayEntry>> {
     Ok(rows.collect::<rusqlite::Result<_>>()?)
 }
 
+/// One of the player's scores on osu! for a library difficulty (`online_list`).
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct OnlineEntry {
+    /// osu!'s score id
+    pub id: i64,
+    pub user: Option<String>,
+    pub date: i64,
+    pub accuracy: f64,
+    pub score: i64,
+    pub rank: i64,
+    pub combo: i64,
+    pub mods: Vec<String>,
+    pub rate: Option<f64>,
+    /// osu! keeps a replay of it
+    pub has_replay: bool,
+    /// it's downloaded already
+    pub cached: bool,
+}
+
+fn cache_path(data_dir: &Path, score_id: i64) -> std::path::PathBuf {
+    data_dir.join("replays").join(format!("{score_id}.osr"))
+}
+
+/// The logged-in player's scores on osu! for a library difficulty, best first, without the ones
+/// lazer has a replay of here. One request to osu!'s API, made when the player asks.
+/// The library is only held around the request, never during it.
+pub fn online_list<'a>(
+    db: impl Fn() -> std::sync::MutexGuard<'a, Connection>,
+    data_dir: &Path,
+    ep: &crate::osu_auth::Endpoints,
+    map_id: &str,
+) -> Result<Vec<OnlineEntry>> {
+    let (beatmap, mode): (Option<i64>, Option<i64>) = db()
+        .query_row("SELECT online_id, ruleset_id FROM maps WHERE id = ?1", [map_id], |r| Ok((r.get(0)?, r.get(1)?)))
+        .optional()?
+        .unwrap_or((None, None));
+    let beatmap = beatmap.filter(|&b| b > 0).ok_or_else(|| Error::known("osu-not-found", "This difficulty isn't on osu!."))?;
+    let name = mode.and_then(|m| usize::try_from(m).ok()).and_then(|m| crate::osu_scores::RULESETS.get(m)).copied().unwrap_or("mania");
+    let account = crate::osu_auth::account(data_dir).ok_or_else(|| Error::known("osu-logged-out", "Log in with osu! in Settings first."))?;
+    let v = crate::osu_auth::with_token(data_dir, ep, |token| {
+        match crate::osu_auth::api_get(ep, token, &format!("beatmaps/{beatmap}/scores/users/{}/all?ruleset={name}", account.id)) {
+            Err(e) if e.code() == "osu-not-found" => Ok(serde_json::json!({ "scores": [] })),
+            r => r,
+        }
+    })?;
+    // lazer's own replays of these scores are listed already
+    let conn = db();
+    let mut here = conn.prepare("SELECT 1 FROM scores WHERE online_id = ?1 AND replay IS NOT NULL")?;
+    let mut out = Vec::new();
+    for s in v["scores"].as_array().map(Vec::as_slice).unwrap_or_default() {
+        let Some(id) = s["id"].as_i64() else { continue };
+        if here.exists([id])? {
+            continue;
+        }
+        let (mods, rate) = crate::osu_scores::mods_of(&s["mods"].to_string());
+        out.push(OnlineEntry {
+            id,
+            user: Some(account.username.clone()),
+            date: s["ended_at"].as_str().and_then(crate::osu_scores::parse_iso).unwrap_or(0),
+            accuracy: s["accuracy"].as_f64().unwrap_or(0.0),
+            score: s["total_score"].as_i64().unwrap_or(0),
+            rank: -1,
+            combo: s["max_combo"].as_i64().unwrap_or(0),
+            mods,
+            rate,
+            has_replay: s["has_replay"].as_bool().or_else(|| s["replay"].as_bool()).unwrap_or(false),
+            cached: cache_path(data_dir, id).is_file(),
+        });
+    }
+    out.sort_by(|a, b| b.score.cmp(&a.score));
+    Ok(out)
+}
+
+/// One download at a time.
+static DOWNLOADING: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// A score's replay from osu! (downloaded once, then read from Fumen's cache). Replays only:
+/// never beatmap files.
+pub fn online_load(data_dir: &Path, ep: &crate::osu_auth::Endpoints, score_id: i64) -> Result<Replay> {
+    let path = cache_path(data_dir, score_id);
+    if let Ok(bytes) = std::fs::read(&path) {
+        if let Ok(r) = parse(&bytes) {
+            return Ok(r);
+        }
+    }
+    let _one = DOWNLOADING.lock().unwrap_or_else(|e| e.into_inner());
+    let bytes = crate::osu_auth::with_token(data_dir, ep, |token| crate::osu_auth::api_get_bytes(ep, token, &format!("scores/{score_id}/download")))?;
+    let replay = parse(&bytes)?;
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    std::fs::write(&path, &bytes)?;
+    Ok(replay)
+}
+
 #[derive(Serialize, Debug, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Replay {
