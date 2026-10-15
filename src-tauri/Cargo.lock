@@ -1106,7 +1106,7 @@ dependencies = [
 
 [[package]]
 name = "fumen"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "flate2",
  "getrandom 0.3.4",
