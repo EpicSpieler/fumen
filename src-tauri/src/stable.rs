@@ -1,5 +1,6 @@
 //! osu!stable as a source: its `osu!.db` (every difficulty with its metadata), the files in its
-//! Songs folder and its `collection.db`. Read only — Fumen never writes stable's files.
+//! Songs folder, its `collection.db` and its `scores.db` (the plays on this computer, into the
+//! history as lazer would have them). Read only — Fumen never writes stable's files.
 //!
 //! stable's sets go into the same tables as lazer's (`sets.source = 'stable'`). lazer keeps files
 //! by content hash; stable keeps them by name, so each file Fumen needs (charts, audio,
@@ -113,6 +114,155 @@ impl<'a> Reader<'a> {
 fn ticks_ms(ticks: i64) -> Option<i64> {
     const UNIX_TICKS: i64 = 621_355_968_000_000_000;
     (ticks > UNIX_TICKS).then(|| (ticks - UNIX_TICKS) / 10_000)
+}
+
+// ── scores.db ───────────────────────────────────────────────────────────
+
+/// From this version on, a score's online id is 8 bytes (4 before).
+const LONG_SCORE_ID: i32 = 20140721;
+
+/// One play in stable's scores.db (stable keeps passes only).
+#[derive(Debug, Clone, PartialEq)]
+pub struct DbScore {
+    pub mode: u8,
+    pub md5: String,
+    pub player: String,
+    pub replay_md5: String,
+    /// 300, 100, 50, geki, katu, miss
+    pub hits: [u16; 6],
+    pub score: i32,
+    pub combo: u16,
+    /// stable's mod bits
+    pub mods: i32,
+    /// Unix ms
+    pub date: Option<i64>,
+    pub online_id: i64,
+}
+
+pub fn read_scores_db(b: &[u8]) -> Result<Vec<DbScore>> {
+    let mut r = Reader::new(b, "scores.db");
+    let _version = r.i32()?;
+    let maps = r.count(2)?;
+    let mut out = Vec::new();
+    for _ in 0..maps {
+        let _md5 = r.string()?;
+        for _ in 0..r.count(40)? {
+            let mode = r.u8()?;
+            let version = r.i32()?;
+            let md5 = r.string()?;
+            let player = r.string()?;
+            let replay_md5 = r.string()?;
+            let mut hits = [0u16; 6];
+            for h in &mut hits {
+                *h = r.u16()?;
+            }
+            let score = r.i32()?;
+            let combo = r.u16()?;
+            let _perfect = r.bool()?;
+            let mods = r.i32()?;
+            let _life = r.string()?;
+            let date = ticks_ms(r.i64()?);
+            let _replay_size = r.i32()?;
+            let online_id = if version >= LONG_SCORE_ID { r.i64()? } else { r.i32()? as i64 };
+            // target practice: how much of the targets were hit
+            if mods & (1 << 23) != 0 {
+                r.f64()?;
+            }
+            out.push(DbScore { mode, md5, player, replay_md5, hits, score, combo, mods, date, online_id });
+        }
+    }
+    Ok(out)
+}
+
+/// stable's mod bits as lazer names them (NC and PF stand alone, without DT and SD).
+const MOD_BITS: [(i32, &str); 31] = [
+    (1, "NF"), (2, "EZ"), (4, "TD"), (8, "HD"), (16, "HR"), (32, "SD"), (64, "DT"), (128, "RX"), (256, "HT"),
+    (512, "NC"), (1024, "FL"), (2048, "AT"), (4096, "SO"), (8192, "AP"), (16384, "PF"), (1 << 15, "4K"),
+    (1 << 16, "5K"), (1 << 17, "6K"), (1 << 18, "7K"), (1 << 19, "8K"), (1 << 20, "FI"), (1 << 21, "RD"),
+    (1 << 22, "CN"), (1 << 23, "TP"), (1 << 24, "9K"), (1 << 25, "DS"), (1 << 26, "1K"), (1 << 27, "3K"),
+    (1 << 28, "2K"), (1 << 29, "SV2"), (1 << 30, "MR"),
+];
+
+impl DbScore {
+    /// Fumen's id for it (lazer's are GUIDs: never the same)
+    fn id(&self) -> String {
+        if self.replay_md5.is_empty() {
+            format!("st-{}-{}", self.md5, self.date.unwrap_or(0))
+        } else {
+            format!("st-{}", self.replay_md5)
+        }
+    }
+
+    /// Accuracy (0–1) the way stable works it out for the ruleset.
+    pub fn accuracy(&self) -> f64 {
+        let [n300, n100, n50, geki, katu, miss] = self.hits.map(f64::from);
+        let ratio = |hit: f64, all: f64| if all > 0.0 { hit / all } else { 1.0 };
+        match self.mode {
+            1 => ratio(n300 + 0.5 * n100, n300 + n100 + miss),
+            2 => ratio(n300 + n100 + n50, n300 + n100 + n50 + katu + miss),
+            3 => ratio(300.0 * (n300 + geki) + 200.0 * katu + 100.0 * n100 + 50.0 * n50, 300.0 * (n300 + geki + katu + n100 + n50 + miss)),
+            _ => ratio(300.0 * n300 + 100.0 * n100 + 50.0 * n50, 300.0 * (n300 + n100 + n50 + miss)),
+        }
+    }
+
+    /// stable's grade, as lazer's ScoreRank (0 D … 4 S, 5 S silver, 6 SS, 7 SS silver).
+    pub fn rank(&self) -> i64 {
+        let acc = self.accuracy();
+        let [n300, n100, n50, _, _, miss] = self.hits.map(f64::from);
+        let by_acc = |s: f64, a: f64, b: f64, c: f64| if acc >= 1.0 { 6 } else if acc > s { 4 } else if acc > a { 3 } else if acc > b { 2 } else if acc > c { 1 } else { 0 };
+        let grade = match self.mode {
+            2 => by_acc(0.98, 0.94, 0.90, 0.85),
+            3 => by_acc(0.95, 0.90, 0.80, 0.70),
+            _ => {
+                let all = n300 + n100 + n50 + miss;
+                let (r300, r50) = if all > 0.0 { (n300 / all, n50 / all) } else { (1.0, 0.0) };
+                if r300 >= 1.0 {
+                    6
+                } else if r300 > 0.9 && r50 <= 0.01 && miss == 0.0 {
+                    4
+                } else if (r300 > 0.8 && miss == 0.0) || r300 > 0.9 {
+                    3
+                } else if (r300 > 0.7 && miss == 0.0) || r300 > 0.8 {
+                    2
+                } else if r300 > 0.6 {
+                    1
+                } else {
+                    0
+                }
+            }
+        };
+        let silver = self.mods & (8 | 1024) != 0 || (self.mode == 3 && self.mods & (1 << 20) != 0);
+        if silver && (grade == 4 || grade == 6) { grade + 1 } else { grade }
+    }
+
+    /// The judgement counts as lazer keeps them for the ruleset (lazer's legacy score import).
+    pub fn statistics(&self) -> serde_json::Value {
+        let [n300, n100, n50, geki, katu, miss] = self.hits;
+        let pairs: Vec<(&str, u16)> = match self.mode {
+            1 => vec![("great", n300), ("ok", n100), ("miss", miss)],
+            2 => vec![("great", n300), ("large_tick_hit", n100), ("small_tick_hit", n50), ("small_tick_miss", katu), ("miss", miss)],
+            3 => vec![("perfect", geki), ("great", n300), ("good", katu), ("ok", n100), ("meh", n50), ("miss", miss)],
+            _ => vec![("great", n300), ("ok", n100), ("meh", n50), ("miss", miss)],
+        };
+        serde_json::Value::Object(pairs.into_iter().filter(|(_, n)| *n > 0).map(|(k, n)| (k.to_string(), n.into())).collect())
+    }
+
+    /// The mods as lazer's JSON; like lazer's import of stable's scores, with Classic.
+    pub fn mods_json(&self) -> serde_json::Value {
+        let m = self.mods;
+        let mut list: Vec<serde_json::Value> = MOD_BITS
+            .iter()
+            .filter(|(bit, a)| m & bit != 0 && !(*a == "DT" && m & 512 != 0) && !(*a == "SD" && m & 16384 != 0))
+            .map(|(_, a)| serde_json::json!({ "acronym": a }))
+            .collect();
+        list.push(serde_json::json!({ "acronym": "CL" }));
+        serde_json::Value::Array(list)
+    }
+}
+
+/// What tells a changed scores.db: its size and modification time ("" without one).
+fn scores_db_stamp(install: &StableInstall) -> String {
+    std::fs::metadata(Path::new(&install.path).join("scores.db")).map_or(String::new(), |m| format!("{}:{}", m.len(), modified_ns(&m)))
 }
 
 /// One difficulty in osu!.db.
@@ -464,6 +614,8 @@ pub struct StableCounts {
     pub sets: usize,
     pub maps: usize,
     pub collections: usize,
+    #[serde(default)]
+    pub scores: usize,
 }
 
 /// Replaces the cached stable library with what's in `install` now, atomically. `progress`
@@ -518,13 +670,15 @@ pub fn import(conn: &mut Connection, install: &StableInstall, progress: impl Fn(
     });
 
     let collections = std::fs::read(dir.join("collection.db")).ok().map(|b| read_collection_db(&b)).transpose()?.unwrap_or_default();
+    let scores = std::fs::read(dir.join("scores.db")).ok().map(|b| read_scores_db(&b)).transpose()?.unwrap_or_default();
 
     let mut counts = StableCounts::default();
     let tx = conn.transaction()?;
     tx.execute_batch(
         "DELETE FROM sets WHERE source = 'stable';
          DELETE FROM lazer_collections WHERE source = 'stable';
-         DELETE FROM stable_files;",
+         DELETE FROM stable_files;
+         DELETE FROM scores WHERE id LIKE 'st-%';",
     )?;
     {
         let mut ins_set = tx.prepare(
@@ -623,6 +777,29 @@ pub fn import(conn: &mut Connection, install: &StableInstall, progress: impl Fn(
             }
         }
 
+        // the plays, as lazer keeps its own (copies lazer imported itself are left out when read)
+        let mut ins_score = tx.prepare(
+            "INSERT OR IGNORE INTO scores (id, map_md5, ruleset, total_score, accuracy, max_combo, rank, date, mods,
+                statistics, online_id, legacy, user)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, 1, ?12)",
+        )?;
+        for s in scores.iter().filter(|s| !s.md5.is_empty() && s.mode < 4) {
+            counts.scores += ins_score.execute(params![
+                s.id(),
+                s.md5,
+                RULESETS[s.mode as usize],
+                s.score as i64,
+                s.accuracy(),
+                s.combo as i64,
+                s.rank(),
+                s.date,
+                s.mods_json().to_string(),
+                s.statistics().to_string(),
+                Some(s.online_id).filter(|v| *v > 0),
+                Some(s.player.as_str()).filter(|p| !p.is_empty()),
+            ])?;
+        }
+
         let mut ins_col = tx.prepare("INSERT INTO lazer_collections (id, name, modified, position, source) VALUES (?1, ?2, NULL, ?3, 'stable')")?;
         let mut ins_item = tx.prepare("INSERT INTO lazer_collection_items (collection_id, md5, position) VALUES (?1, ?2, ?3)")?;
         for (pos, (name, md5s)) in collections.iter().enumerate() {
@@ -642,6 +819,7 @@ pub fn import(conn: &mut Connection, install: &StableInstall, progress: impl Fn(
     db::set_meta(&tx, "stable.counts", &serde_json::to_string(&counts)?)?;
     db::set_meta(&tx, "stable.folders", "1")?;
     db::set_meta(&tx, "stable.mapFiles", "1")?;
+    db::set_meta(&tx, "stable.scoresDb", &scores_db_stamp(install))?;
     tx.commit()?;
     Ok(counts)
 }
@@ -658,7 +836,9 @@ pub fn is_current(conn: &Connection, install: &StableInstall) -> Result<bool> {
         // imported before Fumen kept the sets' folders (library care)
         && meta("stable.folders")?.is_some()
         // …and the song and background each difficulty names
-        && meta("stable.mapFiles")?.is_some())
+        && meta("stable.mapFiles")?.is_some()
+        // plays since (stable writes osu!.db when it closes, scores.db after each play)
+        && meta("stable.scoresDb")?.as_deref() == Some(scores_db_stamp(install).as_str()))
 }
 
 /// What the last scan found.
@@ -666,7 +846,7 @@ pub fn last_counts(conn: &Connection) -> Result<StableCounts> {
     let raw = db::get_meta(conn, "stable.counts")?.unwrap_or_default();
     let v: serde_json::Value = serde_json::from_str(&raw).unwrap_or_default();
     let n = |k: &str| v[k].as_u64().unwrap_or(0) as usize;
-    Ok(StableCounts { sets: n("sets"), maps: n("maps"), collections: n("collections") })
+    Ok(StableCounts { sets: n("sets"), maps: n("maps"), collections: n("collections"), scores: n("scores") })
 }
 
 /// Takes stable's sets out of the library (stable switched off or gone).
@@ -676,6 +856,7 @@ pub fn clear(conn: &mut Connection) -> Result<()> {
         "DELETE FROM sets WHERE source = 'stable';
          DELETE FROM lazer_collections WHERE source = 'stable';
          DELETE FROM stable_files;
+         DELETE FROM scores WHERE id LIKE 'st-%';
          DELETE FROM meta WHERE key LIKE 'stable.%';",
     )?;
     tx.commit()?;
@@ -713,6 +894,117 @@ mod tests {
         fn b(&mut self, b: &[u8]) {
             self.0.extend_from_slice(b);
         }
+    }
+
+    /// A scores.db the way stable writes it: one difficulty, these plays.
+    fn scores_db(md5: &str, plays: &[DbScore]) -> Vec<u8> {
+        let mut w = W(Vec::new());
+        w.b(&20250107i32.to_le_bytes());
+        w.b(&1i32.to_le_bytes());
+        w.s(md5);
+        w.b(&(plays.len() as i32).to_le_bytes());
+        for p in plays {
+            w.b(&[p.mode]);
+            w.b(&20250107i32.to_le_bytes());
+            w.s(&p.md5);
+            w.s(&p.player);
+            w.s(&p.replay_md5);
+            for h in p.hits {
+                w.b(&h.to_le_bytes());
+            }
+            w.b(&p.score.to_le_bytes());
+            w.b(&p.combo.to_le_bytes());
+            w.b(&[0]);
+            w.b(&p.mods.to_le_bytes());
+            w.b(&[0]);
+            w.b(&(p.date.unwrap() * 10_000 + 621_355_968_000_000_000).to_le_bytes());
+            w.b(&(-1i32).to_le_bytes());
+            w.b(&p.online_id.to_le_bytes());
+            if p.mods & (1 << 23) != 0 {
+                w.b(&0.5f64.to_le_bytes());
+            }
+        }
+        w.0
+    }
+
+    fn play(mode: u8, hits: [u16; 6], mods: i32) -> DbScore {
+        DbScore {
+            mode,
+            md5: "m".repeat(32),
+            player: "Player".into(),
+            replay_md5: format!("{mode}{mods}").repeat(4),
+            hits,
+            score: 123_456,
+            combo: 300,
+            mods,
+            date: Some(1_700_000_000_000),
+            online_id: 0,
+        }
+    }
+
+    #[test]
+    fn reads_scores_db() {
+        let plays = [play(0, [300, 10, 0, 50, 5, 0], 8 | 64), play(3, [500, 20, 3, 900, 40, 2], 1 << 23), DbScore { online_id: 4_000_000_000, ..play(1, [1, 0, 0, 0, 0, 0], 0) }];
+        assert_eq!(read_scores_db(&scores_db(&"m".repeat(32), &plays)).unwrap(), plays);
+        assert!(read_scores_db(&scores_db(&"m".repeat(32), &plays)[..60]).is_err());
+    }
+
+    #[test]
+    fn scores_as_lazer_has_them() {
+        let close = |a: f64, b: f64| (a - b).abs() < 1e-9;
+        // osu!: 300s 100s 50s geki katu miss
+        let p = play(0, [300, 10, 0, 50, 5, 0], 8 | 64);
+        assert!(close(p.accuracy(), (300.0 * 300.0 + 100.0 * 10.0) / (300.0 * 310.0)));
+        // 96.8% 300s, no 50s, no miss, HD: silver S
+        assert_eq!(p.rank(), 5);
+        assert_eq!(p.statistics(), serde_json::json!({ "great": 300, "ok": 10 }));
+        assert_eq!(p.mods_json(), serde_json::json!([{ "acronym": "HD" }, { "acronym": "DT" }, { "acronym": "CL" }]));
+        // NC carries DT's bit, PF SD's
+        assert_eq!(play(0, [1, 0, 0, 0, 0, 0], 64 | 512 | 32 | 16384).mods_json(), serde_json::json!([{ "acronym": "NC" }, { "acronym": "PF" }, { "acronym": "CL" }]));
+        assert_eq!(play(0, [10, 0, 0, 0, 0, 0], 0).rank(), 6);
+        assert_eq!(play(0, [10, 0, 0, 0, 0, 0], 1024).rank(), 7);
+        assert_eq!(play(0, [95, 5, 0, 0, 0, 1], 0).rank(), 3);
+        assert_eq!(play(0, [50, 50, 0, 0, 0, 0], 0).rank(), 0);
+        // taiko: a good counts half
+        let t = play(1, [90, 10, 0, 0, 0, 0], 0);
+        assert!(close(t.accuracy(), 0.95));
+        assert_eq!(t.rank(), 3);
+        assert_eq!(t.statistics(), serde_json::json!({ "great": 90, "ok": 10 }));
+        // catch: fruits, drops and droplets all count the same; katu are missed droplets
+        let c = play(2, [100, 20, 75, 0, 5, 0], 0);
+        assert!(close(c.accuracy(), 195.0 / 200.0));
+        assert_eq!(c.rank(), 3);
+        assert_eq!(c.statistics(), serde_json::json!({ "great": 100, "large_tick_hit": 20, "small_tick_hit": 75, "small_tick_miss": 5 }));
+        // mania: geki (MAX) and 300 count full, katu 200
+        let m = play(3, [100, 0, 0, 900, 0, 0], 1 << 20);
+        assert!(close(m.accuracy(), 1.0));
+        assert_eq!(m.rank(), 7);
+        let m = play(3, [500, 20, 3, 900, 40, 2], 0);
+        assert!(close(m.accuracy(), (300.0 * 1400.0 + 200.0 * 40.0 + 100.0 * 20.0 + 50.0 * 3.0) / (300.0 * 1465.0)));
+        assert_eq!(m.rank(), 4);
+        assert_eq!(m.statistics(), serde_json::json!({ "perfect": 900, "great": 500, "good": 40, "ok": 20, "meh": 3, "miss": 2 }));
+    }
+
+    /// The real scores.db, read only: FUMEN_TEST_STABLE=<osu!stable's folder>
+    #[test]
+    #[ignore = "reads a real osu!stable"]
+    fn real_scores_db() {
+        let Some(dir) = std::env::var_os("FUMEN_TEST_STABLE") else { return };
+        let scores = read_scores_db(&std::fs::read(Path::new(&dir).join("scores.db")).unwrap()).unwrap();
+        for s in &scores {
+            println!(
+                "{} {} {:?} {:.2}% rank {} {} mods {} {:?}",
+                RULESETS[s.mode as usize],
+                s.player,
+                s.hits,
+                s.accuracy() * 100.0,
+                s.rank(),
+                s.statistics(),
+                s.mods_json(),
+                s.date
+            );
+        }
+        assert!(!scores.is_empty());
     }
 
     const FLOAT_STARS: i32 = 20250107;
