@@ -322,14 +322,9 @@ sections below is the order of the work.
       ticks on the uninherited timing points (higher on bars), scheduled on the song's Web Audio
       clock like the hitsounds. Parts are kept per difficulty in localStorage. Right-click a
       difficulty › Practice the hardest part; from Practice next with that group's pattern and rate
-- [x] Chart numbers for osu! / taiko / catch — 0.4.18. `src/lib/ruleset-stats.ts` counts them
-      from the playfield's chart data (no new backend): osu! jumps (≥ 1.2 circles from the
-      previous object's end, half a beat or faster), streams (5+ at a quarter beat; bursts 3–4),
-      slider share, lean = stream objects against jumps; taiko colour changes over quarter-beat
-      steps, the top three-hit D/K patterns, finishers, longest run, rolls / swells; catch
-      hyperdash share, sideways moves between fruits, autoplay's dashed share of moving, banana
-      shower time. Every second gets a label (the panel's pattern bars, fullscreen's "This
-      second"); the fullscreen side shows the four numbers under the live ones
+- [ ] Chart numbers for osu! / taiko / catch in the panel and the fullscreen side: osu! jump
+      distances, stream lengths, slider share, aim vs speed lean; taiko colour changes (don/kat
+      patterns), finisher share; catch hyperdash share, dash distance, banana time
 
 ## v0.7 — library care
 

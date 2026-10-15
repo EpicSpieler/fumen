@@ -77,11 +77,6 @@ database first (see [Adding beatmaps](#adding-beatmaps)).
   osu! in all of them too (circles, sliders snaking in and out, spinners, follow points, the cursor
   and its trail; slider slides and spinner spins as looping sounds), and osu!catch (fruits,
   droplets and bananas, the catcher with its plate, dash and hyperdash trails, hit explosions)
-- Chart numbers for osu!, osu!taiko and osu!catch (the panel and the fullscreen side): what each
-  second asks for (jumps, streams, sliders; colour changes, drumrolls; hyperdashes, dashes,
-  bananas), jump distances, stream lengths and speed, the slider share and an aim / speed lean;
-  colour-change rate, don/kat patterns, finishers; hyperdash share, catcher moves, how much is
-  dashed, banana time. Fumen's own counts from the chart as lazer plays it
 - Practice mode beside the playfield: drag across the density graph to loop a part (on the beat),
   or loop the hardest part; Speed up starts it 0.20× slower and adds 0.05× each time round, a
   metronome ticks on the timing points. The part is remembered per difficulty. Right-click any

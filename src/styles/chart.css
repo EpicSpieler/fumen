@@ -109,13 +109,6 @@
 .stack-legend b { color: var(--t1); font-weight: 600; }
 
 .lanes-label { margin-top: 18px; }
-
-/* osu!, osu!taiko, osu!catch: their numbers */
-.rs-facts { display: flex; flex-direction: column; gap: 10px; margin-top: 18px; }
-.rs-fact { display: grid; grid-template-columns: 112px minmax(0, 1fr); column-gap: 10px; font-size: var(--fs-12); }
-.rs-k { grid-row: span 2; padding-top: 2px; color: var(--t2); font-weight: 500; }
-.rs-fact b { font-size: var(--fs-14); font-weight: 650; color: var(--t1); }
-.rs-s { color: var(--t3); }
 .lanes {
   display: grid;
   grid-template-columns: repeat(var(--keys), minmax(0, 1fr));
