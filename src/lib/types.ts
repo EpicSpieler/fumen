@@ -365,6 +365,33 @@ export interface CareReport {
   /** lazer's beatmap files, each counted once */
   lazerSize: number;
   stableSize: number;
+  duplicates: DupeGroup[];
+  /** the sets in `duplicates` (osu!stable's copies of lazer's sets aren't in the snapshot) */
+  dupeSets: DupeSet[];
+}
+
+/** Sets that are (partly) the same: "stable-copy" osu!stable sets with every difficulty in lazer
+ * too, "same-set" one osu! set more than once, "shared" difficulties in common, "reupload" the same
+ * title by the same mapper with the same song file. */
+export interface DupeGroup {
+  kind: "stable-copy" | "same-set" | "shared" | "reupload";
+  /** newest first */
+  sets: string[];
+  /** difficulties in more than one of them */
+  shared: number;
+}
+
+export interface DupeSet {
+  id: string;
+  source: "lazer" | "stable";
+  onlineId?: number | null;
+  title: string;
+  artist: string;
+  creator: string;
+  bg?: string | null;
+  added?: number | null;
+  maps: number;
+  folder?: string | null;
 }
 
 export interface ScanProgress {

@@ -48,7 +48,8 @@
 
 /* ---------- Lists ---------- */
 .care-lists { margin-top: 26px; }
-.care-tabs { margin-bottom: 6px; }
+.care-tabs { margin-bottom: 6px; overflow-x: auto; scrollbar-width: none; }
+.care-tabs > button { flex: none; white-space: nowrap; }
 .care-note { margin: 0 10px 8px; min-height: 1.4em; font-size: var(--fs-12); color: var(--t3); }
 .care-list { animation: fade-in .2s var(--ease-std); }
 .care-none { padding: 28px 10px; font-size: var(--fs-13); color: var(--t3); }
@@ -73,6 +74,22 @@
 .crow-video .ic { width: 12px; height: 12px; }
 .crow-size { text-align: right; color: var(--t1); font-weight: 600; white-space: nowrap; }
 .crow-when { text-align: right; color: var(--t3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------- Duplicates ---------- */
+.dupe { padding: 4px 0 10px; }
+.dupe + .dupe { border-top: 1px solid var(--stroke-dim); padding-top: 12px; }
+.dupe-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 12px;
+  padding: 2px 10px 6px;
+}
+.dupe-title { font-size: var(--fs-13); font-weight: 600; color: var(--t1); }
+.dupe-note { grid-column: 1; font-size: var(--fs-12); color: var(--t3); }
+.dupe-save { grid-column: 2; grid-row: 1 / 3; align-self: center; font-size: var(--fs-12); font-weight: 600; color: var(--t2); white-space: nowrap; }
+.dupe-row.off { cursor: default; }
+.dupe-row.off:hover { background: none; }
+.dupe-new { font-weight: 600; color: var(--accent-ink); }
 
 @container (max-width: 680px) {
   .care-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
