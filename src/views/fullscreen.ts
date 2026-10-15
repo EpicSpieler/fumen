@@ -39,6 +39,7 @@ import { AccentColors, drawDensity, fitCanvas } from "../ui/playfield";
 import { rateClick, rateControlHtml, starsAtRate, syncRateControl } from "../ui/rate";
 import type { PatternName } from "../lib/types";
 import { PracticePanel } from "./practice";
+import { rulesetStats, type RulesetStats } from "../lib/ruleset-stats";
 
 export type FullscreenMode = "visual" | "field";
 
@@ -83,6 +84,8 @@ class Fullscreen {
   /** last text written per live field, so frames only touch the DOM when something changed */
   private live = new Map<Element, string>();
   private practice!: PracticePanel;
+  /** osu!, osu!taiko, osu!catch: Fumen's counts for the chart (lib/ruleset-stats) */
+  private rstats: RulesetStats | null = null;
 
   get open(): boolean {
     return this.isOpen;
@@ -176,6 +179,7 @@ class Fullscreen {
               <div class="fs-stat"><span class="fs-k">BPM</span><b class="num" data-live="bpm">–</b><span class="fs-s num" data-live="bpm-sub"></span></div>
               <div class="fs-stat"><span class="fs-k">Notes</span><b class="num" data-live="count">–</b><span class="fs-s num" data-live="count-sub"></span></div>
             </div>
+            <div class="fs-facts" hidden></div>
             <div class="fs-graph">
               <canvas aria-label="Note density"></canvas>
               <div class="fs-graph-loop" hidden></div>
@@ -416,6 +420,7 @@ class Fullscreen {
         const renderer = await this.rendererFor(d);
         if (this.mapId !== map.id || this.chartKey !== key || job !== this.skinJob) return;
         this.data = d;
+        this.renderFacts(d);
         const canvas = this.el!.querySelector<HTMLCanvasElement>(".fs-pf")!;
         this.field = osuChart(d)
           ? new OsuPlayfield(canvas, d, renderer as OsuRenderer)
@@ -436,6 +441,16 @@ class Fullscreen {
         this.kick();
       })
       .catch(() => this.mapId === map.id && this.showEmpty(null, "Couldn't read this chart."));
+  }
+
+  /** osu!, osu!taiko, osu!catch: the chart's numbers under the live ones. */
+  private renderFacts(d: ChartData): void {
+    this.rstats = rulesetStats(d);
+    const box = this.el!.querySelector<HTMLElement>(".fs-facts")!;
+    box.hidden = !this.rstats;
+    box.innerHTML = (this.rstats?.facts ?? [])
+      .map((f) => `<div class="fs-fact"${f.tip ? ` data-tip="${esc(f.tip)}"` : ""}><span class="fs-k">${esc(f.label)}</span><b class="num">${esc(f.value)}</b><span class="fs-s">${esc(f.sub)}</span></div>`)
+      .join("");
   }
 
   // ── skins ─────────────────────────────────────────────────────────────
@@ -739,9 +754,10 @@ class Fullscreen {
     this.set("nps", nps.toFixed(0));
     this.set("peak", `peak ${(a.npsPeak * r).toFixed(1)}`);
     const sec = Math.floor((t - a.start) / 1000);
-    const label = t < a.start ? "Intro" : t > a.end ? "Outro" : (a.windows?.[sec] ? PATTERNS[a.windows[sec]!].label : "Light");
+    const win = a.windows?.[sec] ? PATTERNS[a.windows[sec]!].label : (this.rstats?.windows[sec] ?? null);
+    const label = t < a.start ? "Intro" : t > a.end ? "Outro" : (win ?? "Light");
     this.set("pattern", label);
-    this.set("pattern-sub", t < a.start || t > a.end ? "no notes" : a.windows?.[sec] ? "pattern" : "not much going on");
+    this.set("pattern-sub", t < a.start || t > a.end ? "no notes" : win ? "pattern" : "not much going on");
     const beat = bpmAt(d.beats, t) * r;
     this.set("bpm", beat ? bpm(beat) : "–");
     this.set("bpm-sub", r === 1 ? "" : `${bpm(beat / r)} × ${r.toFixed(2)}`);
