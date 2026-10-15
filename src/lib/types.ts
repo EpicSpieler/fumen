@@ -260,6 +260,12 @@ export interface PatternReport {
   svAmount: number;
   /** most important first */
   clusters: PatternCluster[];
+  /** what each second from `start` is: an index into `labels`, -1 for nothing */
+  seconds?: number[];
+  /** a specific pattern ("Jumpstream") or a core one ("Stream", see CorePattern) */
+  labels?: string[];
+  /** ms */
+  start?: number;
 }
 
 export interface DanRating {
