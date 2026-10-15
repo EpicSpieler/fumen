@@ -13,8 +13,9 @@
 import { css, darken, ease, opacity, rgb, tween, WHITE, type Colour } from "../mania/draw";
 import { OBJECT_RADIUS } from "./chart";
 import { arc, box, disc, glow, ICON, icon, ring, sprite, text, vertical } from "./draw";
-import { dimmed, type ApproachPiece, type BallPiece, type BodyStyle, type CirclePiece, type CursorPiece, type FollowPointPiece, type OsuFrame, type OsuRenderer, type RepeatPiece, type SpinnerPiece, type TickPiece, type TrailPart, type TrailStyle } from "./playfield";
-import { cursorExpand, defaultApproach, drawTrailParts, followCircle, repeatScale, spinnerScales, STORE_SCALE, type DefaultTextures } from "./triangles";
+import { seeded } from "../mania/argon";
+import { dimmed, type ApproachPiece, type BallPiece, type BodyStyle, type CirclePiece, type CursorPiece, type FollowPointPiece, type JudgementPiece, type OsuFrame, type OsuRenderer, type RepeatPiece, type SpinnerPiece, type TickPiece, type TrailPart, type TrailStyle } from "./playfield";
+import { cursorExpand, defaultApproach, drawTrailParts, followCircle, JUDGEMENT_COLOURS, JUDGEMENT_TEXT, MISS_RED, missMotion, repeatScale, spinnerScales, STORE_SCALE, type DefaultTextures } from "./triangles";
 
 const SIZE = OBJECT_RADIUS * 2;
 /** ArgonMainCirclePiece */
@@ -139,7 +140,7 @@ export class ArgonOsuRenderer implements OsuRenderer {
     const ctx = f.ctx;
     ctx.globalAlpha *= k.alpha;
     const s = f.scale * k.scale;
-    ring(ctx, k.x, k.y, 12 * s, 3 * s, css(k.accent));
+    ring(ctx, k.x, k.y, 12 * s, 3 * s, css(k.miss ? MISS_RED : k.accent));
   }
 
   repeat(f: OsuFrame, r: RepeatPiece): void {
@@ -220,7 +221,7 @@ export class ArgonOsuRenderer implements OsuRenderer {
       turn += tween(t - s.end, 0, 180, 320);
     }
     const complete = t >= s.completed;
-    const tracking = t >= s.start && t <= s.end;
+    const tracking = s.tracking;
 
     if (discScale > 0) {
       ctx.save();
@@ -286,6 +287,61 @@ export class ArgonOsuRenderer implements OsuRenderer {
       ctx.globalAlpha *= Math.min(1, (t - s.start) / s.fadeIn);
       text(ctx, String(Math.trunc(Math.max(0, s.spm))), 0, 74, 28, 600, "#fff");
       text(ctx, "SPINS PER MINUTE", 0, 100, 16, 600, "#fff");
+    }
+  }
+
+  judgement(f: OsuFrame, j: JudgementPiece): void {
+    // ArgonJudgementPiece: the result's name, in over 300 ms and growing to 1.2×, fading over
+    // 800 ms, rings flying out of hits; a miss falls, turning. Argon pro shows none for Great.
+    if (this.pro && j.result === 0) return;
+    const el = j.since;
+    if (el < 0 || el >= 1000) return;
+    const ctx = f.ctx;
+    const colour = JUDGEMENT_COLOURS[j.result];
+    const fade = 1 - Math.min(1, el / 800);
+    ctx.translate(j.x, j.y);
+    ctx.scale(f.scale, f.scale);
+    ctx.globalCompositeOperation = "lighter";
+    const text = () => {
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = css(colour);
+      ctx.font = `400 20px "Instrument Sans", system-ui, sans-serif`;
+      ctx.letterSpacing = "10px";
+      ctx.fillText(JUDGEMENT_TEXT[j.result], 5, 0);
+    };
+    if (j.result === 3) {
+      if (fade <= 0) return;
+      ctx.globalAlpha *= fade;
+      missMotion(ctx, el);
+      text();
+      return;
+    }
+    if (fade > 0) {
+      ctx.save();
+      ctx.globalAlpha *= fade * ease.outQuint(Math.min(1, el / 300));
+      const s = tween(el, 1, 1.2, 1800, ease.outQuint);
+      ctx.scale(s, s);
+      text();
+      ctx.restore();
+    }
+    // the rings: 4 small and 4 large for Great, fewer and not as far for Ok and Meh
+    const ringFade = (1 - ease.outQuint(Math.min(1, el / 1000))) * Math.max(fade, 0);
+    if (ringFade <= 0) return;
+    const rand = seeded(j.seed);
+    const travel = 58 * (j.result === 0 ? 1 : j.result === 1 ? 0.6 : 0.3);
+    const count = j.result === 0 ? 8 : j.result === 1 ? 4 : 3;
+    ctx.globalAlpha *= ringFade;
+    ctx.strokeStyle = css(colour);
+    ctx.lineWidth = 4;
+    for (let k = 0; k < count; k++) {
+      const size = k < 4 ? 9 : 14;
+      const dir = rand() * Math.PI * 2;
+      const dist = travel / 2 + (rand() * travel) / 2;
+      const r = tween(el, dist * 0.6, dist, 600, ease.outQuint);
+      ctx.beginPath();
+      ctx.arc(Math.cos(dir) * r, Math.sin(dir) * r, size / 2 - 2, 0, Math.PI * 2);
+      ctx.stroke();
     }
   }
 

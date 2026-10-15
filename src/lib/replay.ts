@@ -88,18 +88,36 @@ export interface Judgement {
   tail: boolean;
 }
 
+/** Something else that counts towards the accuracy (osu!'s slider ticks and ends). */
+export interface AccuracyPart {
+  time: number;
+  score: number;
+  max: number;
+}
+
 /** The running counts and accuracy of a replay's judgements (sorted by time). */
 export class Tally {
   private readonly times: Float64Array;
   private readonly counts: Uint32Array;
   private readonly scores: Float64Array;
+  private readonly partTimes: Float64Array;
+  private readonly partScores: Float64Array;
+  private readonly partMax: Float64Array;
 
-  /** `score`: each result's base score, `max` the best one's */
+  /** `score`: each result's base score, `max` the best one's; `parts` (sorted by time) count too */
   constructor(
     judgements: readonly Judgement[],
     private readonly score: readonly number[],
     private readonly max: number,
+    parts: readonly AccuracyPart[] = [],
   ) {
+    this.partTimes = Float64Array.from(parts.map((p) => p.time));
+    this.partScores = new Float64Array(parts.length + 1);
+    this.partMax = new Float64Array(parts.length + 1);
+    parts.forEach((p, i) => {
+      this.partScores[i + 1] = this.partScores[i] + p.score;
+      this.partMax[i + 1] = this.partMax[i] + p.max;
+    });
     this.times = Float64Array.from(judgements.map((j) => j.time));
     this.counts = new Uint32Array((judgements.length + 1) * 6);
     this.scores = new Float64Array(judgements.length + 1);
@@ -126,8 +144,22 @@ export class Tally {
   stats(t: number): { counts: number[]; accuracy: number; judged: number } {
     const i = this.upTo(t);
     const counts = Array.from(this.counts.subarray(i * 6, i * 6 + 6));
-    return { counts, accuracy: i ? this.scores[i] / (i * this.max) : 1, judged: i };
+    const k = upperOf(this.partTimes, t);
+    const max = i * this.max + this.partMax[k];
+    return { counts, accuracy: max ? (this.scores[i] + this.partScores[k]) / max : 1, judged: i };
   }
+}
+
+/** First index whose value is > t in a sorted array. */
+function upperOf(a: Float64Array, t: number): number {
+  let lo = 0;
+  let hi = a.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (a[mid] <= t) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
 }
 
 /**
