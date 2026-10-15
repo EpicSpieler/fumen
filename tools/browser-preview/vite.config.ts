@@ -74,6 +74,21 @@ function fumenFiles(): Plugin {
           res.setHeader("Content-Type", sniff(p));
           return createReadStream(p).pipe(res);
         }
+        if (url === "/__fumen/replay-index") {
+          const dir = join(here, ".cache", "replays");
+          const all: Record<string, unknown> = {};
+          if (existsSync(dir)) for (const f of readdirSync(dir)) Object.assign(all, JSON.parse(readFileSync(join(dir, f), "utf8")).replays);
+          res.setHeader("Content-Type", "application/json");
+          return res.end(JSON.stringify(all));
+        }
+        // lazer's replays of a difficulty: { entries, replays } (export_real_replays in src-tauri/src/replay.rs)
+        const replays = /^\/__fumen\/replays\/([0-9a-f-]{36})$/.exec(url);
+        if (replays) {
+          const p = join(here, ".cache", "replays", `${replays[1]}.json`);
+          res.setHeader("Content-Type", "application/json");
+          if (!existsSync(p)) return res.end(JSON.stringify({ entries: [], replays: {} }));
+          return createReadStream(p).pipe(res);
+        }
         // a chart, or (+EZ, +HRMR …) the chart with the mods that change it
         const chart = /^\/__fumen\/chart\/([0-9a-f-]{36}(?:\+[A-Z]+)?)$/.exec(url);
         if (chart) {

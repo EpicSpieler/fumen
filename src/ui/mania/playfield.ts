@@ -16,6 +16,7 @@ import { ArgonRenderer } from "./argon";
 import { View } from "./draw";
 import { LegacyRenderer } from "./legacy";
 import { Autoplay, barLines, STAGE_HEIGHT, timeRange, type BarLine, type Frame, type Renderer } from "./stage";
+import type { ManiaPlay } from "./autoplay";
 import { TrianglesRenderer } from "./triangles";
 
 /** ManiaModHidden: the cover, in 768 units from the hit position */
@@ -61,23 +62,47 @@ export async function createRenderer(skin: LoadedSkin, keys: number): Promise<Re
 }
 
 export class ManiaPlayfield {
-  readonly auto: Autoplay;
+  /** what's played: autoplay, or a replay (`setPlay`) */
+  auto: ManiaPlay;
+  private readonly autoplay: Autoplay;
   private readonly bars: BarLine[];
-  private readonly maxHold: number;
+  private maxHold: number;
+  /** the chart as built (a replay with Hold Off shows it with notes for holds) */
+  private readonly chart: ChartData;
   private mods: ModState | null = null;
   /** the notes, drawn apart to be covered */
   private layer: HTMLCanvasElement | null = null;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
-    readonly data: ChartData,
+    public data: ChartData,
     private renderer: Renderer,
   ) {
-    this.auto = new Autoplay(data.notes, data.keys);
+    this.chart = data;
+    this.autoplay = new Autoplay(data.notes, data.keys);
+    this.auto = this.autoplay;
     this.bars = barLines(data);
+    this.maxHold = ManiaPlayfield.longest(data.notes);
+  }
+
+  private static longest(notes: ArrayLike<number>): number {
     let max = 0;
-    for (let i = 2; i < data.notes.length; i += 3) max = Math.max(max, data.notes[i]);
-    this.maxHold = max;
+    for (let i = 2; i < notes.length; i += 3) max = Math.max(max, notes[i]);
+    return max;
+  }
+
+  /** Plays a replay (with the notes as it played them), or autoplay again (null). */
+  setPlay(play: ManiaPlay | null, notes?: ArrayLike<number>): void {
+    this.auto = play ?? this.autoplay;
+    this.data = play && notes && notes !== this.chart.notes ? { ...this.chart, notes: Array.from(notes) } : this.chart;
+    this.maxHold = ManiaPlayfield.longest(this.data.notes);
+    // the combo the mods follow is the chart's
+    if (this.mods) {
+      const cover = this.mods.cover;
+      const fl = !!this.mods.light;
+      this.mods = null;
+      this.setMods([...(cover === "hidden" ? ["HD" as Mod] : cover === "fade-in" ? ["FI" as Mod] : []), ...(fl ? ["FL" as Mod] : [])]);
+    }
   }
 
   setRenderer(r: Renderer): void {
@@ -152,7 +177,8 @@ export class ManiaPlayfield {
       timeRange: range,
       hitD,
       posD: (time) => hitD + ((time - t) / range) * len,
-      maxHold: this.maxHold,
+      // missed notes scroll on past the hit line, so look back that far too
+      maxHold: Math.max(this.maxHold, (range * (hitD + 60)) / Math.max(1, len)),
       notes: (draw) => {
         if (!mods?.cover || inPeriod(mods.breaks, t)) return draw();
         // the notes into a layer of their own, the cover cut out of it, then onto the stage

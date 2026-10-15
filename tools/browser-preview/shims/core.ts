@@ -74,6 +74,17 @@ export async function invoke<T>(cmd: string, args: Record<string, unknown> = {})
       const chart = (await res.json()) as { hitsounds?: unknown };
       return (chart.hitsounds ?? { samples: [], events: [] }) as T;
     }
+    case "replays_for_map": {
+      const r = (await (await fetch(`/__fumen/replays/${args.id as string}`)).json()) as { entries: unknown[] };
+      return r.entries as T;
+    }
+    case "get_replay": {
+      // every cached replay, by score id
+      const all = (await (await fetch("/__fumen/replay-index")).json()) as Record<string, unknown>;
+      const r = all[args.id as string];
+      if (!r) throw { code: "replay-missing", message: "Not in the preview cache." };
+      return r as T;
+    }
     case "get_skins": {
       const list = (await (await fetch("/__fumen/skins")).json()) as { skins: { files?: unknown }[] };
       return { ...list, skins: list.skins.map(({ files: _files, ...s }) => s) } as T;

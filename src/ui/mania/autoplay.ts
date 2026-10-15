@@ -9,7 +9,21 @@
 
 const RELEASE_DELAY = 20;
 
-export class Autoplay {
+/** What the playfield shows being played: lazer's autoplay, or a replay (lib/replay). */
+export interface ManiaPlay {
+  /** per column: judged hit times (not misses), sorted */
+  readonly hits: Float64Array[];
+  /** The column's key at `t`: down or not, and when it last went down / up (−∞ if never). */
+  key(col: number, t: number): { down: boolean; pressed: number; released: number };
+  /** The latest judgement at or before `t` (result: 0 Perfect … 5 Miss). */
+  judgement(t: number): { time: number; result: number } | null;
+  /** When an object (index into the notes / 3) is gone, hit; Infinity while it scrolls on. */
+  gone(obj: number): number;
+  /** Whether a hold is held at `t`. */
+  held(obj: number, t: number): boolean;
+}
+
+export class Autoplay implements ManiaPlay {
   /** per column: [press, release, press, release, …], sorted */
   readonly presses: Float64Array[];
   /** per column: judged hit times, sorted */
@@ -18,7 +32,10 @@ export class Autoplay {
   readonly allHits: Float64Array;
 
   /** `notes` is [time, column, length] per object, sorted by time */
-  constructor(notes: ArrayLike<number>, keys: number) {
+  constructor(
+    private readonly notes: ArrayLike<number>,
+    keys: number,
+  ) {
     const presses: number[][] = Array.from({ length: keys }, () => []);
     const hits: number[][] = Array.from({ length: keys }, () => []);
     const all: number[] = [];
@@ -93,5 +110,22 @@ export class Autoplay {
   lastHit(t: number): number {
     const i = Autoplay.upper(this.allHits, t);
     return i > 0 ? this.allHits[i - 1] : -Infinity;
+  }
+
+  /** autoplay only ever gets Perfect */
+  judgement(t: number): { time: number; result: number } | null {
+    const time = this.lastHit(t);
+    return time > -Infinity ? { time, result: 0 } : null;
+  }
+
+  /** notes at their time, holds at their end */
+  gone(obj: number): number {
+    const n = this.notes;
+    return n[obj * 3] + Math.max(0, n[obj * 3 + 2]);
+  }
+
+  held(obj: number, t: number): boolean {
+    const n = this.notes;
+    return t >= n[obj * 3] && t < n[obj * 3] + n[obj * 3 + 2];
   }
 }

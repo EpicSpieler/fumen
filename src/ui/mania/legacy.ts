@@ -47,7 +47,8 @@ export class LegacyRenderer implements Renderer {
   private right: TexRef | null = null;
   private hint: TexRef | null = null;
   private bottom: Anim | null = null;
-  private judgement: Anim | null = null;
+  /** Perfect … Miss (hit300g, hit300, hit200, hit100, hit50, hit0) */
+  private judgements: (Anim | null)[] = [];
   private readonly lineColour: Colour;
   private readonly judgementLine: Colour;
   private readonly barColour: Colour;
@@ -99,9 +100,19 @@ export class LegacyRenderer implements Renderer {
 
     // the judgement comes from the skin itself, else from classic (each with its own setting)
     const judgementFrom = (c: TextureChain, name: string) => c.animation(name, true, true, { frameLength: 1000 / 20 });
-    this.judgement =
-      judgementFrom(new TextureChain([own]), image("Hit300g", "mania-hit300g")) ??
-      (skin.chain[1] ? judgementFrom(new TextureChain([skin.chain[1]]), "mania-hit300g") : null);
+    this.judgements = (
+      [
+        ["Hit300g", "mania-hit300g"],
+        ["Hit300", "mania-hit300"],
+        ["Hit200", "mania-hit200"],
+        ["Hit100", "mania-hit100"],
+        ["Hit50", "mania-hit50"],
+        ["Hit0", "mania-hit0"],
+      ] as const
+    ).map(
+      ([key, name]) =>
+        judgementFrom(new TextureChain([own]), image(key, name)) ?? (skin.chain[1] ? judgementFrom(new TextureChain([skin.chain[1]]), name) : null),
+    );
 
     for (let i = 0; i < keys; i++) {
       // LegacyManiaColumnElement.FallbackColumnIndex
@@ -133,7 +144,7 @@ export class LegacyRenderer implements Renderer {
 
   static async create(skin: LoadedSkin, keys: number): Promise<LegacyRenderer> {
     const r = new LegacyRenderer(skin, keys);
-    await preload([r.left, r.right, r.hint, r.bottom, r.judgement, ...r.cols.flatMap((c) => [c.key, c.keyDown, c.note, c.head, c.tail, c.body, c.light, c.explosion, c.holdLight])]);
+    await preload([r.left, r.right, r.hint, r.bottom, ...r.judgements, ...r.cols.flatMap((c) => [c.key, c.keyDown, c.note, c.head, c.tail, c.body, c.light, c.explosion, c.holdLight])]);
     return r;
   }
 
@@ -228,7 +239,7 @@ export class LegacyRenderer implements Renderer {
       for (let j = to - 3; j >= from; j -= 3) {
         const col = n[j + 1];
         if (col < 0 || col >= keys) continue;
-        this.drawObject(f, col, n[j], n[j + 2]);
+        this.drawObject(f, col, n[j], n[j + 2], j / 3);
       }
     });
     if (!cfg.keysUnderNotes) for (let i = 0; i < keys; i++) this.drawKey(f, i);
@@ -243,12 +254,13 @@ export class LegacyRenderer implements Renderer {
       }
     }
 
-    // ── judgement (LegacyManiaJudgementPiece; autoplay only ever gets 300g) ──
-    if (this.judgement) {
-      const hitT = auto.lastHit(t);
-      const e = t - hitT;
+    // ── judgement (LegacyManiaJudgementPiece; autoplay only ever gets 300g, a replay any) ──
+    const judged = auto.judgement(t);
+    const anim = judged ? this.judgements[judged.result] : null;
+    if (judged && anim) {
+      const e = t - judged.time;
       if (e >= 0 && e < 220) {
-        const fr = tex(frameAt(this.judgement, e));
+        const fr = tex(frameAt(anim, e));
         if (fr) {
           const fromTop = 768 - cfg.hitPosition;
           const centre = cfg.scorePosition > fromTop / 2 ? f.hitD + fromTop - cfg.scorePosition : S - cfg.scorePosition;
@@ -311,8 +323,9 @@ export class LegacyRenderer implements Renderer {
     const n = f.data.notes;
     for (let j = lowerBound(n, f.t + 1) - 3; j >= 0 && f.t - n[j] <= f.maxHold + 120; j -= 3) {
       if (n[j + 1] !== col || !(n[j + 2] > 0)) continue;
-      const end = n[j] + n[j + 2];
-      if (f.t < end + 120) return [n[j], end];
+      // held, or let go (judged) less than 120 ms ago
+      const end = Math.min(n[j] + n[j + 2], f.auto.gone(j / 3));
+      if (f.auto.held(j / 3, f.t) || (end < Infinity && f.t >= end && f.t < end + 120)) return [n[j], end];
       return null;
     }
     return null;
@@ -329,7 +342,7 @@ export class LegacyRenderer implements Renderer {
     f.v.image(fr.img, 0, 0, fr.img.naturalWidth, fr.img.naturalHeight, f.x0 + box.x, box.w, 0, fr.h);
   }
 
-  private drawObject(f: Frame, i: number, start: number, len: number): void {
+  private drawObject(f: Frame, i: number, start: number, len: number, obj: number): void {
     const { v, t } = f;
     const c = this.cols[i];
     const box = f.geo.columns[i];
@@ -338,7 +351,7 @@ export class LegacyRenderer implements Renderer {
     const pos = f.posD(start);
     if (!(len > 0)) {
       // notes vanish when hit
-      if (t >= start || !c.note) return;
+      if (t >= f.auto.gone(obj) || !c.note) return;
       const fr = tex(frameAt(c.note, t - start + f.timeRange));
       if (!fr) return;
       const h = this.noteHeight(fr);
@@ -347,8 +360,8 @@ export class LegacyRenderer implements Renderer {
       return;
     }
     const end = start + len;
-    // the hold is judged (and gone) at its end
-    if (t >= end) return;
+    // the hold is gone once judged (at its end, for autoplay)
+    if (t >= f.auto.gone(obj)) return;
     const head = c.head ? tex(frameAt(c.head, t - start + f.timeRange)) : null;
     const tail = c.tail ? tex(frameAt(c.tail, t - start + f.timeRange)) : null;
     const headH = head ? this.noteHeight(head) : 0;
@@ -356,7 +369,7 @@ export class LegacyRenderer implements Renderer {
     const endPos = f.posD(end);
     if (pos - headH > v.S || endPos + tailH < -10) return;
     // being held: the head stays on the hit position and the body is cut there
-    const sizingBottom = t >= start ? f.hitD : pos;
+    const sizingBottom = f.auto.held(obj, t) ? f.hitD : pos;
     const ctx = v.ctx;
     ctx.save();
     v.clip(x, w, sizingBottom + headH / 2, Math.max(sizingBottom + headH / 2, endPos + tailH));

@@ -9,7 +9,8 @@
  *    matters while you watch it: notes per second right now, the pattern of this second, BPM,
  *    notes so far, and the density graph. The numbers about the whole chart stay in the set
  *    page's panel. Practice mode (./practice) loops a part of it, a little faster each time
- *    round, with a metronome.
+ *    round, with a metronome. osu!mania can be played by one of lazer's replays instead of
+ *    autoplay (./replay-panel), judged as lazer does, with the accuracy and hit errors as it goes.
  *
  * Esc leaves; Space plays/pauses; ←/→ seek 5 s; F3/F4 lower/raise the scroll speed as in lazer.
  * Nothing animates while the song is paused.
@@ -39,6 +40,7 @@ import { AccentColors, drawDensity, fitCanvas } from "../ui/playfield";
 import { rateClick, rateControlHtml, starsAtRate, syncRateControl } from "../ui/rate";
 import type { PatternName } from "../lib/types";
 import { PracticePanel } from "./practice";
+import { ReplayPanel } from "./replay-panel";
 
 export type FullscreenMode = "visual" | "field";
 
@@ -83,6 +85,7 @@ class Fullscreen {
   /** last text written per live field, so frames only touch the DOM when something changed */
   private live = new Map<Element, string>();
   private practice!: PracticePanel;
+  private replays!: ReplayPanel;
 
   get open(): boolean {
     return this.isOpen;
@@ -170,15 +173,18 @@ class Fullscreen {
           </div>
           <aside class="fs-info">
             <button class="fs-diff" type="button" aria-label="Difficulty"></button>
+            ${ReplayPanel.settingHtml()}
             <div class="fs-live">
               <div class="fs-stat"><span class="fs-k">Notes per second</span><b class="num" data-live="nps">–</b><span class="fs-s num" data-live="peak"></span></div>
               <div class="fs-stat fs-stat-pattern"><span class="fs-k">This second</span><b data-live="pattern">–</b><span class="fs-s" data-live="pattern-sub"></span></div>
               <div class="fs-stat"><span class="fs-k">BPM</span><b class="num" data-live="bpm">–</b><span class="fs-s num" data-live="bpm-sub"></span></div>
               <div class="fs-stat"><span class="fs-k">Notes</span><b class="num" data-live="count">–</b><span class="fs-s num" data-live="count-sub"></span></div>
             </div>
+            ${ReplayPanel.panelHtml()}
             <div class="fs-graph">
               <canvas aria-label="Note density"></canvas>
               <div class="fs-graph-loop" hidden></div>
+              <div class="fs-graph-marks" aria-hidden="true"></div>
               <div class="graph-head"></div>
             </div>
             <div class="fs-axis num"><span>0:00</span><span>Notes per second</span><span data-live="graph-end"></span></div>
@@ -236,6 +242,7 @@ class Fullscreen {
     document.body.appendChild(el);
     this.el = el;
     this.practice = new PracticePanel(el, () => this.kick());
+    this.replays = new ReplayPanel(el, () => this.field, () => this.kick());
     attachSegIndicator(el.querySelector(".fs-modes")!);
     attachSegIndicator(el.querySelector(".rate-presets")!);
     el.querySelectorAll("img").forEach((img) => {
@@ -389,6 +396,7 @@ class Fullscreen {
       this.field = null;
       hitsounds.clear();
       this.practice.chart("", null);
+      this.replays.chart("", null);
       this.syncSounds();
       this.renderHitsounds();
       this.showEmpty(map.mode);
@@ -406,6 +414,7 @@ class Fullscreen {
       this.field = null;
       hitsounds.clear();
       this.practice.chart(map.id, null);
+      this.replays.chart(map.id, null);
       this.syncSounds();
       this.renderHitsounds();
       this.showEmpty(null, "Loading the chart…");
@@ -428,6 +437,7 @@ class Fullscreen {
             : new ManiaPlayfield(canvas, d, renderer as Renderer);
         this.field.setMods(activeMods(player.mods, map.mode));
         this.practice.chart(map.id, d);
+        this.replays.chart(map.id, d);
         this.renderSpeed();
         this.showEmpty(null);
         this.syncSounds();
@@ -731,6 +741,7 @@ class Fullscreen {
 
     if (!(field instanceof ManiaPlayfield)) field.draw(t, r);
     else field.draw(t, scrollTime(scrollSpeed().speed) * r, scrollUp(), r);
+    this.replays.frame(t);
 
     // live numbers
     const a = d.analysis;
@@ -775,6 +786,7 @@ class Fullscreen {
       if (t.closest(".fs-prev")) return player.prev();
       if (t.closest(".fs-next")) return player.next();
       if (this.practice.click(t)) return;
+      if (this.replays.click(t)) return;
       if (rateClick(t)) return;
       const mod = t.closest<HTMLElement>(".fs-mod[data-mod]");
       if (mod) return this.clickMod(mod.dataset.mod as Mod);

@@ -630,3 +630,29 @@ export interface MirrorPage {
   /** that mirror can't filter or sort on its side: the order is its own */
   plain: boolean;
 }
+
+/** A lazer score with a replay (see src-tauri/src/replay.rs). */
+export interface ReplayEntry {
+  /** lazer's score id */
+  id: string;
+  user?: string;
+  /** unix ms */
+  date?: number;
+  accuracy?: number;
+  score?: number;
+  rank?: number;
+  combo?: number;
+  mods: string[];
+  /** playback rate from the mods, when not 1× */
+  rate?: number;
+  /** lazer's judgement counts as JSON */
+  statistics?: string;
+}
+
+/** A replay's frames: [time (song ms), x, y, buttons] each; osu!mania keeps its keys in x. */
+export interface ReplayData {
+  mode: number;
+  player: string;
+  beatmapMd5: string;
+  frames: number[];
+}

@@ -81,7 +81,7 @@ export class TrianglesRenderer implements Renderer {
       for (let j = to - 3; j >= from; j -= 3) {
         const col = n[j + 1];
         if (col < 0 || col >= keys) continue;
-        this.drawObject(f, col, n[j], n[j + 2]);
+        this.drawObject(f, col, n[j], n[j + 2], j / 3);
       }
     });
     for (let i = 0; i < keys; i++) this.drawKeyArea(f, i);
@@ -97,7 +97,7 @@ export class TrianglesRenderer implements Renderer {
     }
   }
 
-  private drawObject(f: Frame, col: number, start: number, len: number): void {
+  private drawObject(f: Frame, col: number, start: number, len: number, obj: number): void {
     const { v, t } = f;
     const box = f.geo.columns[col];
     const x = f.x0 + box.x;
@@ -105,17 +105,17 @@ export class TrianglesRenderer implements Renderer {
     const accent = this.colours[col];
     const pos = f.posD(start);
     if (!(len > 0)) {
-      if (t >= start || pos > v.S) return;
+      if (t >= f.auto.gone(obj) || pos > v.S) return;
       this.notePiece(v, x, w, pos, accent);
       return;
     }
     const end = start + len;
-    if (t >= end) return;
+    if (t >= f.auto.gone(obj)) return;
     const endPos = f.posD(end);
     if (pos - NOTE_HEIGHT > v.S) return;
     const ctx = v.ctx;
-    const sizingBottom = t >= start ? f.hitD : pos;
-    const holding = t >= start && t < end;
+    const holding = f.auto.held(obj, t);
+    const sizingBottom = holding ? f.hitD : pos;
     ctx.save();
     v.clip(x - 20, w + 40, sizingBottom + NOTE_HEIGHT / 2, Math.max(sizingBottom + NOTE_HEIGHT / 2, endPos + NOTE_HEIGHT));
     const d0 = pos + NOTE_HEIGHT / 2;
