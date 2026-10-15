@@ -16,7 +16,7 @@ import {
 } from "../lib/skills";
 import { similarTo } from "../lib/similar";
 import { events, store } from "../lib/store";
-import type { MapRow, Play } from "../lib/types";
+import type { MapRow, PatternName, Play } from "../lib/types";
 import { attachSegIndicator, openMenu, toast, type MenuEntry } from "../ui/controls";
 import { icon } from "../ui/icons";
 import { openSet, setMenu } from "./actions";
@@ -582,7 +582,9 @@ export class SkillsView {
       e.preventDefault();
       const mapIdx = +row.dataset.map!;
       const rate = row.dataset.rate ? +row.dataset.rate : undefined;
+      const pattern = row.closest<HTMLElement>(".practice-group")?.dataset.pattern as PatternName | undefined;
       setMenu({ x: e.clientX, y: e.clientY }, store.snap!.maps[mapIdx].set, mapIdx, {
+        practice: { rate, pattern },
         extra: [{ label: "Set a goal…", icon: "flag", action: () => openGoalDialog({ kind: "chart", mapIdx, rate }) }],
       });
     });

@@ -10,6 +10,8 @@ import { go } from "../lib/router";
 import { store } from "../lib/store";
 import { player } from "../player";
 import { openMenu, toast, uiConfirm, uiPrompt, type MenuEntry } from "../ui/controls";
+import type { PatternName } from "../lib/types";
+import { practiceChart } from "./fullscreen";
 
 export function openSet(setIdx: number, mapIdx?: number, opts: { similar?: boolean } = {}): void {
   const snap = store.snap;
@@ -32,7 +34,15 @@ export function setMenu(
   at: Element | { x: number; y: number },
   setIdx: number,
   mapIdx?: number,
-  opts: { onSearch?: (q: string) => void; inSetPage?: boolean; extra?: MenuEntry[]; collection?: string; onSimilar?: () => void } = {},
+  opts: {
+    onSearch?: (q: string) => void;
+    inSetPage?: boolean;
+    extra?: MenuEntry[];
+    collection?: string;
+    onSimilar?: () => void;
+    /** how "Practice the hardest part" plays it: at a rate, the hardest part of a pattern */
+    practice?: { rate?: number; pattern?: PatternName };
+  } = {},
 ): void {
   const snap = store.snap;
   if (!snap) return;
@@ -46,6 +56,7 @@ export function setMenu(
   if (mapIdx !== undefined) {
     const similar = opts.onSimilar ?? (() => openSet(setIdx, mapIdx, { similar: true }));
     entries.push({ label: "Similar maps", icon: "similar", action: similar });
+    entries.push({ label: "Practice the hardest part", icon: "repeat", action: () => practiceChart(mapIdx, opts.practice) });
   }
   if (opts.extra?.length) entries.push(...opts.extra);
   // a set: all its difficulties
