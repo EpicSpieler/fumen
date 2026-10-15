@@ -2,6 +2,9 @@
  * time, key numbers, and what the patterns ask of you; the difficulties in the library most like it.
  * The playfield itself opens in fullscreen ("Open playfield").
  *
+ * osu!, osu!taiko and osu!catch get Fumen's own counts (lib/ruleset-stats): what each second asks
+ * for, what the chart is made of, and the numbers that matter in that ruleset.
+ *
  * For osu!mania the dan rating and the pattern report come from Fumen's port of ManiaMapAnalyser
  * by Leo_Black (MIT; src-tauri/src/mma): Azusa's dan for 4K rice, Sunny's star rating on the dan
  * tables otherwise, and its pattern clusters merged per core pattern.
@@ -19,6 +22,7 @@ import { CORE_PATTERNS, danReadings, MODE_LABEL, patternGroups, SV_AMOUNT } from
 import { bpm, duration, esc, num, srChip } from "../lib/format";
 import { store } from "../lib/store";
 import type { ChartData, DanRating } from "../lib/types";
+import { rulesetStats } from "../lib/ruleset-stats";
 import { player } from "../player";
 import { attachSegIndicator } from "../ui/controls";
 import { icon } from "../ui/icons";
@@ -156,7 +160,7 @@ export class ChartPanel {
         </div>
         <div class="graph-axis num"><span>0:00</span><span class="graph-hint">Notes per second${d.kiai.length ? " · kiai shaded" : ""}</span><span class="axis-end">${duration(this.total() / player.rate)}</span></div>
         <div class="chart-stats${mania ? " has-dan" : ""}">${this.statsHtml(d)}</div>
-        ${mania ? this.maniaBlocks(d) : `<p class="chart-note">Pattern analysis covers osu!mania for now.</p>`}
+        ${mania ? this.maniaBlocks(d) : this.rulesetBlocks(d)}
         <div class="chart-plays"></div>
         <div class="chart-similar"></div>
         <div class="chart-actions">
@@ -293,6 +297,48 @@ export class ChartPanel {
       })
       .join("");
     return top + rows;
+  }
+
+  /** osu!, osu!taiko and osu!catch: the seconds each pattern takes, what the chart is made of,
+   * and the ruleset's numbers (lib/ruleset-stats). */
+  private rulesetBlocks(d: ChartData): string {
+    const st = rulesetStats(d);
+    if (!st) return `<p class="chart-note">No pattern numbers for this chart.</p>`;
+    const r = player.rate;
+    const max = Math.max(1, ...st.shares.map((s) => s.seconds));
+    const rows = st.shares.length
+      ? st.shares
+          .map(
+            (s) => `<div class="pat-item" data-tip="${esc(s.hint)}">
+              <div class="pat-row">
+                <span class="pat-name">${esc(s.label)}</span>
+                <div class="bar"><i style="width:${((s.seconds / max) * 100).toFixed(1)}%"></i></div>
+                <span class="pat-val num">${s.bpm ? `<span class="pat-bpm" data-bpm="${Math.round(s.bpm)}">${Math.round(s.bpm * r)}</span> BPM` : `${s.seconds} s`}</span>
+              </div>
+              ${s.detail ? `<div class="pat-spec">${esc(s.detail)}</div>` : ""}
+            </div>`,
+          )
+          .join("")
+      : `<p class="chart-note">Light throughout: nothing stands out.</p>`;
+    const total = st.parts.reduce((s, [, n]) => s + n, 0) || 1;
+    const parts = st.parts.map(([name, n], i) => ({ name, n, share: n / total, i: Math.min(3, i) }));
+    return `
+      <div class="chart-cols">
+        <section class="chart-block">
+          <div class="pat-head"><div class="label-caps">Patterns</div><div class="pat-tags"><span>by the seconds they take</span></div></div>
+          ${rows}
+        </section>
+        <section class="chart-block">
+          <div class="label-caps">Made of</div>
+          <div class="stack">${parts.map((p) => `<i class="stack-${p.i}" style="flex:${p.share}" data-tip="${p.name}: ${num(p.n)}"></i>`).join("")}</div>
+          <div class="stack-legend">${parts.map((p) => `<span><i class="stack-${p.i}"></i>${p.name} <b class="num">${num(p.n)}</b></span>`).join("")}</div>
+          <div class="rs-facts">
+            ${st.facts
+              .map((f) => `<div class="rs-fact"${f.tip ? ` data-tip="${esc(f.tip)}"` : ""}><span class="rs-k">${esc(f.label)}</span><b class="num">${esc(f.value)}</b><span class="rs-s">${esc(f.sub)}</span></div>`)
+              .join("")}
+          </div>
+        </section>
+      </div>`;
   }
 
   private maniaBlocks(d: ChartData): string {
