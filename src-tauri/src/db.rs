@@ -235,6 +235,10 @@ const MIGRATIONS: &[&str] = &[
         path TEXT NOT NULL
     );
     "#,
+    // 14 — a lazer score's replay file (its hash in lazer's files/), for the playfield
+    r#"
+    ALTER TABLE scores ADD COLUMN replay TEXT;
+    "#,
 ];
 
 pub fn open(path: &Path) -> Result<Connection> {

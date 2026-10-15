@@ -222,6 +222,8 @@ struct LScore {
     legacy: bool,
     user: Option<String>,
     user_id: Option<i64>,
+    /// the replay file's hash in lazer's files/
+    replay: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -353,8 +355,8 @@ pub fn import(conn: &mut Connection, json: &Path, install: &LazerInstall) -> Res
         let mut ins_score = tx.prepare(
             "INSERT OR REPLACE INTO scores (id, map_id, map_md5, ruleset, total_score, accuracy,
                 max_combo, rank, pp, date, mods, statistics, maximum_statistics, online_id, legacy,
-                user, user_id)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
+                user, user_id, replay)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
         )?;
         for s in &export.scores {
             ins_score.execute(params![
@@ -375,6 +377,7 @@ pub fn import(conn: &mut Connection, json: &Path, install: &LazerInstall) -> Res
                 s.legacy,
                 s.user,
                 s.user_id,
+                s.replay,
             ])?;
             counts.scores += 1;
         }

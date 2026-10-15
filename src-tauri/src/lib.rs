@@ -2,6 +2,7 @@ mod analysis;
 mod catch;
 mod chart;
 mod cloud;
+mod replay;
 mod charts;
 mod collections;
 mod db;
@@ -439,6 +440,29 @@ async fn get_hitsounds(app: AppHandle, id: String) -> Result<hitsounds::Sounds> 
         let files = state.files();
         let conn = state.db();
         hitsounds::for_map(&conn, &files, &id)
+    })
+    .await
+    .map_err(|e| Error::known("internal", e.to_string()))?
+}
+
+/// The lazer scores on a library difficulty that come with a replay, best first.
+#[tauri::command]
+async fn replays_for_map(app: AppHandle, id: String) -> Result<Vec<replay::ReplayEntry>> {
+    tauri::async_runtime::spawn_blocking(move || replay::list(&app.state::<AppState>().db(), &id))
+        .await
+        .map_err(|e| Error::known("internal", e.to_string()))?
+}
+
+/// A lazer score's replay: its frames, read from lazer's files.
+#[tauri::command]
+async fn get_replay(app: AppHandle, id: String) -> Result<replay::Replay> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let storage = state
+            .storage()
+            .ok_or_else(|| Error::known("lazer-not-found", "osu!lazer's data folder wasn't found. Pick it in Settings."))?;
+        let conn = state.db();
+        replay::load(&conn, &storage, &id)
     })
     .await
     .map_err(|e| Error::known("internal", e.to_string()))?
@@ -1286,6 +1310,8 @@ pub fn run() {
             cancel_import,
             find_played_sets,
             search_mirrors,
+            replays_for_map,
+            get_replay,
             cloud_push_collections,
             cloud_pull_collections,
             osu_account,
