@@ -174,6 +174,14 @@ internal static class Exporter
             F.WriteStr(w, "user", F.Str(user, "Username"));
             F.WriteInt(w, "userId", F.Int(user, "OnlineID"));
             F.WriteStr(w, "clientVersion", F.Str(s, "ClientVersion"));
+            // the replay, when lazer keeps one (files/ by hash)
+            foreach (var usage in F.List(s, "Files"))
+            {
+                var name = F.Str(usage, "Filename");
+                if (name == null || !name.EndsWith(".osr", StringComparison.OrdinalIgnoreCase)) continue;
+                F.WriteStr(w, "replay", F.Str(F.Link(usage, "File"), "Hash"));
+                break;
+            }
             w.WriteEndObject();
             count++;
         }
