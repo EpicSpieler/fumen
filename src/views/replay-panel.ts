@@ -3,6 +3,10 @@
  * it's going: the accuracy so far, the judgements so far, the latest hits on an error bar with
  * lazer's windows, and the misses — marked on the density graph, one click away each.
  *
+ * Logged in, the menu also finds the player's own scores on osu! (one request, when asked): their
+ * replays come from osu! when picked, one at a time, and stay on this PC. Replays only, never
+ * beatmap files.
+ *
  * Picking a replay sets the score's rate and the mods Fumen draws (Mirror rebuilds the chart);
  * the judging (lib/replay) keeps the score's own rate, so watching it slower changes nothing.
  */
@@ -10,7 +14,7 @@ import { api, asApiError } from "../lib/api";
 import { date, num, pct } from "../lib/format";
 import { maniaWindows, ManiaReplay, MISS, playedNotes, unreplayed } from "../lib/replay";
 import { store } from "../lib/store";
-import type { ChartData, ReplayEntry } from "../lib/types";
+import type { ChartData, OnlineReplayEntry, ReplayEntry } from "../lib/types";
 import type { Mod } from "../lib/mods";
 import { player } from "../player";
 import { openMenu, toast, type MenuEntry } from "../ui/controls";
@@ -27,8 +31,11 @@ const TICK_LIFE = 3000;
 /** a miss is jumped to this much before it, song ms */
 const LEAD = 2000;
 
+/** what a replay is: lazer's (by its score id) or osu!'s (by osu!'s score id) */
+type Entry = (ReplayEntry & { online?: false }) | (Omit<OnlineReplayEntry, "id"> & { id: string; online: true; scoreId: number });
+
 interface Playing {
-  entry: ReplayEntry;
+  entry: Entry;
   frames: number[];
 }
 
@@ -36,6 +43,9 @@ export class ReplayPanel {
   private mapId = "";
   private data: ChartData | null = null;
   private list: ReplayEntry[] | null = null;
+  /** the player's scores on osu! (null until asked for) */
+  private online: OnlineReplayEntry[] | null = null;
+  private asking = false;
   private playing: Playing | null = null;
   private replay: ManiaReplay | null = null;
   private misses: number[] = [];
@@ -85,6 +95,7 @@ export class ReplayPanel {
     if (mapId !== this.mapId) {
       this.mapId = mapId;
       this.list = null;
+      this.online = null;
       this.stop(false);
       if (mapId) void this.loadList(mapId);
     }
@@ -159,14 +170,58 @@ export class ReplayPanel {
       });
     }
     if (!list.length) entries.push({ label: this.list ? "No replays of this difficulty in lazer" : "Looking for replays…", disabled: true });
-    openMenu(anchor, entries, { minWidth: 320 });
+    // the player's own scores on osu!
+    entries.push({ group: "Your scores on osu!" });
+    if (this.online === null) {
+      entries.push({
+        label: this.asking ? "Asking osu!…" : "Find your replays on osu!",
+        icon: "search",
+        disabled: this.asking,
+        action: () => void this.askOsu(anchor),
+      });
+    } else if (!this.online.length) entries.push({ label: "No other scores of yours on osu!", disabled: true });
+    for (const o of this.online ?? []) {
+      const mods = o.mods.filter((m) => m !== "CL");
+      const e: Entry = { ...o, id: `osu:${o.id}`, online: true, scoreId: o.id };
+      entries.push({
+        label: `${pct(o.accuracy)}${mods.length ? ` · ${mods.join("")}` : ""} · ${num(o.score)}`,
+        hint: o.hasReplay ? (o.cached ? date(o.date) : `${date(o.date)} · download`) : "no replay on osu!",
+        checked: this.playing?.entry.id === e.id,
+        radio: "replay",
+        disabled: !o.hasReplay || unreplayed(o.mods).length > 0,
+        action: () => void this.start(e),
+      });
+    }
+    openMenu(anchor, entries, { minWidth: 340 });
   }
 
-  private async start(e: ReplayEntry): Promise<void> {
+  /** The player's scores on osu! for this difficulty, then the menu again. */
+  private async askOsu(anchor: HTMLElement): Promise<void> {
+    const mapId = this.mapId;
+    this.asking = true;
+    try {
+      const list = await api.onlineReplaysForMap(mapId);
+      if (mapId !== this.mapId) return;
+      this.online = list;
+    } catch (err) {
+      toast(`Couldn't ask osu!: ${asApiError(err).message}`, { kind: "danger", timeout: 5000 });
+      return;
+    } finally {
+      this.asking = false;
+    }
+    if (anchor.isConnected) this.menu(anchor);
+  }
+
+  private async start(e: Entry): Promise<void> {
     const job = ++this.job;
     let frames: number[];
     try {
-      const r = await api.getReplay(e.id);
+      const r = e.online ? await api.getOnlineReplay(e.scoreId) : await api.getReplay(e.id);
+      if (e.online) {
+        e.cached = true;
+        const o = this.online?.find((x) => x.id === e.scoreId);
+        if (o) o.cached = true;
+      }
       if (r.mode !== 3) throw new Error("This replay isn't osu!mania.");
       frames = r.frames;
     } catch (err) {

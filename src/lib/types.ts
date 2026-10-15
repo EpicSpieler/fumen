@@ -655,6 +655,23 @@ export interface ReplayEntry {
   statistics?: string;
 }
 
+/** One of the player's scores on osu! for a difficulty (see `online_list` in replay.rs). */
+export interface OnlineReplayEntry {
+  /** osu!'s score id */
+  id: number;
+  user?: string;
+  date: number;
+  accuracy: number;
+  score: number;
+  combo: number;
+  mods: string[];
+  rate?: number;
+  /** osu! keeps a replay of it */
+  hasReplay: boolean;
+  /** downloaded already */
+  cached: boolean;
+}
+
 /** A replay's frames: [time (song ms), x, y, buttons] each; osu!mania keeps its keys in x. */
 export interface ReplayData {
   mode: number;

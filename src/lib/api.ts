@@ -8,6 +8,7 @@ import type {
   ApiError,
   ChartData,
   ChartSounds,
+  OnlineReplayEntry,
   ReplayData,
   ReplayEntry,
   DanRating,
@@ -58,6 +59,10 @@ export const api = {
   replaysForMap: (id: string) => invoke<ReplayEntry[]>("replays_for_map", { id }),
   /** a lazer score's replay frames ([time, x, y, buttons] each) */
   getReplay: (id: string) => invoke<ReplayData>("get_replay", { id }),
+  /** the player's scores on osu! for a difficulty (one API request, when asked) */
+  onlineReplaysForMap: (id: string) => invoke<OnlineReplayEntry[]>("online_replays_for_map", { id }),
+  /** a score's replay from osu!, downloaded once and kept */
+  getOnlineReplay: (id: number) => invoke<ReplayData>("get_online_replay", { id }),
   getSkins: () => invoke<SkinList>("get_skins"),
   /** [filename, sha256] per file */
   async getSkinFiles(id: string): Promise<[string, string][]> {
