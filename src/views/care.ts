@@ -4,14 +4,15 @@
  * sets, re-uploads), and songs or backgrounds that are missing or aren't what their name says.
  *
  * Sizes come from src-tauri/src/care.rs (lazer's files by their hash, stable's folders); whether
- * and when a set was played from the snapshot (lazer's last played, the merged scores). Fumen
- * only points things out here.
+ * and when a set was played from the snapshot (lazer's last played, the merged scores). Sets
+ * picked here are deleted by lazer's own Delete (src-tauri/src/lazer_import.rs); Fumen deletes
+ * nothing itself, and never touches osu!stable's files.
  */
 import { api, asApiError, onCareProgress, thumbUrl } from "../lib/api";
 import { bytes, displayArtist, displayTitle, esc, MODE_SHORT, num, relativeTime, statusLabel } from "../lib/format";
-import { events, store } from "../lib/store";
+import { events, reloadLibrary, store } from "../lib/store";
 import type { Broken, CareReport, DupeGroup, DupeSet } from "../lib/types";
-import { attachSegIndicator, openMenu } from "../ui/controls";
+import { attachSegIndicator, openMenu, toast, uiConfirm } from "../ui/controls";
 import { icon } from "../ui/icons";
 import { openSet } from "./actions";
 
@@ -68,6 +69,9 @@ export class CareView {
   private failed: string | null = null;
   private progress: { done: number; total: number } | null = null;
   private loading = false;
+  /** lazer sets picked for deleting, by id */
+  private picked = new Set<string>();
+  private deleting = false;
 
   constructor() {
     this.el = document.createElement("section");
@@ -135,6 +139,9 @@ export class CareView {
       }
     }
     this.entries.sort((a, b) => b.size - a.size);
+    // deleted ones are gone from the library
+    const ids = new Set(snap?.sets.map((s) => s.id));
+    for (const id of this.picked) if (!ids.has(id)) this.picked.delete(id);
     this.render();
   }
 
@@ -192,8 +199,13 @@ export class CareView {
           <button type="button" data-tab="dupes">Duplicates</button>
           <button type="button" data-tab="broken">Broken files</button>
         </div>
-        <div class="care-note"></div>
+        <div class="care-note-row"><div class="care-note"></div><button class="btn btn-ghost btn-sm care-pick-all" type="button" hidden></button></div>
         <div class="care-list"></div>
+        <div class="care-act" hidden>
+          <div class="care-act-text num"></div>
+          <button class="btn btn-ghost btn-sm care-unpick" type="button">Clear</button>
+          <button class="btn btn-danger btn-sm care-delete" type="button">${icon("trash")}<span>Delete in osu!lazer</span></button>
+        </div>
       </section>`;
     attachSegIndicator(body.querySelector(".care-groups")!);
     attachSegIndicator(body.querySelector(".care-tabs")!);
@@ -285,6 +297,9 @@ export class CareView {
     const tabs = this.el.querySelector<HTMLElement>(".care-tabs");
     const active = tabs?.querySelector<HTMLElement>("button.active");
     if (tabs && active) tabs.scrollLeft = Math.max(0, Math.min(tabs.scrollLeft, active.offsetLeft), active.offsetLeft + active.offsetWidth - tabs.clientWidth);
+    this.renderAct();
+    const all = this.el.querySelector<HTMLButtonElement>(".care-pick-all")!;
+    all.hidden = true;
     if (this.tab === "dupes") return this.renderDupes(list, note);
     if (this.tab === "broken") return this.renderBroken(list, note);
     const now = Date.now();
@@ -306,6 +321,14 @@ export class CareView {
       list.innerHTML = `<div class="care-none">${this.tab === "never" ? "You've played every set in your library." : "Nothing here."}</div>`;
       return;
     }
+    // never played / not in a year: all of them at once
+    const pickable = this.rows.filter((x) => !x.stable).map((x) => snapId(x.set));
+    if ((this.tab === "never" || this.tab === "stale") && pickable.length > 1) {
+      const every = pickable.every((id) => this.picked.has(id));
+      all.hidden = false;
+      all.textContent = every ? "Unpick all" : `Pick all ${num(pickable.length)}`;
+      all.dataset.ids = every ? "" : "all";
+    }
     const shown = this.rows.slice(0, this.shownRows);
     const left = this.rows.length - shown.length;
     list.innerHTML = shown.map((x, i) => this.row(x, i)).join("") + (left > 0 ? `<button class="btn btn-ghost btn-sm hist-more care-more" type="button">Show ${num(Math.min(PAGE, left))} more</button>` : "");
@@ -321,6 +344,7 @@ export class CareView {
     const video = x.kinds[1];
     return `
       <div class="crow" data-i="${i}" role="button" tabindex="0">
+        ${this.pick(x.stable ? null : set.id)}
         <span class="t-art${set.bg ? "" : " img-missing"}">${set.bg ? `<img src="${thumbUrl(set.bg, 160)}" alt="" loading="lazy" decoding="async" />` : ""}</span>
         <div class="prow-text"><div class="t-title">${esc(displayTitle(set, unicode))}</div><div class="t-sub">${sub}</div></div>
         <span class="crow-video num">${video ? `<span data-tip="The background video">${icon("play")}${bytes(video)}</span>` : ""}</span>
@@ -356,12 +380,15 @@ export class CareView {
         const d = DUPES[g.kind];
         const c = could(g);
         const what = g.kind === "stable-copy" ? "osu!stable's copy" : "all but the newest";
+        // the older copies in lazer, to pick at once (osu!stable's are for osu!stable to delete)
+        const older = g.kind === "same-set" || g.kind === "reupload" ? g.sets.slice(1).filter((id) => info.get(id)?.source === "lazer" && this.setIndex(id) !== undefined) : [];
         return `
         <div class="dupe">
           <div class="dupe-head">
             <div class="dupe-title">${d.title}</div>
             <div class="dupe-note">${esc(d.note(g))}</div>
             ${c ? `<div class="dupe-save num">${what}: ${bytes(c)}</div>` : ""}
+            ${older.length ? `<button class="btn btn-ghost btn-sm dupe-pick" type="button" data-ids="${esc(older.join(" "))}">Pick the older ${older.length === 1 ? "one" : "ones"}</button>` : ""}
           </div>
           ${g.sets.map((id, k) => this.dupeRow(info.get(id), size.get(id) ?? 0, k === 0 && g.kind !== "stable-copy" && g.kind !== "shared")).join("")}
         </div>`;
@@ -414,12 +441,80 @@ export class CareView {
     const bg = set?.bg ?? s.bg;
     return `
       <div class="crow dupe-row${idx === undefined ? " off" : ""}"${idx !== undefined ? ` data-set="${idx}" role="button" tabindex="0"` : ""}>
+        ${this.pick(idx !== undefined && s.source === "lazer" ? s.id : null)}
         <span class="t-art${bg ? "" : " img-missing"}">${bg ? `<img src="${thumbUrl(bg, 160)}" alt="" loading="lazy" decoding="async" />` : ""}</span>
         <div class="prow-text"><div class="t-title">${esc(title)}</div><div class="t-sub">${sub.join(" · ")}</div>${issues.map((b) => `<div class="broken-line">${issue(b, s)}</div>`).join("")}</div>
         <span class="crow-video"></span>
         <b class="crow-size num">${bytes(size)}</b>
         <span class="crow-when">${when}</span>
       </div>`;
+  }
+
+  /** The pick toggle of a row (`id`: a lazer set's; null: nothing to pick, an osu!stable set). */
+  private pick(id: string | null): string {
+    if (!id) return `<span class="crow-pick-none"></span>`;
+    const on = this.picked.has(id);
+    return `<button type="button" class="crow-pick${on ? " on" : ""}" data-pick="${esc(id)}" aria-pressed="${on}" aria-label="Pick to delete" data-tip="${on ? "Picked to delete" : "Pick to delete"}">${icon("check")}</button>`;
+  }
+
+  /** The bar with what's picked: how many, how much, and deleting them. */
+  private renderAct(): void {
+    const bar = this.el.querySelector<HTMLElement>(".care-act");
+    if (!bar || !cached) return;
+    const n = this.picked.size;
+    bar.hidden = n === 0;
+    if (!n) return;
+    const size = new Map(cached.sets.map((s) => [s.id, s.size]));
+    const total = [...this.picked].reduce((s, id) => s + (size.get(id) ?? 0), 0);
+    bar.querySelector(".care-act-text")!.textContent = `${num(n)} ${n === 1 ? "set" : "sets"} picked · ${bytes(total)}`;
+    bar.querySelectorAll<HTMLButtonElement>("button").forEach((b) => (b.disabled = this.deleting));
+  }
+
+  private togglePicks(ids: string[], on: boolean): void {
+    for (const id of ids) {
+      if (on) this.picked.add(id);
+      else this.picked.delete(id);
+    }
+    this.el.querySelectorAll<HTMLElement>(".crow-pick").forEach((b) => {
+      const p = this.picked.has(b.dataset.pick!);
+      b.classList.toggle("on", p);
+      b.setAttribute("aria-pressed", String(p));
+      b.dataset.tip = p ? "Picked to delete" : "Pick to delete";
+    });
+    if (this.tab === "never" || this.tab === "stale") this.renderList();
+    else this.renderAct();
+  }
+
+  /** lazer's own Delete on the picked sets, after asking. */
+  private async deletePicked(): Promise<void> {
+    if (this.deleting || !this.picked.size || !cached) return;
+    const ids = [...this.picked];
+    const size = new Map(cached.sets.map((s) => [s.id, s.size]));
+    const total = ids.reduce((s, id) => s + (size.get(id) ?? 0), 0);
+    const one = ids.length === 1;
+    const snap = store.snap;
+    const only = one && snap ? snap.sets.find((s) => s.id === ids[0]) : undefined;
+    const title = only ? `Delete "${displayTitle(only, store.prefs.unicode)}" in osu!lazer?` : `Delete ${num(ids.length)} sets in osu!lazer?`;
+    const message =
+      `Deleted the way osu!lazer deletes sets: ${one ? "it disappears" : "they disappear"} right away, and osu!lazer removes ${one ? "it and its" : "them and their"} files for good the next time it starts (up to ${bytes(total)}). Your scores on ${one ? "it" : "them"} stay.` +
+      "\n\nosu!lazer has to be closed. Its database is backed up first.";
+    if (!(await uiConfirm(message, { title, confirmLabel: "Delete in osu!lazer", danger: true }))) return;
+    this.deleting = true;
+    this.renderAct();
+    events.emit("importing", true);
+    try {
+      const r = await api.deleteSetsInLazer(ids);
+      this.picked.clear();
+      toast(r.deleted === 1 ? "Deleted 1 set in osu!lazer" : `Deleted ${num(r.deleted)} sets in osu!lazer${r.skipped ? ` (${num(r.skipped)} already gone)` : ""}`, { kind: "success" });
+      await reloadLibrary().catch((e) => console.warn("[care] reload failed", e));
+    } catch (e) {
+      const err = asApiError(e);
+      toast(err.code === "lazer-running" ? "Close osu!lazer first: sets are deleted only while it's closed." : `Couldn't delete in osu!lazer: ${err.message}`, { kind: "danger", timeout: 7000 });
+    } finally {
+      this.deleting = false;
+      events.emit("importing", false);
+      this.renderAct();
+    }
   }
 
   private setIndex(id: string): number | undefined {
@@ -457,6 +552,14 @@ export class CareView {
         this.shownRows += PAGE;
         return this.renderList();
       }
+      const pick = t.closest<HTMLElement>(".crow-pick");
+      if (pick) return this.togglePicks([pick.dataset.pick!], !this.picked.has(pick.dataset.pick!));
+      const older = t.closest<HTMLElement>(".dupe-pick");
+      if (older) return this.togglePicks(older.dataset.ids!.split(" "), true);
+      const all = t.closest<HTMLElement>(".care-pick-all");
+      if (all) return this.togglePicks(this.rows.filter((x) => !x.stable).map((x) => snapId(x.set)), all.dataset.ids === "all");
+      if (t.closest(".care-unpick")) return this.togglePicks([...this.picked], false);
+      if (t.closest(".care-delete")) return void this.deletePicked();
       const dupe = t.closest<HTMLElement>(".crow[data-set]");
       if (dupe) return openSet(+dupe.dataset.set!);
       const row = t.closest<HTMLElement>(".crow[data-i]");
@@ -470,6 +573,8 @@ export class CareView {
       openMenu({ x: e.clientX, y: e.clientY }, [{ label: "Open beatmap set", icon: "library", action: () => this.open(i) }]);
     });
     this.el.addEventListener("keydown", (e) => {
+      // the pick toggle is a button of its own
+      if ((e.target as Element).closest(".crow-pick")) return;
       const dupe = (e.target as Element).closest<HTMLElement>(".crow[data-set]");
       if (dupe && (e.key === "Enter" || e.key === " ")) {
         e.preventDefault();
@@ -520,6 +625,9 @@ function issue(b: Broken, s: DupeSet): string {
   const of = b.what !== "files" && s.maps > 1 ? ` · ${b.count === s.maps ? "every difficulty" : `${num(b.count)} of ${num(s.maps)} difficulties`}` : "";
   return `<b>${b.how === "missing" ? "Missing" : "Broken"}</b> ${text}${of}`;
 }
+
+/** A snapshot set's id, by its index. */
+const snapId = (i: number): string => store.snap!.sets[i].id;
 
 /** A share as a whole percentage (under 1: "<1%"). */
 const percent = (v: number): string => (v > 0 && v < 0.005 ? "<1%" : `${Math.round(v * 100)}%`);
