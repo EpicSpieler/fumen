@@ -77,6 +77,10 @@ database first (see [Adding beatmaps](#adding-beatmaps)).
   osu! in all of them too (circles, sliders snaking in and out, spinners, follow points, the cursor
   and its trail; slider slides and spinner spins as looping sounds), and osu!catch (fruits,
   droplets and bananas, the catcher with its plate, dash and hyperdash trails, hit explosions)
+- Practice mode beside the playfield: drag across the density graph to loop a part (on the beat),
+  or loop the hardest part; Speed up starts it 0.20× slower and adds 0.05× each time round, a
+  metronome ticks on the timing points. The part is remembered per difficulty. Right-click any
+  difficulty › Practice the hardest part (from Practice next: of that pattern, at its rate)
 - Dan rating for osu!mania: Azusa for 4K rice, Sunny's star rating on the 4K / 6K / 7K / 10K dan
   tables otherwise (with an LN reading for long-note charts), at any rate. Shown in the chart panel
   and the difficulty rows; search `dan=gamma`, `dan>=13`, `dan>="reform 8"`

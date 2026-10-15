@@ -314,10 +314,14 @@ sections below is the order of the work.
       judged per ruleset with lazer's hit windows (mania, osu! hits / slider ends, taiko, catch
       positions); hit errors and misses on the timeline, jump to each; accuracy so far beside the
       playfield
-- [ ] Practice mode: an A–B loop over a section (picked on the density graph), a rate that climbs
-      each loop (e.g. 0.80× → 1.00× in 0.05 steps), a metronome from the timing points; the
-      section remembered per chart. "Practice next" can open a chart straight at its hardest part
-      of the pattern
+- [x] Practice mode — 0.4.17. `src/views/practice.ts` beside the fullscreen playfield: a drag on
+      the density graph picks the part (snapped to beats; a click still seeks), "Hardest part"
+      takes the densest 16 s from a bar's start (`hardest` in lib/practice.ts; with a pattern, its
+      seconds count fully and the rest 0.3), and the song goes back 1.5 s before A on reaching B.
+      Speed up: from 0.20× under the rate you had, +0.05× each time round, up to it. The metronome
+      ticks on the uninherited timing points (higher on bars), scheduled on the song's Web Audio
+      clock like the hitsounds. Parts are kept per difficulty in localStorage. Right-click a
+      difficulty › Practice the hardest part; from Practice next with that group's pattern and rate
 - [ ] Chart numbers for osu! / taiko / catch in the panel and the fullscreen side: osu! jump
       distances, stream lengths, slider share, aim vs speed lean; taiko colour changes (don/kat
       patterns), finisher share; catch hyperdash share, dash distance, banana time
