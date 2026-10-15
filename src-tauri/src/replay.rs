@@ -336,7 +336,7 @@ mod real {
     use super::*;
 
     /// Writes the chart, replay and lazer's counts of the newest scores of a ruleset
-    /// (FUMEN_REPLAY_RULESET: mania, the default, taiko or osu) in a sidecar export
+    /// (FUMEN_REPLAY_RULESET: mania, the default, taiko, osu or fruits) in a sidecar export
     /// (FUMEN_REPLAY_SCORES) to FUMEN_REPLAY_EXPORT (a folder), for the judging test. Run by hand;
     /// reads lazer's files and the library read-only.
     #[test]
@@ -374,7 +374,7 @@ mod real {
             let Ok(chart) = crate::charts::load_with(&files, &hash, m) else { continue };
             let chart = serde_json::from_slice::<serde_json::Value>(&crate::charts::chart_json(&chart, m).unwrap()).unwrap();
             // converts aren't played here
-            if (ruleset == "taiko" && chart["taiko"].is_null()) || (ruleset == "osu" && chart["osu"].is_null()) {
+            if (ruleset == "taiko" && chart["taiko"].is_null()) || (ruleset == "osu" && chart["osu"].is_null()) || (ruleset == "fruits" && chart["catch"].is_null()) {
                 continue;
             }
             let Some(path) = crate::paths::lazer_file(&storage, s["replay"].as_str().unwrap()) else { continue };
@@ -382,7 +382,7 @@ mod real {
             let case = serde_json::json!({
                 "id": s["id"], "mapId": map_id, "user": s["user"], "date": s["date"], "rawMods": s["mods"], "mods": acronyms, "rate": rate.unwrap_or(1.0), "od": od, "accuracy": s["accuracy"],
                 "statistics": s["statistics"].as_str().and_then(|v| serde_json::from_str::<serde_json::Value>(v).ok()),
-                "notes": chart["notes"], "keys": chart["keys"], "taiko": chart["taiko"], "osu": chart["osu"], "frames": replay.frames,
+                "notes": chart["notes"], "keys": chart["keys"], "taiko": chart["taiko"], "osu": chart["osu"], "catch": chart["catch"], "frames": replay.frames,
             });
             std::fs::write(out.join(format!("{n}.json")), case.to_string()).unwrap();
             n += 1;
