@@ -21,8 +21,9 @@ import { darken, ease, fromBytes, tween, WHITE, type Colour } from "../mania/dra
 import { STABLE_SCALE } from "../../lib/skin/ini";
 import { OBJECT_RADIUS, type OsuChart } from "./chart";
 import { size as texSize, sprite } from "./draw";
-import { dimmed, type ApproachPiece, type BallPiece, type BodyStyle, type CirclePiece, type CursorPiece, type FollowPointPiece, type OsuFrame, type OsuRenderer, type RepeatPiece, type SpinnerPiece, type TickPiece, type TrailPart, type TrailStyle } from "./playfield";
-import { DEFAULT_COMBO, drawTrailParts, type DefaultTextures } from "./triangles";
+import { seeded } from "../mania/argon";
+import { dimmed, type ApproachPiece, type BallPiece, type BodyStyle, type CirclePiece, type CursorPiece, type FollowPointPiece, type JudgementPiece, type OsuFrame, type OsuRenderer, type RepeatPiece, type SpinnerPiece, type TickPiece, type TrailPart, type TrailStyle } from "./playfield";
+import { DEFAULT_COMBO, drawTrailParts, MISS_RED, type DefaultTextures } from "./triangles";
 
 const SIZE = OBJECT_RADIUS * 2;
 const MAX_CIRCLE: [number, number] = [SIZE * 2, SIZE * 2];
@@ -58,6 +59,8 @@ export class LegacyOsuRenderer implements OsuRenderer {
   private balls: TexRef[] = [];
   private followCircle: Anim | null = null;
   private followPointAnim: Anim | null = null;
+  /** hit300, hit100, hit50, hit0 */
+  private judgements: (Anim | null)[] = [];
   /** the reverse arrow is classic's own (it turns black on bright colours) */
   private arrowIsDefault = false;
   private newSpinner = false;
@@ -141,6 +144,7 @@ export class LegacyOsuRenderer implements OsuRenderer {
     }
     r.followCircle = c.animation("sliderfollowcircle", true, true);
     r.followPointAnim = c.animation("followpoint", true, true);
+    r.judgements = ["hit300", "hit100", "hit50", "hit0"].map((name) => c.animation(name, true, false));
     r.newSpinner = !!r.t["spinner-top"] && !r.t["spinner-background"];
     r.oldSpinner = !!r.t["spinner-background"];
     // the classic skin's own new-style spinner has no approach circle
@@ -161,6 +165,7 @@ export class LegacyOsuRenderer implements OsuRenderer {
       ...r.balls,
       r.followCircle,
       r.followPointAnim,
+      ...r.judgements,
       ...Object.values(r.circles).flatMap((p) => [p.circle, p.overlay]),
     ]);
     return r;
@@ -267,7 +272,7 @@ export class LegacyOsuRenderer implements OsuRenderer {
   tick(f: OsuFrame, k: TickPiece): void {
     const ctx = f.ctx;
     ctx.globalAlpha *= k.alpha;
-    sprite(ctx, this.t.sliderscorepoint, k.x, k.y, { scale: f.scale * k.scale, max: [SIZE, SIZE] });
+    sprite(ctx, this.t.sliderscorepoint, k.x, k.y, { scale: f.scale * k.scale, tint: k.miss ? MISS_RED : undefined, max: [SIZE, SIZE] });
   }
 
   repeat(f: OsuFrame, r: RepeatPiece): void {
@@ -307,12 +312,17 @@ export class LegacyOsuRenderer implements OsuRenderer {
     ctx.globalAlpha *= b.alpha;
     ctx.translate(b.x, b.y);
     ctx.scale(f.scale, f.scale);
-    // LegacyFollowCircle: to 2× on the press, a pulse on ticks, 1.6× and gone at the end
-    if (this.followCircle && b.sinceStart >= 0) {
-      const press = Math.max(1, Math.min(180, -b.sinceEnd + b.sinceStart));
-      let scale = tween(b.sinceStart, 1, 2, Math.min(180, press), ease.out);
-      let alpha = Math.min(1, b.sinceStart / Math.min(60, press));
-      if (b.sinceTick >= 0 && b.sinceEnd < 0 && scale >= 2) scale = tween(b.sinceTick, 2.2, 2, 200);
+    // LegacyFollowCircle: to 2× on the press (letting go leaves it), a pulse on ticks, blown away
+    // when one is missed, 1.6× and gone at the end
+    if (this.followCircle && b.followOn >= 0) {
+      const press = Math.max(1, Math.min(180, -b.sinceEnd + b.followOn));
+      let scale = tween(b.followOn, 1, 2, Math.min(180, press), ease.out);
+      let alpha = Math.min(1, b.followOn / Math.min(60, press));
+      if (b.sinceTick >= 0 && b.sinceTick <= b.followOn && b.sinceEnd < 0 && scale >= 2) scale = tween(b.sinceTick, 2.2, 2, 200);
+      if (b.broken >= 0) {
+        scale = tween(b.broken, scale, 4, 100);
+        alpha *= 1 - Math.min(1, b.broken / 100);
+      }
       if (b.sinceEnd >= 0) {
         scale = tween(b.sinceEnd, scale, 1.6, 200, ease.out);
         alpha *= 1 - ease.in(Math.min(1, b.sinceEnd / 200));
@@ -320,7 +330,7 @@ export class LegacyOsuRenderer implements OsuRenderer {
       if (alpha > 0) {
         ctx.save();
         ctx.globalAlpha *= alpha;
-        const frame = frameAt(this.followCircle, b.sinceStart);
+        const frame = frameAt(this.followCircle, b.followOn);
         sprite(ctx, frame, 0, 0, { scale: 0.5 * scale, max: [SIZE * 3 * 2, SIZE * 3 * 2] });
         ctx.restore();
       }
@@ -429,6 +439,32 @@ export class LegacyOsuRenderer implements OsuRenderer {
       sprite(ctx, this.t["spinner-clear"], 0, SPINNER_TOP + 115, { scale });
       ctx.restore();
     }
+  }
+
+  judgement(f: OsuFrame, j: JudgementPiece): void {
+    // LegacyJudgementPieceOld: in over 120 ms, out over 600 from 500; still sprites pop from 0.6×
+    // to 1.1× and settle, a miss drops from 1.6×, tilting (and falling, past version 1)
+    const anim = this.judgements[j.result];
+    const el = j.since;
+    if (!anim || el < 0 || el >= 1100) return;
+    const ctx = f.ctx;
+    ctx.globalAlpha *= el < 120 ? el / 120 : el < 500 ? 1 : 1 - (el - 500) / 600;
+    ctx.translate(j.x, j.y);
+    ctx.scale(f.scale, f.scale);
+    if (anim.frames.length <= 1) {
+      if (j.result === 3) {
+        const s = tween(el, 1.6, 1, 100, ease.in);
+        if (this.version > 1) ctx.translate(0, -5 + tween(el, 0, 80, 1100, ease.in));
+        const tilt = (seeded(j.seed)() * 2 - 1) * 8.6;
+        const rotation = el < 120 ? tween(el, 0, tilt, 120) : tween(el - 120, tilt, tilt * 2, 980, ease.in);
+        ctx.rotate((rotation * Math.PI) / 180);
+        ctx.scale(s, s);
+      } else {
+        const s = el < 96 ? tween(el, 0.6, 1.1, 96) : tween(el - 96, 0.9, 1, 24);
+        ctx.scale(s, s);
+      }
+    }
+    sprite(ctx, frameAt(anim, el), 0, 0);
   }
 
   followPoint(f: OsuFrame, p: FollowPointPiece): void {

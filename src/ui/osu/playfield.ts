@@ -4,12 +4,16 @@
  *  - OsuPlayfieldAdjustmentContainer: 0.8 of the canvas, 4:3 inside that, 512 × 384 osu!pixels;
  *  - DrawableHitCircle: the circle fades in over TimeFadeIn from TimePreempt before it, dimmed
  *    (195, 195, 195) until 400 ms before; the approach circle shrinks from 4× to 1× over the
- *    preempt, reaching 0.9 opacity, gone 50 ms after; autoplay hits everything on time;
+ *    preempt, reaching 0.9 opacity, gone 50 ms after (or once hit); a hit circle goes on 800 ms, a
+ *    missed one fades in 100;
  *  - DrawableSlider: the body fades in with the head and snakes in over a third of the preempt,
  *    out along the last span; ticks (preempt: half the time since their span started, plus
  *    200 ms or 0.66 × the preempt on the first span), repeats (the first with the slider, the
  *    rest two spans early) and the ball that follows the path; all fading out 240 ms after the end;
- *  - DrawableSpinner: in the middle, turning as the autoplay cursor circles it;
+ *    ticks missed turn red as they go; the follow circle while the slider is followed;
+ *  - DrawableSpinner: in the middle, turning as the cursor circles it;
+ *  - DrawableOsuJudgement: each circle's, slider head's and spinner's result where it was, scaled
+ *    like the circles;
  *  - FollowPointConnection: points every 32 osu!pixels between objects of one combo;
  *  - the cursor and its trail on top;
  *  - OsuModHidden: no approach circles (but the first object's), circles fading in over 0.4 of
@@ -18,9 +22,14 @@
  *    125 osu!pixels across at first, smaller at 100 and 200 combo, bigger in breaks, and the rest
  *    darker while a slider is held. (Easy, Hard Rock and Mirror come built into the chart.)
  *
- * Later objects are drawn under earlier ones, approach circles above them all. The skin renderers
- * (argon.ts, triangles.ts, legacy.ts) draw the pieces; this decides where and when.
+ * Autoplay hits everything on time; a replay (lib/osu-replay) plays it as it was played: its
+ * cursor, what it hit when, what it missed, when sliders were followed.
+ *
+ * Later objects are drawn under earlier ones, judgements over them, approach circles above them
+ * all. The skin renderers (argon.ts, triangles.ts, legacy.ts) draw the pieces; this decides where
+ * and when.
  */
+import type { Nested, OsuReplay } from "../../lib/osu-replay";
 import type { Mod } from "../../lib/mods";
 import type { ChartData } from "../../lib/types";
 import { breakPeriods, Combo, comboScale, drawCircleLight, FlashlightSize, type FlashlightSpec } from "../flashlight";
@@ -45,6 +54,10 @@ const FOLLOW_DURATION = 400;
 const PREEMPT_MIN = 450;
 /** DrawableSliderTick.ANIM_DURATION */
 const TICK_ANIM = 150;
+/** DrawableHitCircle: a missed circle fades out over this */
+const MISS_FADE = 100;
+/** the longest a judgement shows */
+const JUDGEMENT_LIFE = 1100;
 /** SpinnerSpmCalculator */
 const SPM_WINDOW = 595;
 /** DrawableSliderBall.FOLLOW_AREA */
@@ -102,6 +115,8 @@ export interface TickPiece {
   accent: Colour;
   alpha: number;
   scale: number;
+  /** missed: it turns red as it goes */
+  miss: boolean;
 }
 
 export interface RepeatPiece {
@@ -134,6 +149,11 @@ export interface BallPiece {
   sinceEnd: number;
   /** ms since the last tick or repeat was hit (NaN for none yet) */
   sinceTick: number;
+  /** the follow circle: ms since the slider was last followed (NaN if never), since it stopped
+   * being followed after that (NaN while it is), since a tick was missed after that (NaN) */
+  followOn: number;
+  followOff: number;
+  broken: number;
   /** osu!pixels per ms */
   velocity: number;
   /** the slider's fade-out */
@@ -156,9 +176,22 @@ export interface SpinnerPiece {
   progress: number;
   /** when it got all its spins (Infinity if never) */
   completed: number;
+  /** being turned (a button down, in its time) */
+  tracking: boolean;
   /** spins per minute */
   spm: number;
   alpha: number;
+}
+
+/** A result where it was judged: 0 Great, 1 Ok, 2 Meh, 3 Miss. */
+export interface JudgementPiece {
+  x: number;
+  y: number;
+  result: 0 | 1 | 2 | 3;
+  /** ms since it was judged */
+  since: number;
+  /** for the skins' bits of chance */
+  seed: number;
 }
 
 export interface FollowPointPiece {
@@ -212,12 +245,25 @@ export interface OsuRenderer {
   ball(f: OsuFrame, b: BallPiece): void;
   spinner(f: OsuFrame, s: SpinnerPiece): void;
   followPoint(f: OsuFrame, p: FollowPointPiece): void;
+  judgement(f: OsuFrame, j: JudgementPiece): void;
   readonly trail: TrailStyle;
   drawTrail(f: OsuFrame, parts: TrailPart[]): void;
   cursor(f: OsuFrame, c: CursorPiece): void;
 }
 
 const clamp01 = (v: number): number => (v < 0 ? 0 : v > 1 ? 1 : v);
+
+/** lib/replay's results → the judgement pieces' */
+const PIECE_RESULT: Record<number, JudgementPiece["result"]> = { 1: 0, 3: 1, 4: 2, 5: 3 };
+
+/** A slider's ticks, repeats and end as a replay judged them. */
+interface SliderPlay {
+  ticks: Nested[];
+  repeats: Nested[];
+  tail: Nested;
+  /** when it was followed: on, off, on … (before its end) */
+  follow: number[];
+}
 
 export class OsuPlayfield {
   readonly chart: OsuChart;
@@ -226,6 +272,11 @@ export class OsuPlayfield {
   /** Hidden leaves the first object its approach circle (lazer's "increase first object visibility") */
   private readonly first: number;
   private light: { size: FlashlightSize; sliders: number[] } | null = null;
+  /** the replay it shows (null: autoplay) */
+  private play: OsuReplay | null = null;
+  private sliderPlay = new Map<number, SliderPlay>();
+  /** the judgements shown, by time: when, which object, which result */
+  private judged: { time: Float64Array; obj: Int32Array; result: Uint8Array } = { time: new Float64Array(0), obj: new Int32Array(0), result: new Uint8Array(0) };
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -236,6 +287,36 @@ export class OsuPlayfield {
     let first = -1;
     for (let i = 0; i < this.chart.n && first < 0; i++) if (this.chart.kind[i] !== SPINNER) first = i;
     this.first = first;
+    this.setPlay(null);
+  }
+
+  /** Plays a replay (judged), or autoplay again (null). */
+  setPlay(r: OsuReplay | null): void {
+    const ch = this.chart;
+    this.play = r;
+    ch.setFrames(r ? r.frames : null, r ? r.rate : 1);
+    this.sliderPlay.clear();
+    const shown: [number, number, number][] = [];
+    if (r) {
+      for (const [i, nested] of r.nested) {
+        // FollowCircle: what changes before the start shows from the start; nothing once it's over
+        const follow = (r.follow.get(i) ?? []).filter((at) => at < ch.end[i]).map((at) => Math.max(at, ch.time[i]));
+        this.sliderPlay.set(i, { ticks: nested.filter((x) => x.kind === 0), repeats: nested.filter((x) => x.kind === 1), tail: nested[nested.length - 1], follow });
+      }
+      for (const j of r.judgements) shown.push([j.time, j.obj, PIECE_RESULT[j.result] ?? 3]);
+    } else {
+      // autoplay: Great, on time
+      for (let i = 0; i < ch.n; i++) shown.push([ch.kind[i] === SPINNER ? ch.end[i] : ch.time[i], i, 0]);
+    }
+    shown.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+    this.judged = { time: Float64Array.from(shown, (s) => s[0]), obj: Int32Array.from(shown, (s) => s[1]), result: Uint8Array.from(shown, (s) => s[2]) };
+  }
+
+  /** When a circle (or slider head) was hit and when it was missed (NaN for neither yet). */
+  private judgedAt(i: number): [number, number] {
+    const p = this.play;
+    if (!p) return [this.chart.time[i], NaN];
+    return [p.hitAt[i], p.missAt[i]];
   }
 
   setRenderer(r: OsuRenderer): void {
@@ -326,6 +407,7 @@ export class OsuPlayfield {
       if (t < start - preempt || t > end + SPINNER_FADE_OUT) continue;
       const spin = ch.spinAt(i, t);
       const before = ch.spinAt(i, t - SPM_WINDOW).total;
+      const p = this.play;
       const spm = t > start ? ((spin.total - before) / 360 / Math.min(SPM_WINDOW, Math.max(1, t - start))) * 60000 : 0;
       ctx.save();
       r.spinner(f, {
@@ -339,7 +421,9 @@ export class OsuPlayfield {
         rotation: spin.rotation,
         hidden: this.hidden,
         progress: ch.spinProgress(i, t),
-        completed: ch.spinCompleted(i),
+        // a replay's spinner is complete only if lazer would have counted all its spins
+        completed: !p || p.result[i] === 1 ? ch.spinCompleted(i) : Infinity,
+        tracking: t >= start && t <= end && (!p || ch.buttonsAt(t) !== 0),
         spm,
         // Hidden: out over 0.3 of the preempt from the end
         alpha: Math.min(t > end ? 1 - (t - end) / SPINNER_FADE_OUT : 1, this.hidden ? 1 - clamp01((t - end) / (preempt * HD_FADE_OUT)) : 1),
@@ -359,6 +443,15 @@ export class OsuPlayfield {
       const k = ch.kind[i];
       if (k === CIRCLE) this.hitCircle(f, i, approaches);
       else if (k === SLIDER) this.slider(f, i, approaches);
+    }
+
+    // judgements, over the objects
+    const J = this.judged;
+    for (let k = bound(J.time, t - JUDGEMENT_LIFE); k < J.time.length && J.time[k] <= t; k++) {
+      const i = J.obj[k];
+      ctx.save();
+      r.judgement(f, { x: ch.x[i], y: ch.y[i], result: J.result[k] as JudgementPiece["result"], since: t - J.time[k], seed: J.time[k] + i });
+      ctx.restore();
     }
 
     for (let j = approaches.length - 1; j >= 0; j--) {
@@ -408,20 +501,23 @@ export class OsuPlayfield {
     const preempt = ch.preempt;
     const appear = start - preempt;
     if (t < appear) return;
-    const hit = t >= start ? t - start : NaN;
-    if (hit >= HIT_LIFE) return;
+    const [hitAt, missAt] = this.judgedAt(i);
+    const hit = t >= hitAt ? t - hitAt : NaN;
+    if (hit >= HIT_LIFE || t >= missAt + MISS_FADE) return;
     const accent = this.accent(i);
     const dim = t < start - MISS_WINDOW ? DIM : tween(t - (start - MISS_WINDOW), DIM, 1, 100);
     const fadeIn = this.hidden ? preempt * HD_FADE_IN : ch.fadeIn;
-    const alpha = clamp01((t - appear) / fadeIn) * parentAlpha * this.hiddenFade(start, t);
+    let alpha = clamp01((t - appear) / fadeIn) * parentAlpha * this.hiddenFade(start, t);
+    if (t >= missAt) alpha *= 1 - (t - missAt) / MISS_FADE;
     f.ctx.save();
     if (alpha > 0) this.renderer.circle(f, { i, x, y, accent, number: ch.number[i], part, alpha, dim, hit });
     f.ctx.restore();
     // the approach circle: 4× → 1× over the preempt, to 0.9 over two fade-ins; out 50 ms from the
-    // start; Hidden has none but the first object's
-    if (t < start + 50 && (!this.hidden || i === this.first)) {
+    // start, or from an early hit or miss; Hidden has none but the first object's
+    const gone = Math.min(start, Number.isNaN(hitAt) ? Infinity : hitAt, Number.isNaN(missAt) ? Infinity : missAt);
+    if (t < gone + 50 && (!this.hidden || i === this.first)) {
       let a = 0.9 * clamp01((t - appear) / Math.min(fadeIn * 2, preempt));
-      if (t >= start) a *= 1 - (t - start) / 50;
+      if (t >= gone) a *= 1 - (t - gone) / 50;
       approaches.push({ x, y, accent, scale: tween(t - appear, 4, 1, preempt), alpha: a * parentAlpha });
     }
   }
@@ -442,6 +538,7 @@ export class OsuPlayfield {
     const r = this.renderer;
     const ctx = f.ctx;
     const accent = this.accent(i);
+    const sp = this.sliderPlay.get(i) ?? null;
     const duration = Math.max(1, end - start);
     const completion = clamp01((t - start) / duration);
     const alpha = t > end ? clamp01(1 - (t - end) / SLIDER_FADE_OUT) : 1;
@@ -486,7 +583,7 @@ export class OsuPlayfield {
       const [tx, ty] = repeats % 2 === 0 ? snakeEnd : ch.positionAt(s, 0);
       if (tailAlpha > 0) {
         ctx.save();
-        r.circle(f, { i, x: tx, y: ty, accent, number: 0, part: "tail", alpha: tailAlpha, dim, hit: t >= end ? t - end : NaN });
+        r.circle(f, { i, x: tx, y: ty, accent, number: 0, part: "tail", alpha: tailAlpha, dim, hit: t >= end && (!sp || sp.tail.hit) ? t - end : NaN });
         ctx.restore();
       }
     }
@@ -506,15 +603,18 @@ export class OsuPlayfield {
         a *= 1 - clamp01((t - (time - d)) / d);
       }
       let scale = tween(t - appear, 0.5, 1, TICK_ANIM * 4, ease.outElasticHalf);
-      if (t >= time) {
-        const e = t - time;
+      // hit: out and 1.5× over the animation; missed: out, turning red
+      const judged = sp ? sp.ticks[k]?.judgedAt : time;
+      const miss = !!sp && sp.ticks[k]?.hit === false && t >= judged;
+      if (t >= judged) {
+        const e = t - judged;
         if (e >= TICK_ANIM) continue;
         a *= 1 - ease.outQuint(e / TICK_ANIM);
-        scale *= tween(e, 1, 1.5, TICK_ANIM, ease.out);
+        if (!miss) scale *= tween(e, 1, 1.5, TICK_ANIM, ease.out);
       }
       const [x, y] = ch.positionAt(s, s.tickProgress[k]);
       ctx.save();
-      r.tick(f, { x, y, accent, alpha: a * alpha, scale });
+      r.tick(f, { x, y, accent, alpha: a * alpha, scale, miss });
       ctx.restore();
     }
 
@@ -525,15 +625,18 @@ export class OsuPlayfield {
       const appear = time - repeatPreempt;
       if (t < appear) continue;
       const animDuration = Math.min(300, s.spanDuration);
-      if (t >= time + animDuration) continue;
+      const rp = sp?.repeats[k];
+      const judged = rp ? rp.judgedAt : time;
+      if (t >= judged + animDuration) continue;
       const delay = k === 0 ? preempt / 3 : 0;
       const arrowFade = k > 0 ? Math.min(s.spanDuration, 150) : 150;
       const circleFade = k > 0 ? 0 : ch.fadeIn;
       let arrowAlpha = clamp01((t - appear - delay) / arrowFade);
       let circleAlpha = circleFade > 0 ? clamp01((t - appear - delay) / circleFade) : t >= appear + delay ? 1 : 0;
-      const hit = t >= time ? t - time : NaN;
-      if (hit >= 0) {
-        const out = 1 - ease.out(Math.min(1, hit / animDuration));
+      // hit: 1.5× and out; missed: just out
+      const hit = t >= judged && (!rp || rp.hit) ? t - judged : NaN;
+      if (t >= judged) {
+        const out = 1 - ease.out(Math.min(1, (t - judged) / animDuration));
         arrowAlpha *= out;
         circleAlpha *= out;
       }
@@ -580,13 +683,34 @@ export class OsuPlayfield {
         const [qx, qy] = ch.pointAt(s, d - fw * 2);
         angle = Math.atan2(ny - qy, nx - qx);
       }
-      // the last tick or repeat hit
+      // the last tick or repeat hit, and the last missed
       let lastTick = NaN;
-      for (let k = 0; k < s.tickTime.length; k++) if (s.tickTime[k] <= t) lastTick = Math.max(Number.isNaN(lastTick) ? -Infinity : lastTick, s.tickTime[k]);
-      for (let k = 0; k < repeats; k++) {
-        const time = start + (k + 1) * s.spanDuration;
-        if (time <= t && time < end) lastTick = Math.max(Number.isNaN(lastTick) ? -Infinity : lastTick, time);
+      let lastMiss = NaN;
+      let followOn = t >= start ? t - start : NaN;
+      let followOff = NaN;
+      if (sp) {
+        for (const x of [...sp.ticks, ...sp.repeats]) {
+          if (!(x.judgedAt <= t)) continue;
+          if (x.hit) lastTick = Number.isNaN(lastTick) ? x.judgedAt : Math.max(lastTick, x.judgedAt);
+          else lastMiss = Number.isNaN(lastMiss) ? x.judgedAt : Math.max(lastMiss, x.judgedAt);
+        }
+        // followed: on, off, on …
+        followOn = NaN;
+        const fl = sp.follow;
+        for (let k = 0; k < fl.length && fl[k] <= t; k += 2) {
+          followOn = t - fl[k];
+          followOff = k + 1 < fl.length && fl[k + 1] <= t ? t - fl[k + 1] : NaN;
+        }
+      } else {
+        for (let k = 0; k < s.tickTime.length; k++) if (s.tickTime[k] <= t) lastTick = Math.max(Number.isNaN(lastTick) ? -Infinity : lastTick, s.tickTime[k]);
+        for (let k = 0; k < repeats; k++) {
+          const time = start + (k + 1) * s.spanDuration;
+          if (time <= t && time < end) lastTick = Math.max(Number.isNaN(lastTick) ? -Infinity : lastTick, time);
+        }
       }
+      // a tick missed since the follow circle last changed breaks it
+      const changed = Number.isNaN(followOff) ? followOn : followOff;
+      const broken = t - lastMiss <= (Number.isNaN(changed) ? Infinity : changed) ? t - lastMiss : NaN;
       ctx.save();
       r.ball(f, {
         i,
@@ -597,6 +721,9 @@ export class OsuPlayfield {
         sinceStart: t - start,
         sinceEnd: t - end,
         sinceTick: Number.isNaN(lastTick) ? NaN : t - lastTick,
+        followOn,
+        followOff,
+        broken,
         velocity: s.spanDuration > 0 ? s.length / s.spanDuration : 0,
         alpha,
       });

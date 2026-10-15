@@ -15,7 +15,7 @@ import { preload, type TexRef } from "../../lib/skin/skins";
 import { asterisk, triangles } from "../taiko/triangles";
 import { box, disc, glow, ICON, icon, ring, sprite, text } from "./draw";
 import { OBJECT_RADIUS } from "./chart";
-import { dimmed, FOLLOW_AREA, type ApproachPiece, type BallPiece, type BodyStyle, type CirclePiece, type CursorPiece, type FollowPointPiece, type OsuFrame, type OsuRenderer, type RepeatPiece, type SpinnerPiece, type TickPiece, type TrailPart, type TrailStyle } from "./playfield";
+import { dimmed, FOLLOW_AREA, type ApproachPiece, type BallPiece, type BodyStyle, type CirclePiece, type CursorPiece, type FollowPointPiece, type JudgementPiece, type OsuFrame, type OsuRenderer, type RepeatPiece, type SpinnerPiece, type TickPiece, type TrailPart, type TrailStyle } from "./playfield";
 
 const SIZE = OBJECT_RADIUS * 2;
 
@@ -62,20 +62,44 @@ export function defaultApproach(f: OsuFrame, a: ApproachPiece, tex: TexRef | nul
   }
 }
 
-/** FollowCircle under autoplay (DefaultFollowCircle, ArgonFollowCircle): grown on the press at the
- * start, pulsing on ticks, shrinking away at the end. [scale, alpha] */
+/** The follow circle (DefaultFollowCircle, ArgonFollowCircle): grown over 300 ms once followed,
+ * pulsing on ticks, back to 1× and gone over 150 ms when let go, blown away when a tick is missed,
+ * shrinking away at the end. [scale, alpha] */
 export function followCircle(b: BallPiece): [number, number] {
-  if (b.sinceStart < 0) return [1, 0];
-  let scale = tween(b.sinceStart, 1, FOLLOW_AREA, 300, ease.outQuint);
-  let alpha = tween(b.sinceStart, 0, 1, 300, ease.outQuint);
-  if (b.sinceTick >= 0 && b.sinceEnd < 0 && scale >= FOLLOW_AREA * 0.98) {
+  if (!(b.followOn >= 0)) return [1, 0];
+  let scale = tween(b.followOn, 1, FOLLOW_AREA, 300, ease.outQuint);
+  let alpha = tween(b.followOn, 0, 1, 300, ease.outQuint);
+  if (b.followOff >= 0) {
+    const held = b.followOn - b.followOff;
+    scale = tween(b.followOff, tween(held, 1, FOLLOW_AREA, 300, ease.outQuint), 1, 150, ease.outQuint);
+    alpha = tween(held, 0, 1, 300, ease.outQuint) * (1 - ease.outQuint(Math.min(1, b.followOff / 150)));
+  } else if (b.sinceTick >= 0 && b.sinceTick <= b.followOn && b.sinceEnd < 0 && scale >= FOLLOW_AREA * 0.98) {
     scale = b.sinceTick < 40 ? tween(b.sinceTick, FOLLOW_AREA, FOLLOW_AREA * 1.08, 40, ease.outQuint) : tween(b.sinceTick - 40, FOLLOW_AREA * 1.08, FOLLOW_AREA, 200, ease.outQuint);
+  }
+  if (b.broken >= 0) {
+    scale = tween(b.broken, scale, 4, 100);
+    alpha *= 1 - Math.min(1, b.broken / 100);
   }
   if (b.sinceEnd >= 0) {
     scale = tween(b.sinceEnd, scale, 1, 300, ease.outQuint);
     alpha *= 1 - ease.outQuint(Math.min(1, b.sinceEnd / 150));
   }
   return [scale, alpha];
+}
+
+/** OsuColour.ForHitResult: Great, Ok, Meh, Miss */
+export const JUDGEMENT_COLOURS: Colour[] = [rgb("#66ccff"), rgb("#88b300"), rgb("#ffcc22"), rgb("#ed1121")];
+export const JUDGEMENT_TEXT = ["GREAT", "OK", "MEH", "MISS"];
+/** what a missed tick turns (DrawableSliderTick: Color4.Red) */
+export const MISS_RED: Colour = [1, 0, 0, 1];
+
+/** DefaultJudgementPiece's miss (argon's too): from 1.6× to 1 in 100 ms, falling 100 and turning
+ * 40° over 800 ms (InQuint). */
+export function missMotion(ctx: CanvasRenderingContext2D, el: number): void {
+  const s = tween(el, 1.6, 1, 100, ease.in);
+  ctx.translate(0, tween(el, 0, 100, 800, ease.inQuint));
+  ctx.rotate((tween(el, 0, 40, 800, ease.inQuint) * Math.PI) / 180);
+  ctx.scale(s, s);
 }
 
 /** SkinnableCursor.Expand / Contract: 1.2× on a press (elastic), back over 400 ms. */
@@ -211,9 +235,9 @@ export class TrianglesOsuRenderer implements OsuRenderer {
     const d = 16 * f.scale * k.scale;
     ctx.save();
     ctx.globalAlpha *= 0.3;
-    disc(ctx, k.x, k.y, d, css(k.accent));
+    disc(ctx, k.x, k.y, d, css(k.miss ? MISS_RED : k.accent));
     ctx.restore();
-    ring(ctx, k.x, k.y, d, d / 4, "#fff");
+    ring(ctx, k.x, k.y, d, d / 4, k.miss ? css(MISS_RED) : "#fff");
   }
 
   repeat(f: OsuFrame, r: RepeatPiece): void {
@@ -249,6 +273,8 @@ export class TrianglesOsuRenderer implements OsuRenderer {
     }
     // DefaultSliderBall: a white ring (additive), lit inside while it's followed
     if (b.sinceStart < 0) return;
+    const followed = b.followOn >= 0 && !(b.followOff >= 0);
+    const fill = followed ? tween(b.followOn, 0.05, 0.3, 200, ease.outQuint) : b.followOff >= 0 ? tween(b.followOff, 0.3, 0.05, 200, ease.outQuint) : 0.05;
     let alpha = 1;
     let scale = 1;
     if (b.sinceEnd >= 0) {
@@ -260,7 +286,7 @@ export class TrianglesOsuRenderer implements OsuRenderer {
     ctx.globalAlpha *= alpha;
     ctx.scale(scale, scale);
     ctx.save();
-    ctx.globalAlpha *= 0.3;
+    ctx.globalAlpha *= fill;
     disc(ctx, 0, 0, SIZE, "#fff");
     ctx.restore();
     ring(ctx, 0, 0, SIZE, 10, "#fff");
@@ -295,8 +321,7 @@ export class TrianglesOsuRenderer implements OsuRenderer {
       // the background layer: just its glow
       glow(ctx, 0, 0, area, 40, colour, 1, true);
       // the fill, growing with the spins
-      const tracking = t >= s.start && t <= s.end;
-      const fillAlpha = tracking ? 0.4 : 0.2;
+      const fillAlpha = s.tracking ? 0.4 : 0.2;
       const fillScale = 0.2 + 0.8 * s.progress;
       ctx.save();
       ctx.globalAlpha *= fillAlpha;
@@ -351,6 +376,27 @@ export class TrianglesOsuRenderer implements OsuRenderer {
       text(ctx, String(Math.trunc(Math.max(0, s.spm))), 0, 132, 24, 600, "#fff");
       text(ctx, "SPINS PER MINUTE", 0, 156, 12, 600, "#fff");
     }
+  }
+
+  judgement(f: OsuFrame, j: JudgementPiece): void {
+    // DefaultJudgementPiece: the result's name, stretching from 0.8 to 1.2 wide, fading over
+    // 800 ms; a miss falls, turning
+    const el = j.since;
+    if (el < 0 || el >= 800) return;
+    const ctx = f.ctx;
+    ctx.translate(j.x, j.y);
+    ctx.scale(f.scale, f.scale);
+    ctx.globalAlpha *= 1 - el / 800;
+    if (j.result === 3) {
+      missMotion(ctx, el);
+      ctx.scale(0.85, 1);
+    } else ctx.scale(tween(el, 0.8, 1.2, 1800, ease.outQuint), 1);
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = css(JUDGEMENT_COLOURS[j.result]);
+    ctx.font = `700 20px "Instrument Sans", system-ui, sans-serif`;
+    ctx.letterSpacing = "2px";
+    ctx.fillText(JUDGEMENT_TEXT[j.result], 1, 0);
   }
 
   followPoint(f: OsuFrame, p: FollowPointPiece): void {

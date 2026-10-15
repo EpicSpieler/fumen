@@ -1,4 +1,4 @@
-/* replay-panel.ts — replays beside the fullscreen playfield (osu!mania, osu!taiko): who plays it
+/* replay-panel.ts — replays beside the fullscreen playfield (osu!, osu!taiko, osu!mania): who plays it
  * (autoplay, or one of lazer's scores on the difficulty that has a replay), and while a replay
  * plays, how it's going: the accuracy so far, the judgements so far, the latest hits on an error
  * bar with lazer's windows, and the misses — marked on the density graph, one click away each.
@@ -13,6 +13,7 @@
 import { api, asApiError } from "../lib/api";
 import { date, num, pct } from "../lib/format";
 import { maniaWindows, ManiaReplay, MISS, playedNotes, unreplayed } from "../lib/replay";
+import { OsuReplay, osuOd, osuUnreplayed } from "../lib/osu-replay";
 import { TaikoReplay, taikoOd, taikoUnreplayed } from "../lib/taiko-replay";
 import { store } from "../lib/store";
 import type { ChartData, OnlineReplayEntry, ReplayEntry } from "../lib/types";
@@ -22,10 +23,12 @@ import { openMenu, toast, type MenuEntry } from "../ui/controls";
 import { icon } from "../ui/icons";
 import { fitCanvas } from "../ui/playfield";
 import { ManiaPlayfield } from "../ui/mania/playfield";
+import { OsuPlayfield } from "../ui/osu/playfield";
 import { TaikoPlayfield } from "../ui/taiko/playfield";
 
 const DRAWN: readonly string[] = ["EZ", "HR", "HD", "FI", "FL", "MR"];
-/** the rulesets it replays: osu!taiko, osu!mania */
+/** the rulesets it replays: osu!, osu!taiko, osu!mania */
+const OSU = 0;
 const TAIKO = 1;
 const MANIA = 3;
 const NAMES = ["Perfect", "Great", "Good", "Ok", "Meh", "Miss"];
@@ -52,7 +55,7 @@ export class ReplayPanel {
   private online: OnlineReplayEntry[] | null = null;
   private asking = false;
   private playing: Playing | null = null;
-  private replay: ManiaReplay | TaikoReplay | null = null;
+  private replay: ManiaReplay | TaikoReplay | OsuReplay | null = null;
   private misses: number[] = [];
   /** last text per field, so frames only touch the DOM on changes */
   private shown = new Map<string, string>();
@@ -105,7 +108,7 @@ export class ReplayPanel {
       if (mapId) void this.loadList(mapId);
     }
     this.data = d;
-    this.root.querySelector<HTMLElement>(".fs-replay-set")!.hidden = !(d && ((d.mode === MANIA && d.keys > 0) || (d.mode === TAIKO && d.taiko)));
+    this.root.querySelector<HTMLElement>(".fs-replay-set")!.hidden = !(d && ((d.mode === MANIA && d.keys > 0) || (d.mode === TAIKO && d.taiko) || (d.mode === OSU && d.osu)));
     if (d && this.playing) this.apply();
     this.render();
   }
@@ -202,7 +205,8 @@ export class ReplayPanel {
 
   /** Whether a score's mods keep it from being replayed here. */
   private blocked(mods: string[]): boolean {
-    return (this.data?.mode === TAIKO ? taikoUnreplayed(mods) : unreplayed(mods)).length > 0;
+    const mode = this.data?.mode;
+    return (mode === OSU ? osuUnreplayed(mods) : mode === TAIKO ? taikoUnreplayed(mods) : unreplayed(mods)).length > 0;
   }
 
   /** The player's scores on osu! for this difficulty, then the menu again. */
@@ -265,6 +269,11 @@ export class ReplayPanel {
       const replay = new TaikoReplay(d.taiko, p.frames, taikoOd(map.od, p.entry.mods), p.entry.mods);
       field.setPlay(replay);
       this.replay = replay;
+    } else if (field instanceof OsuPlayfield && d.osu) {
+      // the playfield's chart has the score's Easy / Hard Rock / Mirror built in
+      const replay = new OsuReplay(field.chart, p.frames, osuOd(map.od, p.entry.mods), p.entry.rate ?? 1);
+      field.setPlay(replay);
+      this.replay = replay;
     } else return;
     this.misses = this.replay.judgements.filter((j) => j.result === MISS).map((j) => j.time);
     this.shown.clear();
@@ -279,7 +288,7 @@ export class ReplayPanel {
     this.replay = null;
     this.misses = [];
     const field = this.field();
-    if (field instanceof ManiaPlayfield || field instanceof TaikoPlayfield) field.setPlay(null);
+    if (field instanceof ManiaPlayfield || field instanceof TaikoPlayfield || field instanceof OsuPlayfield) field.setPlay(null);
     this.renderMarks();
     if (redraw) {
       this.render();
@@ -318,7 +327,7 @@ export class ReplayPanel {
   }
 
   /** The latest hits against lazer's windows (the best in the middle, the widest hit at the ends). */
-  private drawErrors(r: ManiaReplay | TaikoReplay, t: number): void {
+  private drawErrors(r: ManiaReplay | TaikoReplay | OsuReplay, t: number): void {
     const c = this.root.querySelector<HTMLCanvasElement>(".fs-errors")!;
     const fit = fitCanvas(c);
     if (!fit) return;

@@ -1,7 +1,8 @@
 /* chart.ts — an osu! chart as the playfield reads it (src-tauri/src/osu.rs lays it out the way
  * lazer does, MIT, ppy Pty Ltd): objects in typed arrays, slider paths with their lengths, the
- * autoplay cursor (lazer's replay frames, positions moving straight between them) and what it
- * does to spinners (SpinnerRotationTracker: the angle it turns around the spinner while holding).
+ * cursor (autoplay's frames or a replay's, positions moving straight between them) and what it
+ * does to spinners (SpinnerRotationTracker: the angle it turns around the spinner while holding,
+ * counted as SpinnerSpinHistory does).
  */
 import type { ChartData, OsuChartData } from "../../lib/types";
 import { bound, upper } from "../taiko/chart";
@@ -43,8 +44,34 @@ interface Spin {
   time: Float64Array;
   /** signed (the disc's visual rotation) */
   rotation: Float64Array;
-  /** every turn counted (Result.TotalRotation) */
+  /** the turns counted (SpinnerSpinHistory) */
   total: Float64Array;
+}
+
+/** SpinnerSpinHistory: spins count in one direction at a time, turning back undoes them first. */
+export class SpinHistory {
+  private completed = 0;
+  private accumulated = 0;
+  private atLastCompletion = 0;
+  private currentMax = 0;
+
+  /** degrees */
+  get total(): number {
+    return 360 * this.completed + this.currentMax;
+  }
+
+  report(delta: number): void {
+    if (delta === 0) return;
+    this.accumulated += delta;
+    const current = () => this.accumulated - this.atLastCompletion;
+    this.currentMax = Math.max(this.currentMax, Math.abs(current()));
+    while (this.currentMax >= 360) {
+      const direction = Math.sign(current());
+      this.completed++;
+      this.atLastCompletion += direction * 360;
+      this.currentMax = Math.abs(current());
+    }
+  }
 }
 
 export class OsuChart {
@@ -69,13 +96,16 @@ export class OsuChart {
   readonly colours: [number, number, number][];
   readonly sliderBorder: [number, number, number] | null;
   readonly sliderTrack: [number, number, number] | null;
-  /** autoplay frames */
-  readonly frameTime: Float64Array;
-  readonly frameX: Float32Array;
-  readonly frameY: Float32Array;
-  readonly frameButtons: Uint8Array;
+  /** the cursor's frames (autoplay's, or a replay's) */
+  frameTime = new Float64Array(0);
+  frameX = new Float32Array(0);
+  frameY = new Float32Array(0);
+  frameButtons = new Uint8Array(0);
   /** cursor travel up to each frame, osu!pixels */
-  readonly frameDist: Float64Array;
+  frameDist = new Float64Array(0);
+  private readonly autoplay: number[];
+  /** a replay's rate (spins turn that much faster) */
+  private spinRate = 1;
   private readonly spins = new Map<number, Spin>();
   /** the longest any object lasts */
   readonly maxSpan: number;
@@ -135,7 +165,16 @@ export class OsuChart {
       return { path, cum, length: cum[cum.length - 1], spans: Math.max(1, s.spans), spanDuration: s.spanDuration, tickTime, tickProgress };
     });
 
-    const f = o.frames;
+    this.autoplay = o.frames;
+    this.setFrames(null);
+  }
+
+  /** Whose cursor it is: a replay's frames ([time, x, y, buttons 1 left / 2 right]) and rate, or
+   * autoplay's (null). */
+  setFrames(frames: ArrayLike<number> | null, rate = 1): void {
+    const f = frames ?? this.autoplay;
+    this.spinRate = frames ? rate : 1;
+    this.spins.clear();
     const m = Math.floor(f.length / 4);
     this.frameTime = new Float64Array(m);
     this.frameX = new Float32Array(m);
@@ -301,6 +340,7 @@ export class OsuChart {
     const time = Float64Array.from(times);
     const rotation = new Float64Array(time.length);
     const total = new Float64Array(time.length);
+    const history = new SpinHistory();
     let [px, py] = this.cursorAt(start);
     let last = Math.atan2(py - SPINNER_Y, px - SPINNER_X);
     for (let k = 1; k < time.length; k++) {
@@ -312,7 +352,8 @@ export class OsuChart {
       last = angle;
       if (!this.buttonsAt(time[k - 1])) delta = 0;
       rotation[k] = rotation[k - 1] + delta;
-      total[k] = total[k - 1] + Math.abs(delta);
+      history.report(delta * this.spinRate);
+      total[k] = history.total;
     }
     s = { time, rotation, total };
     this.spins.set(i, s);
