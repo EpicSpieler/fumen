@@ -415,7 +415,14 @@ sections below is the order of the work.
       step 5): the sets leave the export at once; lazer's RealmAccess removes them and their files
       for good the next time the database is opened (no undo — lazer's own restore only works
       within its session), and every score stays. osu!stable's sets are never picked
-- [ ] osu!stable's `scores.db` into the play history
+- [x] osu!stable's `scores.db` into the play history — 0.7.0. `stable::read_scores_db` (versions with
+      4- and 8-byte score ids, target practice's extra value); each play goes into `scores` as lazer
+      would keep it (id "st-<replay md5>", accuracy and grade by stable's rules per ruleset, silver
+      with HD/FL (mania FI), judgement counts and mods as lazer's legacy import names them, plus
+      Classic). lazer's import keeps them; a changed scores.db re-reads stable. The history counts
+      them as the account's when lazer knows the name under its id (old names too), and leaves out
+      the ones lazer imported itself (same difficulty, within 2 s). On the user's PC: 3 plays,
+      two under an earlier name — all three in the history
 
 ## After 1.0
 
