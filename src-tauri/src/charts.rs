@@ -89,6 +89,8 @@ struct TaikoOut {
     objects: Vec<f64>,
     /// every drum roll's ticks, roll after roll
     ticks: Vec<f64>,
+    /// every drum roll's time between ticks, roll after roll
+    spacing: Vec<f64>,
     /// `[time, multiplier]` scroll speed changes
     scroll: Vec<f64>,
     /// `[time, major]` bar lines
@@ -100,7 +102,11 @@ struct TaikoOut {
 fn taiko_out(t: &crate::taiko::Chart) -> TaikoOut {
     let mut objects = Vec::with_capacity(t.objects.len() * 5);
     let mut ticks = Vec::new();
+    let mut spacing = Vec::new();
     for o in &t.objects {
+        if o.kind == crate::taiko::Kind::Roll {
+            spacing.push(o.spacing);
+        }
         let flags = o.strong as u8 | (o.kiai as u8) << 1;
         let extra = match o.kind {
             crate::taiko::Kind::Roll => ticks.len() as f64,
@@ -113,6 +119,7 @@ fn taiko_out(t: &crate::taiko::Chart) -> TaikoOut {
     TaikoOut {
         objects,
         ticks,
+        spacing,
         scroll: t.scroll.iter().flat_map(|&(a, b)| [a, b]).collect(),
         bars: t.bars.iter().flat_map(|&(a, b)| [a, b as u8 as f64]).collect(),
         presses: t.presses.iter().flat_map(|p| [p.time, p.keys as f64, p.object as f64]).collect(),

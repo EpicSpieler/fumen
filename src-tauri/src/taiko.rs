@@ -75,6 +75,8 @@ pub struct Object {
     pub kiai: bool,
     /// drum rolls: their ticks
     pub ticks: Vec<f64>,
+    /// drum rolls: the time between ticks (a tick is hit within half of it, `DrumRollTick.HitWindow`)
+    pub spacing: f64,
     /// swells: hits needed
     pub hits: u32,
     pub samples: RawSamples,
@@ -166,9 +168,9 @@ pub fn parse(text: &str) -> Option<Chart> {
     parse_with(text, Mods::NONE)
 }
 
-/// An osu!taiko beatmap with the mods that change it: Easy and Hard Rock on OD (swells) and the
-/// slider multiplier (the scroll speed; drum rolls keep the length the beatmap gives them, as
-/// lazer converts before applying mods).
+/// An osu!taiko beatmap with the mods that change it: Easy and Hard Rock on the slider multiplier
+/// (the scroll speed). Drum rolls keep the length the beatmap gives them and swells the hits its
+/// OD asks for, as lazer converts before applying mods (their OD is only the hit windows').
 pub fn parse_with(text: &str, mods: Mods) -> Option<Chart> {
     let mut mode = 0i64;
     let mut od = 5.0f64;
@@ -260,7 +262,6 @@ pub fn parse_with(text: &str, mods: Mods) -> Option<Chart> {
     let timing_at = |t: f64| at(&timing, t, |p| p.time).or(timing.first().copied());
     let speed_at = |t: f64| at(&speeds, t, |p| p.time);
 
-    let od = mods.ar_od(od as f32) as f64;
     let mut objects: Vec<Object> = raw.iter().filter_map(|line| object(line, od, slider_multiplier, tick_rate, &timing_at, &speed_at)).collect();
     // lazer orders by start time (stable, like OrderBy)
     objects.sort_by(|a, b| a.time.total_cmp(&b.time));
@@ -288,7 +289,7 @@ fn object(
     let kiai = speed_at(time + 1.0).is_some_and(|p| p.kiai);
     let beat_len = timing_at(time).map_or(1000.0, |p| p.beat_len);
 
-    let (kind, end, ticks, hits, extras, point_time) = if ty & 2 != 0 {
+    let (kind, end, ticks, spacing, hits, extras, point_time) = if ty & 2 != 0 {
         // x,y,time,type,hitSound,curve,slides,length,edgeSounds,edgeSets,hitSample
         let spans = (int(f.get(6).copied().unwrap_or("1")) - 1).max(0) as f64 + 1.0;
         let length = num(f.get(7).copied()).unwrap_or(0.0).max(0.0);
@@ -314,16 +315,16 @@ fn object(
                 t += spacing;
             }
         }
-        (Kind::Roll, end, ticks, 0, f.get(10).copied(), time + 6.0)
+        (Kind::Roll, end, ticks, spacing, 0, f.get(10).copied(), time + 6.0)
     } else if ty & 8 != 0 {
         // x,y,time,type,hitSound,endTime,hitSample
         let end = num(f.get(5).copied()).unwrap_or(time).max(time);
         let per_second = difficulty_range(od, 3.0, 5.0, 7.5) * SWELL_HIT_MULTIPLIER;
         let hits = ((end - time) / 1000.0 * per_second).max(1.0) as u32;
-        (Kind::Swell, end, Vec::new(), hits, f.get(6).copied(), end + 5.0)
+        (Kind::Swell, end, Vec::new(), 0.0, hits, f.get(6).copied(), end + 5.0)
     } else {
         let kind = if sound & (2 | 8) != 0 { Kind::Rim } else { Kind::Centre };
-        (kind, time, Vec::new(), 0, f.get(5).copied(), time + 5.0)
+        (kind, time, Vec::new(), 0.0, 0, f.get(5).copied(), time + 5.0)
     };
 
     // normalSet:additionSet:index:volume:filename
@@ -337,7 +338,7 @@ fn object(
         file: e.get(4).map(|v| v.trim().to_string()).filter(|v| !v.is_empty()),
         point_time,
     };
-    Some(Object { time, end, kind, strong, kiai, ticks, hits, samples })
+    Some(Object { time, end, kind, strong, kiai, ticks, spacing, hits, samples })
 }
 
 /// `DrawableScrollingRuleset`: one multiplier per control point time (up to the last object).
@@ -478,6 +479,14 @@ mod tests {
         let ez = parse_with(&text, Mods { easy: true, ..Mods::NONE }).unwrap();
         assert!((ez.scroll[0].1 - 2.8 * 0.8).abs() < 1e-9);
         assert_eq!(hr.objects.len(), c.objects.len());
+        // swells ask for the beatmap's own OD's hits
+        let swell = format!("{HEAD}[TimingPoints]
+0,500,4,1,0,100,1,0
+[HitObjects]
+256,192,0,12,0,2000
+");
+        let hits = |m: Mods| parse_with(&swell, m).unwrap().objects[0].hits;
+        assert_eq!(hits(Mods { hard_rock: true, ..Mods::NONE }), hits(Mods::NONE));
     }
 
     #[test]
