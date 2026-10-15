@@ -204,6 +204,9 @@ struct LMap {
     preview_time: Option<i64>,
     audio: Option<String>,
     bg: Option<String>,
+    /// the names the chart gives (`audio` / `bg` are their hashes, when the set has them)
+    audio_file: Option<String>,
+    bg_file: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -284,9 +287,9 @@ pub fn import(conn: &mut Connection, json: &Path, install: &LazerInstall) -> Res
         let mut ins_map = tx.prepare(
             "INSERT INTO maps (id, set_id, online_id, version, ruleset, ruleset_id, status, hash, md5,
                 sr, bpm, length, objects, end_objects, last_played, last_update, hidden,
-                hp, cs, od, ar, bg, audio, preview_time)
+                hp, cs, od, ar, bg, audio, preview_time, audio_file, bg_file)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17,
-                ?18, ?19, ?20, ?21, ?22, ?23, ?24)",
+                ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26)",
         )?;
 
         for set in &export.sets {
@@ -354,6 +357,8 @@ pub fn import(conn: &mut Connection, json: &Path, install: &LazerInstall) -> Res
                     m.bg,
                     m.audio,
                     m.preview_time,
+                    m.audio_file.as_deref().map(str::trim).filter(|s| !s.is_empty()),
+                    m.bg_file.as_deref().map(str::trim).filter(|s| !s.is_empty()),
                 ])?;
                 counts.maps += 1;
             }
@@ -436,6 +441,7 @@ pub fn import(conn: &mut Connection, json: &Path, install: &LazerInstall) -> Res
     db::set_meta(&tx, "lazer.skins", &counts.skins.to_string())?;
     db::set_meta(&tx, "lazer.setSounds", "1")?;
     db::set_meta(&tx, "lazer.setFiles", "1")?;
+    db::set_meta(&tx, "lazer.mapFiles", "1")?;
     db::set_meta(&tx, "lazer.storage", &install.storage)?;
     db::set_meta(&tx, "lazer.realmSize", &install.realm_size.to_string())?;
     db::set_meta(&tx, "lazer.realmModified", &install.realm_modified.to_string())?;

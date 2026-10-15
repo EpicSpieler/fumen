@@ -405,6 +405,8 @@ struct Folder {
     sounds: Vec<(String, String)>,
     /// per difficulty (in the set's order): the chart's key, its background's key, its audio's key
     maps: Vec<(Option<String>, Option<String>, Option<String>)>,
+    /// per difficulty: the background its chart names, found or not
+    bg_names: Vec<Option<String>>,
     /// Unix ms the folder was made
     created: Option<i64>,
 }
@@ -445,11 +447,11 @@ fn scan_folder(songs: &Path, folder: &str, maps: &[&DbMap]) -> Option<Folder> {
     }
     for m in maps {
         let chart = clean_rel(&m.file).and_then(|f| key_of(&f, &mut out));
-        let bg = clean_rel(&m.file)
-            .and_then(|f| background_of(&dir.join(f)))
-            .and_then(|b| key_of(&b, &mut out));
+        let bg_name = clean_rel(&m.file).and_then(|f| background_of(&dir.join(f)));
+        let bg = bg_name.as_deref().and_then(|b| key_of(b, &mut out));
         let audio = clean_rel(&m.audio).and_then(|a| key_of(&a, &mut out));
         out.maps.push((chart, bg, audio));
+        out.bg_names.push(bg_name);
     }
     Some(out)
 }
@@ -533,9 +535,9 @@ pub fn import(conn: &mut Connection, install: &StableInstall, progress: impl Fn(
         let mut ins_map = tx.prepare(
             "INSERT OR IGNORE INTO maps (id, set_id, online_id, version, ruleset, ruleset_id, status, hash, md5,
                 sr, bpm, length, objects, end_objects, last_played, last_update, hidden,
-                hp, cs, od, ar, bg, audio, preview_time)
+                hp, cs, od, ar, bg, audio, preview_time, audio_file, bg_file)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, 0,
-                ?17, ?18, ?19, ?20, ?21, ?22, ?23)",
+                ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25)",
         )?;
         let mut ins_file = tx.prepare("INSERT OR IGNORE INTO stable_files (key, path) VALUES (?1, ?2)")?;
 
@@ -586,7 +588,7 @@ pub fn import(conn: &mut Connection, install: &StableInstall, progress: impl Fn(
                 clean_rel(&maps[0].folder),
             ])?;
             counts.sets += 1;
-            for (m, (chart, mbg, maudio)) in maps.iter().zip(&folder.maps) {
+            for (i, (m, (chart, mbg, maudio))) in maps.iter().zip(&folder.maps).enumerate() {
                 let mode = m.mode.min(3) as usize;
                 counts.maps += ins_map.execute(params![
                     format!("st-{}", m.md5),
@@ -612,6 +614,8 @@ pub fn import(conn: &mut Connection, install: &StableInstall, progress: impl Fn(
                     mbg,
                     maudio,
                     Some(m.preview as i64).filter(|p| *p >= 0),
+                    Some(m.audio.trim().trim_matches('"')).filter(|s| !s.is_empty()),
+                    folder.bg_names.get(i).cloned().flatten(),
                 ])?;
             }
             for (k, rel) in &folder.files {
@@ -637,6 +641,7 @@ pub fn import(conn: &mut Connection, install: &StableInstall, progress: impl Fn(
     db::set_meta(&tx, "stable.lastScan", &crate::lazer::now_ms().to_string())?;
     db::set_meta(&tx, "stable.counts", &serde_json::to_string(&counts)?)?;
     db::set_meta(&tx, "stable.folders", "1")?;
+    db::set_meta(&tx, "stable.mapFiles", "1")?;
     tx.commit()?;
     Ok(counts)
 }
@@ -651,7 +656,9 @@ pub fn is_current(conn: &Connection, install: &StableInstall) -> Result<bool> {
         && meta("stable.path")?.as_deref() == Some(install.path.as_str())
         && meta("stable.songs")?.as_deref() == Some(install.songs.as_str())
         // imported before Fumen kept the sets' folders (library care)
-        && meta("stable.folders")?.is_some())
+        && meta("stable.folders")?.is_some()
+        // …and the song and background each difficulty names
+        && meta("stable.mapFiles")?.is_some())
 }
 
 /// What the last scan found.

@@ -245,6 +245,8 @@ fn library_status(state: State<'_, AppState>) -> Result<LibraryStatus> {
                 || db::get_meta(&conn, "lazer.setSounds")?.is_none()
                 // …and every file of the sets (library care)
                 || db::get_meta(&conn, "lazer.setFiles")?.is_none()
+                // …and the song and background each difficulty names (library care)
+                || db::get_meta(&conn, "lazer.mapFiles")?.is_none()
         }
         _ => false,
     };
