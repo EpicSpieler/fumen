@@ -322,9 +322,11 @@ sections below is the order of the work.
       ticks on the uninherited timing points (higher on bars), scheduled on the song's Web Audio
       clock like the hitsounds. Parts are kept per difficulty in localStorage. Right-click a
       difficulty › Practice the hardest part; from Practice next with that group's pattern and rate
-- [ ] Chart numbers for osu! / taiko / catch in the panel and the fullscreen side: osu! jump
-      distances, stream lengths, slider share, aim vs speed lean; taiko colour changes (don/kat
-      patterns), finisher share; catch hyperdash share, dash distance, banana time
+- Dropped: chart numbers for osu! / taiko / catch. Fumen's own counts (0.4.18) came out again in
+      0.5.0: no maintained analyser for those rulesets exists (Mapperator searches patterns,
+      Simple Beatmap Analyzer and osustreams count 1/4 runs), and home-made heuristics aren't
+      worth showing next to ManiaMapAnalyser's report. The panel and the fullscreen side show
+      pattern numbers for osu!mania only
 
 ## v0.7 — library care
 
