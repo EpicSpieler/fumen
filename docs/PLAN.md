@@ -397,7 +397,15 @@ sections below is the order of the work.
       once, difficulties in common (a pack and a set), or a re-upload. The Duplicates tab shows
       the groups newest first, sorted by what could go (stable's copy, or all but the newest).
       On the user's library: 2 stable copies, 1 pack, 2 re-uploads
-- [ ] Missing or broken audio / backgrounds
+- [x] Missing or broken audio / backgrounds — 0.6.3. Each difficulty keeps the song and background
+      its chart names (`maps.audio_file` / `bg_file`, migration 16: lazer's from the realm, stable's
+      from osu!.db and the chart's [Events]); `care.rs` flags one named but not in the set, or there
+      but not audio / an image by its first bytes (`sniff`: magic numbers, and an MP3 after junk by
+      two MPEG frames in a row within the 16000 bytes BASS looks at; lazer's results kept by hash in
+      `file_formats`), plus files lazer lists that are gone from its storage. "virtual" (a chart
+      without a song, on purpose) isn't missing. The Broken files tab: per set, what and for how many
+      difficulties. On the user's library: 6 songs and 3 backgrounds named but never in their (pack)
+      sets; a Unity asset named STORIA.mp3 plays (an MP3 inside, in reach of BASS), so it's fine
 - [ ] "Clean up" lists that hand the deletion to lazer (never deleting itself)
 - [ ] osu!stable's `scores.db` into the play history
 
