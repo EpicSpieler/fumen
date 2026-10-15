@@ -4,10 +4,12 @@
  *  - CatchPlayfieldAdjustmentContainer: 0.8 of a 4:3 area (smaller on wider screens), objects
  *    falling from 100 osu!pixels above it to the catcher at 340, over the AR's time range;
  *  - DrawableFruit / Droplet / TinyDroplet / Banana: a fruit tilted at random, droplets turning,
- *    bananas shrinking and turning as they fall; caught, they vanish;
- *  - Catcher: autoplay's catcher, facing the way it moves, red while hyperdashing; caught fruits
- *    and bananas pile on its plate (half size) until the combo ends and they fly off; droplets fly
- *    off right away; a hit explosion for every catch (hit lighting);
+ *    bananas shrinking and turning as they fall; caught, they vanish; missed, they fall on past
+ *    the catcher, fading;
+ *  - Catcher: autoplay's catcher or a replay's (lib/catch-replay), facing the way it moves, red
+ *    while hyperdashing, failing after a miss; caught fruits and bananas pile on its plate (half
+ *    size) until the combo ends and they fly off (or fall off, the combo's last missed); droplets
+ *    fly off right away; a hit explosion for every catch (hit lighting);
  *  - CatcherTrailDisplay: dashing leaves fading copies of the catcher every 16 ms (in the hyperdash
  *    colour while hyperdashing), a hyperdash an after-image that rises and grows;
  *  - CatchModHidden: objects fade out from 0.6 of their fall time before the catch over the next
@@ -19,6 +21,7 @@
  * Objects are drawn under the catcher, earlier ones over later ones. The skin renderers
  * (triangles.ts, argon.ts, legacy.ts) draw the pieces; this decides where and when.
  */
+import type { CatchReplay } from "../../lib/catch-replay";
 import type { Mod } from "../../lib/mods";
 import type { ChartData } from "../../lib/types";
 import { breakPeriods, Combo, drawCircleLight, FlashlightSize, type FlashlightSpec } from "../flashlight";
@@ -38,6 +41,10 @@ const EXPLODE_FADE = 750;
 const EXPLODE_MOVE = 1000;
 /** how long hit explosions can last (LegacyHitExplosion: 700 ms, then fading) */
 const EXPLOSION_LIFE = 1400;
+/** a missed object falls on, fading over this */
+const MISS_FADE = 300;
+/** Catcher.applyDropAnimation (Drop): falling 75 osu!pixels as it fades */
+const DROP_FALL = 75;
 /** CatchModHidden: shares of the fall time */
 const HD_OFFSET = 0.6;
 const HD_DURATION = 0.44;
@@ -135,6 +142,11 @@ export class CatchPlayfield {
     this.chart = new CatchChart(data);
   }
 
+  /** Plays a replay (judged), or autoplay again (null). */
+  setPlay(r: CatchReplay | null): void {
+    this.chart.setPlay(r ? r.frames : null, r ? r.caught : null);
+  }
+
   setRenderer(r: CatchRenderer): void {
     this.renderer = r;
   }
@@ -204,10 +216,15 @@ export class CatchPlayfield {
     const caught = upper(ch.time, t);
     for (let i = this.hidden ? caught : from; i < caught; i++) {
       const at = ch.clearAt[i];
-      if (!(at <= t) || t - at >= EXPLODE_FADE) continue;
+      if (!ch.caught[i] || !(at <= t) || t - at >= EXPLODE_FADE) continue;
       const e = t - at;
       const x0 = ch.clearX[i] + ch.plateX[i];
       const y0 = plateY + ch.plateY[i];
+      if (ch.dropped[i]) {
+        // Drop: straight down, fading
+        this.caughtPiece(f, i, x0, y0 + DROP_FALL * ease.inSine(e / EXPLODE_FADE), 1 - e / EXPLODE_FADE);
+        continue;
+      }
       const y = e < 250 ? y0 - 50 * ease.outSine(e / 250) : y0 - 50 + 50 * ease.inSine(Math.min(1, (e - 250) / 500));
       const x = x0 + (ch.plateX[i] / cs) * 6 * Math.min(1, e / EXPLODE_MOVE);
       this.caughtPiece(f, i, x, y, 1 - e / EXPLODE_FADE);
@@ -215,7 +232,7 @@ export class CatchPlayfield {
 
     // on the plate: everything caught since the plate was last cleared (fruits and bananas)
     for (let i = this.hidden ? caught : from; i < caught; i++) {
-      if (ch.clearAt[i] <= t || ch.kind[i] === DROPLET || ch.kind[i] === TINY) continue;
+      if (!ch.caught[i] || ch.clearAt[i] <= t || ch.kind[i] === DROPLET || ch.kind[i] === TINY) continue;
       this.caughtPiece(f, i, cx + ch.plateX[i], plateY + ch.plateY[i], 1);
     }
     // a plate can hold more than the window above; older ones are still there
@@ -224,17 +241,22 @@ export class CatchPlayfield {
         if (ch.lastInCombo[i]) break;
         continue;
       }
-      if (ch.kind[i] === FRUIT || ch.kind[i] === BANANA) this.caughtPiece(f, i, cx + ch.plateX[i], plateY + ch.plateY[i], 1);
+      if (ch.caught[i] && (ch.kind[i] === FRUIT || ch.kind[i] === BANANA)) this.caughtPiece(f, i, cx + ch.plateX[i], plateY + ch.plateY[i], 1);
     }
 
-    // falling: later ones under earlier ones
+    // falling: later ones under earlier ones; missed ones falling on
     const preempt = ch.preempt;
     const last = upper(ch.time, t + preempt);
-    for (let i = last - 1; i >= caught; i--) {
+    for (let i = last - 1; i >= 0; i--) {
       const time = ch.time[i];
+      if (t >= time && (ch.caught[i] || t - time >= MISS_FADE)) {
+        if (t - time >= MISS_FADE + 1000) break;
+        continue;
+      }
       const y = CATCHER_Y - ((time - t) / preempt) * FALL_HEIGHT;
       const size = ch.scale * ch.pieceScale(i, t);
-      const fade = this.hidden ? 1 - Math.min(1, Math.max(0, (t - (time - preempt * HD_OFFSET)) / (preempt * (HD_OFFSET - HD_DURATION)))) : 1;
+      let fade = this.hidden ? 1 - Math.min(1, Math.max(0, (t - (time - preempt * HD_OFFSET)) / (preempt * (HD_OFFSET - HD_DURATION)))) : 1;
+      if (t >= time) fade *= 1 - ease.outQuint((t - time) / MISS_FADE);
       if (fade <= 0) continue;
       ctx.save();
       ctx.globalAlpha *= fade;
@@ -290,10 +312,7 @@ export class CatchPlayfield {
     const ctx = f.ctx;
     const t = f.t;
     const cs = ch.catcherScale;
-    const stateAt = (time: number): CatcherState => {
-      const i = ch.lastCaught(time);
-      return i >= 0 && ch.kiai[i] ? "kiai" : "idle";
-    };
+    const stateAt = (time: number): CatcherState => ch.stateAt(time);
     const body = (x: number, dir: number, scale: number, c: CatcherPiece) => {
       ctx.save();
       ctx.translate(x, CATCHER_Y);
@@ -311,6 +330,7 @@ export class CatchPlayfield {
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
     for (let i = upper(ch.time, t - EXPLOSION_LIFE); i < ch.n && ch.time[i] <= t; i++) {
+      if (!ch.caught[i]) continue;
       ctx.save();
       ctx.translate(cx, CATCHER_Y);
       ctx.scale(cs, cs);

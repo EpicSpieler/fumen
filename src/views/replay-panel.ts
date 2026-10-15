@@ -1,7 +1,8 @@
-/* replay-panel.ts — replays beside the fullscreen playfield (osu!, osu!taiko, osu!mania): who plays it
+/* replay-panel.ts — replays beside the fullscreen playfield (every ruleset): who plays it
  * (autoplay, or one of lazer's scores on the difficulty that has a replay), and while a replay
  * plays, how it's going: the accuracy so far, the judgements so far, the latest hits on an error
- * bar with lazer's windows, and the misses — marked on the density graph, one click away each.
+ * bar with lazer's windows (osu!catch has no timing to show), and the misses — marked on the
+ * density graph, one click away each.
  *
  * Logged in, the menu also finds the player's own scores on osu! (one request, when asked): their
  * replays come from osu! when picked, one at a time, and stay on this PC. Replays only, never
@@ -13,6 +14,7 @@
 import { api, asApiError } from "../lib/api";
 import { date, num, pct } from "../lib/format";
 import { maniaWindows, ManiaReplay, MISS, playedNotes, unreplayed } from "../lib/replay";
+import { CatchReplay, catchUnreplayed } from "../lib/catch-replay";
 import { OsuReplay, osuOd, osuUnreplayed } from "../lib/osu-replay";
 import { TaikoReplay, taikoOd, taikoUnreplayed } from "../lib/taiko-replay";
 import { store } from "../lib/store";
@@ -22,14 +24,16 @@ import { player } from "../player";
 import { openMenu, toast, type MenuEntry } from "../ui/controls";
 import { icon } from "../ui/icons";
 import { fitCanvas } from "../ui/playfield";
+import { CatchPlayfield } from "../ui/catch/playfield";
 import { ManiaPlayfield } from "../ui/mania/playfield";
 import { OsuPlayfield } from "../ui/osu/playfield";
 import { TaikoPlayfield } from "../ui/taiko/playfield";
 
 const DRAWN: readonly string[] = ["EZ", "HR", "HD", "FI", "FL", "MR"];
-/** the rulesets it replays: osu!, osu!taiko, osu!mania */
+/** the rulesets */
 const OSU = 0;
 const TAIKO = 1;
+const CATCH = 2;
 const MANIA = 3;
 const NAMES = ["Perfect", "Great", "Good", "Ok", "Meh", "Miss"];
 /** OsuColour.ForHitResult */
@@ -55,7 +59,7 @@ export class ReplayPanel {
   private online: OnlineReplayEntry[] | null = null;
   private asking = false;
   private playing: Playing | null = null;
-  private replay: ManiaReplay | TaikoReplay | OsuReplay | null = null;
+  private replay: ManiaReplay | TaikoReplay | OsuReplay | CatchReplay | null = null;
   private misses: number[] = [];
   /** last text per field, so frames only touch the DOM on changes */
   private shown = new Map<string, string>();
@@ -108,7 +112,7 @@ export class ReplayPanel {
       if (mapId) void this.loadList(mapId);
     }
     this.data = d;
-    this.root.querySelector<HTMLElement>(".fs-replay-set")!.hidden = !(d && ((d.mode === MANIA && d.keys > 0) || (d.mode === TAIKO && d.taiko) || (d.mode === OSU && d.osu)));
+    this.root.querySelector<HTMLElement>(".fs-replay-set")!.hidden = !(d && ((d.mode === MANIA && d.keys > 0) || (d.mode === TAIKO && d.taiko) || (d.mode === OSU && d.osu) || (d.mode === CATCH && d.catch)));
     if (d && this.playing) this.apply();
     this.render();
   }
@@ -122,7 +126,7 @@ export class ReplayPanel {
     this.set("acc-sub", s.judged ? `${num(s.judged)} judged` : "nothing judged yet");
     this.set(
       "counts",
-      r.results.map((i) => `<span style="--c:${COLOURS[i]}"><i>${NAMES[i]}</i><b>${num(s.counts[i])}</b></span>`).join(""),
+      r.results.map((i) => `<span style="--c:${COLOURS[i]}"><i>${("names" in r ? r.names[i] : undefined) ?? NAMES[i]}</i><b>${num(s.counts[i])}</b></span>`).join(""),
       true,
     );
     const before = this.misses.filter((m) => m <= t).length;
@@ -206,7 +210,7 @@ export class ReplayPanel {
   /** Whether a score's mods keep it from being replayed here. */
   private blocked(mods: string[]): boolean {
     const mode = this.data?.mode;
-    return (mode === OSU ? osuUnreplayed(mods) : mode === TAIKO ? taikoUnreplayed(mods) : unreplayed(mods)).length > 0;
+    return (mode === OSU ? osuUnreplayed(mods) : mode === TAIKO ? taikoUnreplayed(mods) : mode === CATCH ? catchUnreplayed(mods) : unreplayed(mods)).length > 0;
   }
 
   /** The player's scores on osu! for this difficulty, then the menu again. */
@@ -269,6 +273,10 @@ export class ReplayPanel {
       const replay = new TaikoReplay(d.taiko, p.frames, taikoOd(map.od, p.entry.mods), p.entry.mods);
       field.setPlay(replay);
       this.replay = replay;
+    } else if (field instanceof CatchPlayfield && d.catch) {
+      const replay = new CatchReplay(field.chart, p.frames);
+      field.setPlay(replay);
+      this.replay = replay;
     } else if (field instanceof OsuPlayfield && d.osu) {
       // the playfield's chart has the score's Easy / Hard Rock / Mirror built in
       const replay = new OsuReplay(field.chart, p.frames, osuOd(map.od, p.entry.mods), p.entry.rate ?? 1);
@@ -288,7 +296,7 @@ export class ReplayPanel {
     this.replay = null;
     this.misses = [];
     const field = this.field();
-    if (field instanceof ManiaPlayfield || field instanceof TaikoPlayfield || field instanceof OsuPlayfield) field.setPlay(null);
+    if (field instanceof ManiaPlayfield || field instanceof TaikoPlayfield || field instanceof OsuPlayfield || field instanceof CatchPlayfield) field.setPlay(null);
     this.renderMarks();
     if (redraw) {
       this.render();
@@ -327,12 +335,15 @@ export class ReplayPanel {
   }
 
   /** The latest hits against lazer's windows (the best in the middle, the widest hit at the ends). */
-  private drawErrors(r: ManiaReplay | TaikoReplay | OsuReplay, t: number): void {
+  private drawErrors(r: ManiaReplay | TaikoReplay | OsuReplay | CatchReplay, t: number): void {
+    const windows = r.barWindows();
+    const box = this.root.querySelector<HTMLElement>(".fs-errors-box")!;
+    box.hidden = !windows.length;
+    if (!windows.length) return;
     const c = this.root.querySelector<HTMLCanvasElement>(".fs-errors")!;
     const fit = fitCanvas(c);
     if (!fit) return;
     const { ctx, w, h } = fit;
-    const windows = r.barWindows();
     const edge = windows[0][1];
     const mid = w / 2;
     const x = (off: number) => mid + (Math.max(-edge, Math.min(edge, off)) / edge) * (mid - 2);
