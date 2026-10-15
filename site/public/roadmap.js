@@ -70,12 +70,11 @@ const VERSIONS = [
     ],
   },
   {
-    v: "0.6", name: "Practice", state: "next",
+    v: "0.6", name: "Practice", state: "done", when: "Oct 2026",
     summary: "Practise with intent.",
     items: [
-      [1, "<b>osu!, osu!taiko and osu!mania replays from lazer in the playfield:</b> judged as lazer does, hit errors, misses on the timeline, accuracy as it goes"],
+      [1, "<b>Replays from lazer in the playfield, every ruleset:</b> judged as lazer does, hit errors, misses on the timeline, accuracy as it goes"],
       [1, "<b>Your scores' replays from osu!</b> when lazer doesn't have one"],
-      [0, "Replays for osu!catch"],
       [1, "<b>Practice mode:</b> loop a section, a little faster every time, with a metronome"],
     ],
     explain: [
@@ -84,7 +83,7 @@ const VERSIONS = [
     ],
   },
   {
-    v: "0.7", name: "Library care", state: "planned",
+    v: "0.7", name: "Library care", state: "next",
     summary: "Keep the library clean.",
     items: [
       [0, "Duplicates across lazer and osu!stable"],

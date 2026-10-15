@@ -354,7 +354,17 @@ sections below is the order of the work.
       its cursor, circles hit when they were (missed ones fading), judgements in all three skins
       (argon's rings, classic's hit300 / 100 / 50 / 0), ticks missed turning red, the follow
       circle only while followed, spinners turned by the replay
-- [ ] Replays for osu!catch (judged by where the catcher was)
+- [x] osu!catch replays — 0.6.0. `src/lib/catch-replay.ts`: the catcher at the replay's x
+      (straight between frames, dashing on the left button), every object judged at its time,
+      caught within half the catch width (Catcher.CanCatch); fruits Great / Miss, droplets large
+      ticks, tiny droplets small ticks, bananas bonus; accuracy counts every fruit, droplet and tiny
+      droplet the same (CatchScoreProcessor). Checked against the user's two catch replays: fruits
+      and droplets exact, tiny droplets two off (within a pixel of the edge). The playfield plays
+      the replay: CatchChart.setPlay takes its frames and what it caught — missed objects fall on
+      past the catcher, fading, stay off the plate, the catcher fails until the next catch, the
+      combo's plate falls off (Drop) when its last is missed, hyperdashes only from hyper fruits
+      caught. The panel counts fruits, droplets and misses, without the error bar (catching is
+      where, not when). With this, every ruleset has its replays: 0.6 is done
 - [x] Practice mode — 0.4.17. `src/views/practice.ts` beside the fullscreen playfield: a drag on
       the density graph picks the part (snapped to beats; a click still seeks), "Hardest part"
       takes the densest 16 s from a bar's start (`hardest` in lib/practice.ts; with a pattern, its
