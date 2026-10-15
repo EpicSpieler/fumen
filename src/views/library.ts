@@ -23,7 +23,8 @@ import { icon } from "../ui/icons";
 import { starRange } from "../ui/star-range";
 import { VirtualList } from "../ui/virtual";
 import { createSmartCollection, DRAG_TYPE, updateSmartCollection } from "../lib/collections";
-import { openSet, setMenu } from "./actions";
+import { collectionPicker, openSet, setMenu } from "./actions";
+import { openDeleteWindow } from "./delete-window";
 
 const SET_SORTS: { value: SetSort; label: string }[] = [
   { value: "added", label: "Date added" },
@@ -149,6 +150,7 @@ export class LibraryView {
           <div class="view-sub lib-count num"></div>
         </div>
         <div class="lib-head-tools">
+          <button class="icon-btn lib-shown" type="button" aria-label="The sets shown here" data-tip="The sets shown here">${icon("more-vert")}</button>
           <span class="lib-sort-host"></span>
           <button class="icon-btn lib-sort-dir" type="button" aria-label="Sort direction"></button>
           <div class="seg-pill lib-layout" role="tablist" aria-label="Layout">
@@ -613,6 +615,7 @@ export class LibraryView {
     });
 
     el.querySelector(".lib-filters-btn")!.addEventListener("click", (e) => this.openFilters(e.currentTarget as HTMLElement));
+    el.querySelector(".lib-shown")!.addEventListener("click", (e) => this.shownMenu(e.currentTarget as HTMLElement));
 
     el.addEventListener("click", (e) => {
       const t = e.target as Element;
@@ -794,6 +797,44 @@ export class LibraryView {
   refresh(): void {
     this.renderTitle();
     this.run();
+  }
+
+  /** What can be done with every set shown now (the filters and search as they are). */
+  private shownMenu(at: HTMLElement): void {
+    const snap = store.snap;
+    if (!snap) return;
+    const sets = this.result.sets;
+    const lazer = sets.filter((r) => snap.sets[r.set].from !== "stable");
+    const filtered = this.isFiltered();
+    const what = this.o.collection || this.o.restrict ? "sets in this collection" : filtered ? "sets shown here" : "sets in your library";
+    openMenu(
+      at,
+      [
+        { group: `${num(sets.length)} ${sets.length === 1 ? "set" : "sets"} shown` },
+        {
+          label: "Add all to a collection…",
+          icon: "collection",
+          disabled: !sets.length,
+          action: () => collectionPicker(at, sets.flatMap((r) => r.maps)),
+        },
+        "sep",
+        {
+          label: "Delete in osu!lazer…",
+          icon: "trash",
+          danger: true,
+          hint: lazer.length === sets.length ? undefined : `${num(lazer.length)} of them`,
+          disabled: !lazer.length,
+          action: () => openDeleteWindow({ what, sets: lazer.map((r) => r.set) }),
+        },
+      ],
+      { minWidth: 240 },
+    );
+  }
+
+  /** Whether a filter or search narrows the list now. */
+  private isFiltered(): boolean {
+    const f = this.filter;
+    return !!f.text.trim() || f.mode !== -1 || f.keys.length > 0 || f.status.length > 0 || f.srMin > 0 || f.srMax < Infinity || f.played !== "any" || f.showHidden;
   }
 
   /** Saves what's filtered now as a smart collection, named by its search. */

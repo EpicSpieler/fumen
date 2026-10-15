@@ -318,6 +318,11 @@
 .t-pat { color: var(--accent-ink); }
 
 /* narrow windows: mapper and the smaller numbers give way first, then the date */
+/* narrow: the tools go under the title instead of squeezing it */
+@container (max-width: 600px) {
+  .lib-head { flex-wrap: wrap; align-items: flex-start; row-gap: 10px; }
+  .lib-head-text { flex: 1 1 100%; }
+}
 @container (max-width: 1100px) {
   .lib-list-head, .lrow-set { grid-template-columns: 18px 64px minmax(160px, 2.4fr) minmax(118px, 1.1fr) 112px 66px 56px 104px 40px 30px; }
   .lrow .hide-1, .lib-list-head .hide-1 { display: none; }

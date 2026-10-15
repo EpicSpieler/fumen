@@ -8,13 +8,15 @@
  * picked here are deleted by lazer's own Delete (src-tauri/src/lazer_import.rs); Fumen deletes
  * nothing itself, and never touches osu!stable's files.
  */
-import { api, asApiError, onCareProgress, thumbUrl } from "../lib/api";
+import { asApiError, onCareProgress, thumbUrl } from "../lib/api";
+import { careReport, knownCare } from "../lib/care-data";
 import { bytes, displayArtist, displayTitle, esc, MODE_SHORT, num, relativeTime, statusLabel } from "../lib/format";
-import { events, reloadLibrary, store } from "../lib/store";
+import { events, store } from "../lib/store";
 import type { Broken, CareReport, DupeGroup, DupeSet } from "../lib/types";
-import { attachSegIndicator, openMenu, toast, uiConfirm } from "../ui/controls";
+import { attachSegIndicator, openMenu, type MenuEntry } from "../ui/controls";
 import { icon } from "../ui/icons";
 import { openSet } from "./actions";
+import { openDeleteWindow } from "./delete-window";
 
 /** rows per "Show more" */
 const PAGE = 50;
@@ -29,6 +31,8 @@ const KIND_TIPS = [
 ];
 /** "Mixed": a set with difficulties of more than one ruleset */
 const RULESET_NAMES = [...MODE_SHORT, "Mixed"];
+/** …in full, for what's deleted */
+const RULESET_FULL = ["osu!", "osu!taiko", "osu!catch", "osu!mania"];
 /** the breakdown's colours, in order */
 const COLOURS = ["var(--accent)", "var(--info)", "var(--success)", "var(--warning)", "var(--t3)", "var(--t4)"];
 
@@ -71,7 +75,8 @@ export class CareView {
   private loading = false;
   /** lazer sets picked for deleting, by id */
   private picked = new Set<string>();
-  private deleting = false;
+  /** the breakdown's parts as shown, with their lazer sets */
+  private legend: { name: string; sets: number[] }[] = [];
 
   constructor() {
     this.el = document.createElement("section");
@@ -82,7 +87,10 @@ export class CareView {
           <h1 class="view-title">Library care</h1>
           <div class="view-sub care-sub meta-line num"></div>
         </div>
-        <button class="btn btn-ghost btn-sm care-refresh" type="button">${icon("refresh")}<span>Measure again</span></button>
+        <div class="care-head-tools">
+          <button class="btn btn-ghost btn-sm care-refresh" type="button">${icon("refresh")}<span>Measure again</span></button>
+          <button class="btn btn-sm care-clean" type="button">${icon("trash")}<span>Clean up</span>${icon("chevron-down")}</button>
+        </div>
       </header>
       <div class="care-body"></div>`;
     this.bind();
@@ -98,7 +106,11 @@ export class CareView {
   /** The sizes (measured once a session, again after a library update or when asked). */
   private async load(again: boolean): Promise<void> {
     if (this.loading) return;
-    if (cached && !again) return this.build(cached);
+    const known = knownCare();
+    if (known && !again) {
+      cached = known;
+      return this.build(cached);
+    }
     this.loading = true;
     this.failed = null;
     this.progress = null;
@@ -108,7 +120,7 @@ export class CareView {
       this.renderLoading();
     });
     try {
-      cached = await api.libraryCare();
+      cached = await careReport(again);
     } catch (e) {
       this.failed = asApiError(e).message;
     } finally {
@@ -151,6 +163,7 @@ export class CareView {
     const body = this.el.querySelector<HTMLElement>(".care-body")!;
     const sub = this.el.querySelector<HTMLElement>(".care-sub")!;
     this.el.querySelector<HTMLButtonElement>(".care-refresh")!.disabled = this.loading;
+    this.el.querySelector<HTMLButtonElement>(".care-clean")!.disabled = this.loading || !cached || !this.entries.some((x) => !x.stable);
     if (this.failed) {
       sub.textContent = "";
       body.innerHTML = `<div class="empty-state">${icon("alert")}<div class="empty-title">Couldn't measure the library</div><div class="empty-sub">${esc(this.failed)}</div></div>`;
@@ -244,18 +257,19 @@ export class CareView {
     if (!el) return;
     this.el.querySelectorAll<HTMLElement>(".care-groups button").forEach((b) => b.classList.toggle("active", b.dataset.group === this.group));
     const snap = store.snap!;
-    const parts = new Map<string, { size: number; sets: number; tip: string }>();
-    const add = (name: string, size: number, tip = "") => {
+    const parts = new Map<string, { size: number; sets: number; tip: string; members: Entry[] }>();
+    const add = (name: string, size: number, x: Entry, tip = "") => {
       if (size <= 0) return;
-      const p = parts.get(name) ?? { size: 0, sets: 0, tip };
+      const p = parts.get(name) ?? { size: 0, sets: 0, tip, members: [] };
       p.size += size;
       p.sets++;
+      p.members.push(x);
       parts.set(name, p);
     };
     for (const x of this.entries) {
-      if (this.group === "kind") x.kinds.forEach((v, k) => add(KIND_NAMES[k], v, KIND_TIPS[k]));
-      else if (this.group === "ruleset") add(RULESET_NAMES[x.ruleset], x.size);
-      else add(statusLabel(snap.sets[x.set].status), x.size);
+      if (this.group === "kind") x.kinds.forEach((v, k) => add(KIND_NAMES[k], v, x, KIND_TIPS[k]));
+      else if (this.group === "ruleset") add(RULESET_NAMES[x.ruleset], x.size, x);
+      else add(statusLabel(snap.sets[x.set].status), x.size, x);
     }
     // files in their own order; the rest biggest first
     let list = [...parts.entries()];
@@ -266,11 +280,17 @@ export class CareView {
       // the long tail in one
       if (list.length > 6) {
         const rest = list.slice(5);
-        list = [...list.slice(0, 5), ["Other statuses", { size: rest.reduce((s, [, p]) => s + p.size, 0), sets: rest.reduce((s, [, p]) => s + p.sets, 0), tip: rest.map(([n]) => n).join(", ") }]];
+        list = [
+          ...list.slice(0, 5),
+          ["Other statuses", { size: rest.reduce((s, [, p]) => s + p.size, 0), sets: rest.reduce((s, [, p]) => s + p.sets, 0), tip: rest.map(([n]) => n).join(", "), members: rest.flatMap(([, p]) => p.members) }],
+        ];
       }
     }
     const total = list.reduce((s, [, p]) => s + p.size, 0) || 1;
     const setWord = this.group === "kind" ? "with them" : "";
+    // a ruleset's or a status's sets can go at once (files can't: they're parts of sets)
+    const deletable = this.group !== "kind";
+    this.legend = list.map(([name, p]) => ({ name, sets: p.members.filter((x) => !x.stable).map((x) => x.set) }));
     el.innerHTML = `
       <div class="care-bar">${list
         .map(([name, p], i) => `<i style="flex-grow:${p.size};background:${COLOURS[i % COLOURS.length]}" data-tip="${esc(name)} · ${bytes(p.size)}"></i>`)
@@ -278,11 +298,12 @@ export class CareView {
       <div class="care-legend">${list
         .map(
           ([name, p], i) => `
-          <div class="care-leg"${p.tip ? ` data-tip="${esc(p.tip)}"` : ""}>
+          <div class="care-leg${deletable && this.legend[i].sets.length ? " can-delete" : ""}"${p.tip ? ` data-tip="${esc(p.tip)}"` : ""}>
             <i style="background:${COLOURS[i % COLOURS.length]}"></i>
             <span class="care-leg-name">${esc(name)}</span>
             <b class="num">${bytes(p.size)}</b>
             <span class="care-leg-sub num">${percent(p.size / total)} · ${num(p.sets)} ${p.sets === 1 ? "set" : "sets"}${setWord ? ` ${setWord}` : ""}</span>
+            ${deletable && this.legend[i].sets.length ? `<button class="icon-btn care-leg-del" type="button" data-leg="${i}" aria-label="Delete these sets in osu!lazer" data-tip="Delete these in osu!lazer…">${icon("trash")}</button>` : ""}
           </div>`,
         )
         .join("")}</div>`;
@@ -467,7 +488,6 @@ export class CareView {
     const size = new Map(cached.sets.map((s) => [s.id, s.size]));
     const total = [...this.picked].reduce((s, id) => s + (size.get(id) ?? 0), 0);
     bar.querySelector(".care-act-text")!.textContent = `${num(n)} ${n === 1 ? "set" : "sets"} picked · ${bytes(total)}`;
-    bar.querySelectorAll<HTMLButtonElement>("button").forEach((b) => (b.disabled = this.deleting));
   }
 
   private togglePicks(ids: string[], on: boolean): void {
@@ -485,36 +505,60 @@ export class CareView {
     else this.renderAct();
   }
 
-  /** lazer's own Delete on the picked sets, after asking. */
-  private async deletePicked(): Promise<void> {
-    if (this.deleting || !this.picked.size || !cached) return;
-    const ids = [...this.picked];
-    const size = new Map(cached.sets.map((s) => [s.id, s.size]));
-    const total = ids.reduce((s, id) => s + (size.get(id) ?? 0), 0);
-    const one = ids.length === 1;
+  /** The picked sets, into the delete window. */
+  private deletePicked(): void {
     const snap = store.snap;
-    const only = one && snap ? snap.sets.find((s) => s.id === ids[0]) : undefined;
-    const title = only ? `Delete "${displayTitle(only, store.prefs.unicode)}" in osu!lazer?` : `Delete ${num(ids.length)} sets in osu!lazer?`;
-    const message =
-      `Deleted the way osu!lazer deletes sets: ${one ? "it disappears" : "they disappear"} right away, and osu!lazer removes ${one ? "it and its" : "them and their"} files for good the next time it starts (up to ${bytes(total)}). Your scores on ${one ? "it" : "them"} stay.` +
-      "\n\nosu!lazer has to be closed. Its database is backed up first.";
-    if (!(await uiConfirm(message, { title, confirmLabel: "Delete in osu!lazer", danger: true }))) return;
-    this.deleting = true;
-    this.renderAct();
-    events.emit("importing", true);
-    try {
-      const r = await api.deleteSetsInLazer(ids);
-      this.picked.clear();
-      toast(r.deleted === 1 ? "Deleted 1 set in osu!lazer" : `Deleted ${num(r.deleted)} sets in osu!lazer${r.skipped ? ` (${num(r.skipped)} already gone)` : ""}`, { kind: "success" });
-      await reloadLibrary().catch((e) => console.warn("[care] reload failed", e));
-    } catch (e) {
-      const err = asApiError(e);
-      toast(err.code === "lazer-running" ? "Close osu!lazer first: sets are deleted only while it's closed." : `Couldn't delete in osu!lazer: ${err.message}`, { kind: "danger", timeout: 7000 });
-    } finally {
-      this.deleting = false;
-      events.emit("importing", false);
-      this.renderAct();
+    if (!this.picked.size || !snap) return;
+    const at = new Map(snap.sets.map((s, i) => [s.id, i]));
+    const sets = [...this.picked].map((id) => at.get(id)).filter((i): i is number => i !== undefined);
+    openDeleteWindow({ what: "picked sets", sets, deleted: () => this.togglePicks([...this.picked], false) });
+  }
+
+  /** What can go at once: every set of a ruleset or a status, the unplayed, older copies. */
+  private cleanMenu(at: Element): void {
+    const snap = store.snap;
+    if (!snap) return;
+    const lazer = this.entries.filter((x) => !x.stable);
+    const entry = (label: string, what: string, list: Entry[]): MenuEntry => {
+      const size = list.reduce((s, x) => s + x.size, 0);
+      return {
+        label,
+        hint: list.length ? `${num(list.length)} · ${bytes(size)}` : "none",
+        disabled: !list.length,
+        action: () => openDeleteWindow({ what, sets: list.map((x) => x.set) }),
+      };
+    };
+    const entries: MenuEntry[] = [{ group: "Every set of a ruleset" }];
+    RULESET_NAMES.forEach((_, k) => {
+      const list = lazer.filter((x) => x.ruleset === k);
+      if (list.length) entries.push(entry(k === 4 ? "Mixed rulesets" : `All ${RULESET_FULL[k]}`, k === 4 ? "sets with mixed rulesets" : `${RULESET_FULL[k]} sets`, list));
+    });
+    const statuses = new Map<string, Entry[]>();
+    for (const x of lazer) {
+      const s = statusLabel(snap.sets[x.set].status);
+      statuses.set(s, [...(statuses.get(s) ?? []), x]);
     }
+    entries.push("sep", { group: "Every set of a status" });
+    for (const [s, list] of [...statuses].sort((a, b) => b[1].length - a[1].length)) entries.push(entry(s, `${s.toLowerCase()} sets`, list));
+    const now = Date.now();
+    entries.push(
+      "sep",
+      { group: "By playing" },
+      entry("Never played", "sets you've never played", lazer.filter((x) => !x.played)),
+      entry("Not played in a year", "sets not played in a year", lazer.filter((x) => x.played > 1 && now - x.played > YEAR)),
+    );
+    // duplicates: the older copies in lazer of the same set or a re-upload
+    const older = new Set<number>();
+    for (const g of cached?.duplicates ?? []) {
+      if (g.kind !== "same-set" && g.kind !== "reupload") continue;
+      for (const id of g.sets.slice(1)) {
+        const i = this.setIndex(id);
+        if (i !== undefined && snap.sets[i].from !== "stable") older.add(i);
+      }
+    }
+    const olderList = lazer.filter((x) => older.has(x.set));
+    if (olderList.length) entries.push("sep", entry("Older copies of duplicates", "older copies", olderList));
+    openMenu(at, entries, { minWidth: 280, className: "care-clean-menu" });
   }
 
   private setIndex(id: string): number | undefined {
@@ -536,6 +580,18 @@ export class CareView {
     this.el.addEventListener("click", (e) => {
       const t = e.target as Element;
       if (t.closest(".care-refresh")) return void this.load(true);
+      const clean = t.closest<HTMLElement>(".care-clean");
+      if (clean) return this.cleanMenu(clean);
+      const leg = t.closest<HTMLElement>(".care-leg-del");
+      if (leg) {
+        const l = this.legend[+leg.dataset.leg!];
+        if (l) {
+          const k = RULESET_NAMES.indexOf(l.name);
+          const what = this.group !== "ruleset" ? `${l.name.toLowerCase()} sets` : k === 4 ? "sets with mixed rulesets" : `${RULESET_FULL[k] ?? l.name} sets`;
+          openDeleteWindow({ what, sets: l.sets });
+        }
+        return;
+      }
       const group = t.closest<HTMLElement>(".care-groups [data-group]");
       if (group) {
         this.group = group.dataset.group as Group;
@@ -559,7 +615,7 @@ export class CareView {
       const all = t.closest<HTMLElement>(".care-pick-all");
       if (all) return this.togglePicks(this.rows.filter((x) => !x.stable).map((x) => snapId(x.set)), all.dataset.ids === "all");
       if (t.closest(".care-unpick")) return this.togglePicks([...this.picked], false);
-      if (t.closest(".care-delete")) return void this.deletePicked();
+      if (t.closest(".care-delete")) return this.deletePicked();
       const dupe = t.closest<HTMLElement>(".crow[data-set]");
       if (dupe) return openSet(+dupe.dataset.set!);
       const row = t.closest<HTMLElement>(".crow[data-i]");
