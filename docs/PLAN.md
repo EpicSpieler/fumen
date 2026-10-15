@@ -340,8 +340,21 @@ sections below is the order of the work.
       scrolling on and fading, explosions and judgements per result in all three skins (legacy
       taiko-hit100 / hit0, the "k" sprite once the second key lands), drum roll ticks in the
       colour that hit them, pippidon failing after a miss
-- [ ] Replays for osu! and osu!catch (judged per ruleset: osu! hits / slider ends, catch
-      positions)
+- [x] osu! replays — 0.5.6. `src/lib/osu-replay.ts` judges them like lazer: OsuHitWindows
+      (Great / Ok / Meh from OD, floored less half a millisecond, a press up to 400 ms early a
+      miss), a press going to the earliest circle under the cursor, note lock
+      (StartTimeOrderedHitPolicy), sliders followed while a button is down and the cursor within
+      the ball (2.4× once following; only the head's key while the other was down), ticks and
+      repeats at their time, the end 36 ms early, a late head taking the ticks it passed, spinners
+      as SpinnerSpinHistory counts the turns (× the rate), and the moments between replay frames
+      that count. Relax, Autopilot, Classic and the mods that move objects aren't replayed.
+      Checked against 35 of the user's replays: 32 come out at lazer's counts exactly, the rest
+      from mid-2025 (older windows); long spinners can come out a bonus spin or two short (the
+      game saw every mouse movement, a replay keeps 60 a second). The playfield plays the replay:
+      its cursor, circles hit when they were (missed ones fading), judgements in all three skins
+      (argon's rings, classic's hit300 / 100 / 50 / 0), ticks missed turning red, the follow
+      circle only while followed, spinners turned by the replay
+- [ ] Replays for osu!catch (judged by where the catcher was)
 - [x] Practice mode — 0.4.17. `src/views/practice.ts` beside the fullscreen playfield: a drag on
       the density graph picks the part (snapped to beats; a click still seeks), "Hardest part"
       takes the densest 16 s from a bar's start (`hardest` in lib/practice.ts; with a pattern, its
