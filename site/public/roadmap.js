@@ -89,9 +89,10 @@ const VERSIONS = [
       [1, "<b>Duplicates:</b> osu!stable's copies of lazer's sets, a set twice, packs and re-uploads"],
       [1, "<b>Broken files:</b> songs and backgrounds a difficulty names that are missing, or aren't audio / an image"],
       [1, "<b>What takes the space:</b> by kind of file, ruleset and status, and the biggest sets you never play"],
+      [1, "<b>Clean up:</b> pick sets to delete; osu!lazer's own Delete does it, your scores stay"],
       [0, "osu!stable's scores in your history"],
     ],
-    note: "Fumen points things out; deleting stays with lazer.",
+    note: "Fumen points things out; deleting is lazer's own, and osu!stable's files are never touched.",
     explain: [["care", "<b>Library care:</b> the same chart twice, a missing file, and what it all costs."]],
   },
   {

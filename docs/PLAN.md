@@ -406,7 +406,15 @@ sections below is the order of the work.
       without a song, on purpose) isn't missing. The Broken files tab: per set, what and for how many
       difficulties. On the user's library: 6 songs and 3 backgrounds named but never in their (pack)
       sets; a Unity asset named STORIA.mp3 plays (an MP3 inside, in reach of BASS), so it's fine
-- [ ] "Clean up" lists that hand the deletion to lazer (never deleting itself)
+- [x] "Clean up" lists that hand the deletion to lazer (never deleting itself) — 0.6.4. Sets are
+      picked on the Library care lists (one by one, all never played / not played in a year, a
+      duplicate's older copies) and deleted with lazer's own Delete: `fumen-import delete` sets
+      the set's DeletePending in lazer's write transaction (ModelManager.Delete; protected sets
+      stay), with the import's checks (tested lazer version, lazer closed, exact schema, a
+      `client.realm` backup). Verified on a copy of the user's library (`verify_installed_lazer`
+      step 5): the sets leave the export at once; lazer's RealmAccess removes them and their files
+      for good the next time the database is opened (no undo — lazer's own restore only works
+      within its session), and every score stays. osu!stable's sets are never picked
 - [ ] osu!stable's `scores.db` into the play history
 
 ## After 1.0
