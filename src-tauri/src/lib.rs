@@ -1,4 +1,5 @@
 mod analysis;
+mod care;
 mod catch;
 mod chart;
 mod cloud;
@@ -242,6 +243,8 @@ fn library_status(state: State<'_, AppState>) -> Result<LibraryStatus> {
                 || db::get_meta(&conn, "lazer.skins")?.is_none()
                 // …and the sets' sound files (custom hitsounds)
                 || db::get_meta(&conn, "lazer.setSounds")?.is_none()
+                // …and every file of the sets (library care)
+                || db::get_meta(&conn, "lazer.setFiles")?.is_none()
         }
         _ => false,
     };
@@ -268,6 +271,28 @@ struct ScanProgress {
     stage: String,
     done: u64,
     total: u64,
+}
+
+#[derive(Clone, Serialize)]
+struct CareProgress {
+    done: u64,
+    total: u64,
+}
+
+/// What every set takes on disk (library care). Emits `care-progress` while it measures files it
+/// hasn't seen before.
+#[tauri::command]
+async fn library_care(app: AppHandle) -> Result<care::CareReport> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let lazer = state.install().map(|i| PathBuf::from(i.storage));
+        let songs = state.stable_install().map(|s| PathBuf::from(s.songs));
+        care::report(&state.db, lazer.as_deref(), songs.as_deref(), |done, total| {
+            let _ = app.emit("care-progress", CareProgress { done, total });
+        })
+    })
+    .await
+    .map_err(|e| Error::known("internal", e.to_string()))?
 }
 
 /// Imports lazer's library (sidecar export → SQLite) and stable's (osu!.db + Songs). Emits
@@ -1310,6 +1335,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             get_settings,
+            library_care,
             update_settings,
             inspect_lazer_path,
             inspect_stable_path,

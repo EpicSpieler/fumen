@@ -162,6 +162,11 @@ struct LSet {
     /// sound files and the storyboard, as [filename, hash]
     #[serde(default)]
     sounds: Vec<(String, String)>,
+    /// every file, as [filename, hash]
+    #[serde(default)]
+    files: Vec<(String, String)>,
+    /// lazer's hash of the set's files
+    hash: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -273,8 +278,8 @@ pub fn import(conn: &mut Connection, json: &Path, install: &LazerInstall) -> Res
         let mut ins_set = tx.prepare(
             "INSERT INTO sets (id, source, online_id, status, date_added, date_submitted, date_ranked,
                 protected, title, title_unicode, artist, artist_unicode, creator, creator_id,
-                source_text, tags, bg, audio, preview_time, sounds)
-             VALUES (?1, 'lazer', ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)",
+                source_text, tags, bg, audio, preview_time, sounds, files, hash)
+             VALUES (?1, 'lazer', ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)",
         )?;
         let mut ins_map = tx.prepare(
             "INSERT INTO maps (id, set_id, online_id, version, ruleset, ruleset_id, status, hash, md5,
@@ -318,6 +323,8 @@ pub fn import(conn: &mut Connection, json: &Path, install: &LazerInstall) -> Res
                 audio,
                 preview,
                 serde_json::to_string(&set.sounds)?,
+                serde_json::to_string(&set.files)?,
+                set.hash,
             ])?;
             counts.sets += 1;
 
@@ -428,6 +435,7 @@ pub fn import(conn: &mut Connection, json: &Path, install: &LazerInstall) -> Res
 
     db::set_meta(&tx, "lazer.skins", &counts.skins.to_string())?;
     db::set_meta(&tx, "lazer.setSounds", "1")?;
+    db::set_meta(&tx, "lazer.setFiles", "1")?;
     db::set_meta(&tx, "lazer.storage", &install.storage)?;
     db::set_meta(&tx, "lazer.realmSize", &install.realm_size.to_string())?;
     db::set_meta(&tx, "lazer.realmModified", &install.realm_modified.to_string())?;

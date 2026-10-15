@@ -239,6 +239,17 @@ const MIGRATIONS: &[&str] = &[
     r#"
     ALTER TABLE scores ADD COLUMN replay TEXT;
     "#,
+    // 15 — library care (src/care.rs): a lazer set's files and lazer's hash of it, a stable set's
+    //      folder, and the size of every file lazer keeps (by its hash: content-addressed)
+    r#"
+    ALTER TABLE sets ADD COLUMN files TEXT NOT NULL DEFAULT '[]';
+    ALTER TABLE sets ADD COLUMN hash TEXT;
+    ALTER TABLE sets ADD COLUMN folder TEXT;
+    CREATE TABLE file_sizes (
+        hash TEXT PRIMARY KEY,
+        size INTEGER NOT NULL
+    );
+    "#,
 ];
 
 pub fn open(path: &Path) -> Result<Connection> {

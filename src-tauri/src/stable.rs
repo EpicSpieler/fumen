@@ -527,8 +527,8 @@ pub fn import(conn: &mut Connection, install: &StableInstall, progress: impl Fn(
     {
         let mut ins_set = tx.prepare(
             "INSERT OR IGNORE INTO sets (id, source, online_id, status, date_added, title, title_unicode, artist,
-                artist_unicode, creator, source_text, tags, bg, audio, preview_time, sounds)
-             VALUES (?1, 'stable', ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+                artist_unicode, creator, source_text, tags, bg, audio, preview_time, sounds, folder)
+             VALUES (?1, 'stable', ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
         )?;
         let mut ins_map = tx.prepare(
             "INSERT OR IGNORE INTO maps (id, set_id, online_id, version, ruleset, ruleset_id, status, hash, md5,
@@ -583,6 +583,7 @@ pub fn import(conn: &mut Connection, install: &StableInstall, progress: impl Fn(
                 audio,
                 preview,
                 serde_json::to_string(&folder.sounds)?,
+                clean_rel(&maps[0].folder),
             ])?;
             counts.sets += 1;
             for (m, (chart, mbg, maudio)) in maps.iter().zip(&folder.maps) {
@@ -635,6 +636,7 @@ pub fn import(conn: &mut Connection, install: &StableInstall, progress: impl Fn(
     db::set_meta(&tx, "stable.dbModified", &install.db_modified.to_string())?;
     db::set_meta(&tx, "stable.lastScan", &crate::lazer::now_ms().to_string())?;
     db::set_meta(&tx, "stable.counts", &serde_json::to_string(&counts)?)?;
+    db::set_meta(&tx, "stable.folders", "1")?;
     tx.commit()?;
     Ok(counts)
 }
@@ -647,7 +649,9 @@ pub fn is_current(conn: &Connection, install: &StableInstall) -> Result<bool> {
         && meta("stable.dbModified")?.as_deref() == Some(install.db_modified.to_string().as_str())
         && meta("stable.dbSize")?.as_deref() == Some(install.db_size.to_string().as_str())
         && meta("stable.path")?.as_deref() == Some(install.path.as_str())
-        && meta("stable.songs")?.as_deref() == Some(install.songs.as_str()))
+        && meta("stable.songs")?.as_deref() == Some(install.songs.as_str())
+        // imported before Fumen kept the sets' folders (library care)
+        && meta("stable.folders")?.is_some())
 }
 
 /// What the last scan found.
