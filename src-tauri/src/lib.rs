@@ -694,6 +694,50 @@ async fn put_collections_into_lazer(app: AppHandle, picks: Vec<collections::Pick
     .map_err(|e| Error::known("internal", e.to_string()))?
 }
 
+#[derive(Serialize)]
+struct LazerSetsDeleted {
+    deleted: usize,
+    /// already deleted, gone, or one of lazer's own
+    skipped: usize,
+}
+
+/// Deletes lazer sets the way lazer's own Delete does (when that's safe, see `lazer_import.rs`),
+/// then updates Fumen's library without them. osu!stable's sets are never touched.
+#[tauri::command]
+async fn delete_sets_in_lazer(app: AppHandle, ids: Vec<String>) -> Result<LazerSetsDeleted> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        if state.scanning.swap(true, Ordering::SeqCst) {
+            return Err(Error::known("busy", "The library is being updated; try again in a moment."));
+        }
+        let result = (|| {
+            let storage = state
+                .storage()
+                .ok_or_else(|| Error::known("lazer-not-found", "osu!lazer's data folder wasn't found. Pick it in Settings."))?;
+            // only lazer's sets, as Fumen knows them
+            let ids: Vec<String> = {
+                let conn = state.db();
+                let mut q = conn.prepare("SELECT 1 FROM sets WHERE id = ?1 AND source = 'lazer'")?;
+                ids.into_iter().filter(|id| q.exists([id]).unwrap_or(false)).collect()
+            };
+            if ids.is_empty() {
+                return Ok(LazerSetsDeleted { deleted: 0, skipped: 0 });
+            }
+            let compat = state.compat();
+            let done = lazer_import::delete_sets(&storage, &state.cache_dir, &state.data_dir.join("lazer-backups"), &ids, &compat)?;
+            if let Err(e) = run_scan(&app, &state) {
+                eprintln!("[delete] library update after deleting in lazer: {e}");
+            }
+            let deleted = done.iter().filter(|d| d.done).count();
+            Ok(LazerSetsDeleted { deleted, skipped: done.len() - deleted })
+        })();
+        state.scanning.store(false, Ordering::SeqCst);
+        result
+    })
+    .await
+    .map_err(|e| Error::known("internal", e.to_string()))?
+}
+
 /// Writes the picked collections as a stable `collection.db` at `path` (picked by the user).
 #[tauri::command]
 fn save_collection_db(state: State<AppState>, path: String, picks: Vec<collections::Pick>) -> Result<usize> {
@@ -1371,6 +1415,7 @@ pub fn run() {
             create_smart_collection,
             set_collection_query,
             put_collections_into_lazer,
+            delete_sets_in_lazer,
             save_collection_db,
             copy_lazer_collection,
             rename_collection,
