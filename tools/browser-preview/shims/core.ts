@@ -254,6 +254,11 @@ export async function invoke<T>(cmd: string, args: Record<string, unknown> = {})
       await new Promise((r) => setTimeout(r, 600));
       return { created, updated: picks.length - created } as T;
     }
+    case "delete_sets_in_lazer": {
+      // nothing is deleted here
+      await new Promise((r) => setTimeout(r, 600));
+      return { deleted: (args.ids as unknown[]).length, skipped: 0 } as T;
+    }
     case "save_collection_db":
       return (args.picks as unknown[]).length as T;
     case "rename_collection":
