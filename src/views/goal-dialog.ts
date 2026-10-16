@@ -2,7 +2,7 @@
  * Opens with the kind and its details filled in from where it was asked for (a skill row, a
  * chart, a practice suggestion) and a target a step beyond where things stand. */
 import { asApiError } from "../lib/api";
-import { displayTitle, esc, pct } from "../lib/format";
+import { displayTitle, esc, fixed, pct } from "../lib/format";
 import { addGoal, currentContext } from "../lib/goals-store";
 import { goalNow, goalValue, isReached, RULESET_LABEL, RULESETS, suggestTarget, type GoalSpec, type Ruleset } from "../lib/goals";
 import { historyNow, mapIndexOf } from "../lib/history";
@@ -11,6 +11,7 @@ import { store } from "../lib/store";
 import { RATE_MAX, RATE_MIN, RATE_STEP } from "../player";
 import { attachSegIndicator, closeAnimated, createSelect, toast } from "../ui/controls";
 import { icon } from "../ui/icons";
+import { t } from "../lib/i18n";
 
 type Kind = GoalSpec["kind"];
 
@@ -44,17 +45,17 @@ export function openGoalDialog(preset: GoalPreset = {}): void {
   bd.className = "modal-backdrop dialog-backdrop";
   bd.innerHTML = `
     <div class="modal-panel dialog goal-dialog" role="dialog" aria-modal="true" aria-labelledby="goal-dialog-title">
-      <div class="dialog-title" id="goal-dialog-title">New goal</div>
-      <div class="seg-pill goal-kinds" role="tablist" aria-label="Kind of goal">
-        <button type="button" data-kind="skill">Skill</button>
-        ${chartMap ? `<button type="button" data-kind="chart">This chart</button>` : ""}
-        <button type="button" data-kind="profile"${rulesets.length ? "" : ` disabled data-tip="Log in with osu! in Settings first"`}>osu! profile</button>
+      <div class="dialog-title" id="goal-dialog-title">${t("New goal")}</div>
+      <div class="seg-pill goal-kinds" role="tablist" aria-label="${t("Kind of goal")}">
+        <button type="button" data-kind="skill">${t("Skill")}</button>
+        ${chartMap ? `<button type="button" data-kind="chart">${t("This chart")}</button>` : ""}
+        <button type="button" data-kind="profile"${rulesets.length ? "" : ` disabled data-tip="${t("Log in with osu! in Settings first")}"`}>${t("osu! profile")}</button>
       </div>
       <div class="goal-fields"></div>
       <div class="goal-now"></div>
       <div class="dialog-actions">
-        <button class="btn btn-ghost" type="button" data-act="cancel">Cancel</button>
-        <button class="btn btn-primary" type="button" data-act="ok">Set goal</button>
+        <button class="btn btn-ghost" type="button" data-act="cancel">${t("Cancel")}</button>
+        <button class="btn btn-primary" type="button" data-act="ok">${t("Set goal")}</button>
       </div>
     </div>`;
   const fields = bd.querySelector<HTMLElement>(".goal-fields")!;
@@ -83,7 +84,7 @@ export function openGoalDialog(preset: GoalPreset = {}): void {
   };
   const suggestion = (now: number | null) => suggestTarget(kind === "profile" ? metric : kind, now);
   /** the target in the field's terms: accuracy in percent */
-  const shown = (v: number) => (kind === "chart" ? (v * 100).toFixed(1) : kind === "skill" ? v.toFixed(2) : String(Math.round(v)));
+  const shown = (v: number) => (kind === "chart" ? fixed(v * 100, 1) : kind === "skill" ? fixed(v, 2) : String(Math.round(v)));
   const parse = (s: string): number | null => {
     const v = Number(s.replace(",", ".").replace(/[^\d.]/g, ""));
     if (!s.trim() || !Number.isFinite(v)) return null;
@@ -108,29 +109,29 @@ export function openGoalDialog(preset: GoalPreset = {}): void {
     row.className = "goal-row";
     if (kind === "skill") {
       row.append(
-        select(PATTERNS.map((p) => ({ value: p, label: PATTERN_LABEL[p] })), pattern, (v) => (pattern = v), "Pattern"),
-        select(modes.map((k) => ({ value: String(k), label: `${k}K` })), String(keys), (v) => (keys = +v), "Keys"),
+        select(PATTERNS.map((p) => ({ value: p, label: PATTERN_LABEL[p] })), pattern, (v) => (pattern = v), t("Pattern")),
+        select(modes.map((k) => ({ value: String(k), label: `${k}K` })), String(keys), (v) => (keys = +v), t("Keys")),
       );
     } else if (kind === "profile") {
-      row.append(select(rulesets.map((r) => ({ value: r, label: RULESET_LABEL[r] })), ruleset, (v) => (ruleset = v), "Mode"));
+      row.append(select(rulesets.map((r) => ({ value: r, label: RULESET_LABEL[r] })), ruleset, (v) => (ruleset = v), t("Mode")));
       const seg = document.createElement("div");
       seg.className = "seg-pill goal-metric";
-      seg.innerHTML = `<button type="button" data-metric="pp" class="${metric === "pp" ? "active" : ""}">pp</button><button type="button" data-metric="rank" class="${metric === "rank" ? "active" : ""}">Rank</button>`;
+      seg.innerHTML = `<button type="button" data-metric="pp" class="${metric === "pp" ? "active" : ""}">pp</button><button type="button" data-metric="rank" class="${metric === "rank" ? "active" : ""}">${t("Rank")}</button>`;
       row.append(seg);
     } else {
       const set = snap!.sets[chartMap!.set];
       row.innerHTML = `
         <div class="goal-chart"><div class="t-title">${esc(displayTitle(set, store.prefs.unicode))}</div><div class="t-sub">${esc(chartMap!.version)}</div></div>
-        <div class="rate-step goal-rate" data-tip="Plays at this rate or faster count">
-          <button class="icon-btn sm" type="button" data-rate-step="-1" aria-label="Slower"${rate <= RATE_MIN + 1e-6 ? " disabled" : ""}>${icon("minus")}</button>
-          <span class="rate-val num">${rate.toFixed(2)}×</span>
-          <button class="icon-btn sm" type="button" data-rate-step="1" aria-label="Faster"${rate >= RATE_MAX - 1e-6 ? " disabled" : ""}>${icon("plus")}</button>
+        <div class="rate-step goal-rate" data-tip="${t("Plays at this rate or faster count")}">
+          <button class="icon-btn sm" type="button" data-rate-step="-1" aria-label="${t("Slower")}"${rate <= RATE_MIN + 1e-6 ? " disabled" : ""}>${icon("minus")}</button>
+          <span class="rate-val num">${fixed(rate, 2)}×</span>
+          <button class="icon-btn sm" type="button" data-rate-step="1" aria-label="${t("Faster")}"${rate >= RATE_MAX - 1e-6 ? " disabled" : ""}>${icon("plus")}</button>
         </div>`;
     }
     const unit = kind === "skill" ? "★" : kind === "chart" ? "%" : metric === "pp" ? "pp" : "";
     const input = document.createElement("label");
     input.className = "goal-target";
-    input.innerHTML = `<span class="goal-target-label">Target</span>${kind === "profile" && metric === "rank" ? `<span class="goal-unit">#</span>` : ""}<input type="text" inputmode="decimal" spellcheck="false" autocomplete="off" aria-label="Target" /><span class="goal-unit">${unit}</span>`;
+    input.innerHTML = `<span class="goal-target-label">${t("Target")}</span>${kind === "profile" && metric === "rank" ? `<span class="goal-unit">#</span>` : ""}<input type="text" inputmode="decimal" spellcheck="false" autocomplete="off" aria-label="${t("Target")}" /><span class="goal-unit">${unit}</span>`;
     const field = input.querySelector("input")!;
     field.value = target;
     field.addEventListener("input", () => {
@@ -152,14 +153,14 @@ export function openGoalDialog(preset: GoalPreset = {}): void {
     let error = "";
     if (kind === "skill") {
       const skill = currentContext()?.skillsFor(keys)[PATTERNS.indexOf(pattern)];
-      note = now !== null ? `Now ${goalValue(spec(0), now)}${skill && skill.charts < MIN_CHARTS ? ", a guess so far" : ""}` : `No ${keys}K ${PATTERN_LABEL[pattern].toLowerCase()} charts passed yet`;
-    } else if (kind === "chart") note = now !== null ? `Your best at ${rate.toFixed(2)}× or faster: ${pct(now)}` : `Not passed at ${rate.toFixed(2)}× or faster yet`;
-    else note = now !== null ? `Now ${goalValue(spec(0), now)}` : "Nothing from osu! yet";
-    if (v === null) error = "Type a target.";
-    else if (kind === "chart" && (v <= 0.5 || v > 1)) error = "An accuracy between 50% and 100%.";
-    else if (kind === "skill" && (v <= 0 || v > 20)) error = "A star rating between 0 and 20.";
-    else if (kind === "profile" && v < 1) error = metric === "rank" ? "A rank from #1." : "Some pp above 0.";
-    else if (sp && isReached(sp, now)) error = "You're there already: aim higher.";
+      note = now !== null ? (skill && skill.charts < MIN_CHARTS ? t("Now {value}, a guess so far", { value: goalValue(spec(0), now) }) : t("Now {value}", { value: goalValue(spec(0), now) })) : t("No {keys}K {pattern} charts passed yet", { keys, pattern: PATTERN_LABEL[pattern].toLowerCase() });
+    } else if (kind === "chart") note = now !== null ? t("Your best at {rate}× or faster: {acc}", { rate: fixed(rate, 2), acc: pct(now) }) : t("Not passed at {rate}× or faster yet", { rate: fixed(rate, 2) });
+    else note = now !== null ? t("Now {value}", { value: goalValue(spec(0), now) }) : t("Nothing from osu! yet");
+    if (v === null) error = t("Type a target.");
+    else if (kind === "chart" && (v <= 0.5 || v > 1)) error = t("An accuracy between 50% and 100%.");
+    else if (kind === "skill" && (v <= 0 || v > 20)) error = t("A star rating between 0 and 20.");
+    else if (kind === "profile" && v < 1) error = metric === "rank" ? t("A rank from #1.") : t("Some pp above 0.");
+    else if (sp && isReached(sp, now)) error = t("You're there already: aim higher.");
     nowEl.innerHTML = `<span>${esc(note)}</span>${error ? `<span class="goal-error">${esc(error)}</span>` : ""}`;
     ok.disabled = !!error;
   }
@@ -176,7 +177,7 @@ export function openGoalDialog(preset: GoalPreset = {}): void {
       await addGoal(spec(kind === "profile" && metric === "rank" ? Math.round(v) : v));
       finish();
     } catch (e) {
-      toast(`Couldn't save the goal: ${asApiError(e).message}`, { kind: "danger" });
+      toast(t("Couldn't save the goal: {error}", { error: asApiError(e).message }), { kind: "danger" });
       ok.disabled = false;
     }
   };

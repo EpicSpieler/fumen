@@ -1,23 +1,25 @@
 /* rate.ts — the rate control (HT / 1× / DT presets and a 0.05 stepper), shared by the chart
  * panel and the fullscreen playfield. The rate itself is the player's. */
 import { player, RATE_MAX, RATE_MIN, RATE_STEP } from "../player";
+import { fixed } from "../lib/format";
 import { icon } from "./icons";
+import { t } from "../lib/i18n";
 
 const RATE_PRESETS = [
-  { rate: 0.75, label: "HT", tip: "Half Time · 0.75×" },
-  { rate: 1, label: "1×", tip: "Normal speed" },
-  { rate: 1.5, label: "DT", tip: "Double Time · 1.5×" },
+  { rate: 0.75, label: "HT", tip: t("Half Time · {rate}×", { rate: fixed(0.75, 2) }) },
+  { rate: 1, label: "1×", tip: t("Normal speed") },
+  { rate: 1.5, label: "DT", tip: t("Double Time · {rate}×", { rate: fixed(1.5, 1) }) },
 ];
 
 export function rateControlHtml(): string {
   return `
-    <div class="seg-pill rate-presets" role="group" aria-label="Rate">
+    <div class="seg-pill rate-presets" role="group" aria-label="${t("Rate")}">
       ${RATE_PRESETS.map((p) => `<button type="button" data-rate="${p.rate}" data-tip="${p.tip}">${p.label}</button>`).join("")}
     </div>
     <div class="rate-step">
-      <button class="icon-btn sm" type="button" data-rate-step="-1" data-tip="Slower" aria-label="Slower">${icon("minus")}</button>
+      <button class="icon-btn sm" type="button" data-rate-step="-1" data-tip="${t("Slower")}" aria-label="${t("Slower")}">${icon("minus")}</button>
       <span class="rate-val num"></span>
-      <button class="icon-btn sm" type="button" data-rate-step="1" data-tip="Faster" aria-label="Faster">${icon("plus")}</button>
+      <button class="icon-btn sm" type="button" data-rate-step="1" data-tip="${t("Faster")}" aria-label="${t("Faster")}">${icon("plus")}</button>
     </div>`;
 }
 
@@ -30,7 +32,7 @@ export function syncRateControl(root: ParentNode): void {
   if (slower) slower.disabled = r <= RATE_MIN;
   if (faster) faster.disabled = r >= RATE_MAX;
   const val = root.querySelector(".rate-val");
-  if (val) val.textContent = `${r.toFixed(2)}×`;
+  if (val) val.textContent = `${fixed(r, 2)}×`;
 }
 
 /** Handles a click inside a rate control; true when it was one. */

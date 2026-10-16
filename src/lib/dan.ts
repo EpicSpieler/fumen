@@ -2,6 +2,7 @@
  * (src-tauri/src/mma): how dan labels read and compare, and the report's clusters merged per
  * core pattern the way the analyser shows them. Dans at other rates: `danAt` in charts.ts. */
 import type { CorePattern, DanRating, PatternReport } from "./types";
+import { t } from "./i18n";
 
 /** "< Intro 1 low" → "below Intro 1"; "> CloverWisp Theta high" → "above CloverWisp Theta". */
 export function danText(label: string): string {
@@ -65,15 +66,15 @@ export function danNumber(label: string): number | null {
 }
 
 export const CORE_PATTERNS: Record<CorePattern, { label: string; hint: string }> = {
-  Stream: { label: "Stream", hint: "Single notes in quick succession, no column twice in a row" },
-  Chordstream: { label: "Chordstream", hint: "Streams of chords: jumpstream, handstream, trills of chords" },
-  Jacks: { label: "Jacks", hint: "Columns hit again right after: minijacks, chordjacks, longjacks" },
-  Coordination: { label: "Coordination", hint: "Long notes held while other columns move: column lock, shields, releases" },
-  Density: { label: "LN density", hint: "Long notes started in quick succession, or inverse" },
-  Wildcard: { label: "LN wildcard", hint: "Long notes mixed with speed or jacks" },
+  Stream: { label: "Stream", hint: t("Single notes in quick succession, no column twice in a row") },
+  Chordstream: { label: "Chordstream", hint: t("Streams of chords: jumpstream, handstream, trills of chords") },
+  Jacks: { label: "Jacks", hint: t("Columns hit again right after: minijacks, chordjacks, longjacks") },
+  Coordination: { label: t("Coordination"), hint: t("Long notes held while other columns move: column lock, shields, releases") },
+  Density: { label: t("LN density"), hint: t("Long notes started in quick succession, or inverse") },
+  Wildcard: { label: "LN wildcard", hint: t("Long notes mixed with speed or jacks") },
 };
 
-export const MODE_LABEL: Record<PatternReport["mode"], string> = { RC: "Rice", LN: "Long notes", HB: "Hybrid", Mix: "Mixed" };
+export const MODE_LABEL: Record<PatternReport["mode"], string> = { RC: "Rice", LN: t("Long notes"), HB: t("Hybrid"), Mix: t("Mixed") };
 
 /** Scroll speed changes over this many ms make an SV chart. */
 export const SV_AMOUNT = 2000;

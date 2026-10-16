@@ -19,7 +19,7 @@ import { thumbUrl } from "../lib/api";
 import { bpmAt, loadChart, lowerBound, PATTERNS, SCROLL_SPEED_MAX, SCROLL_SPEED_MIN, scrollSpeed, scrollTime, scrollUp } from "../lib/charts";
 import { readBars, startAnalyser } from "../lib/eq";
 import { hitsounds } from "../lib/hitsounds";
-import { bpm, displayArtist, displayTitle, duration, esc, keysOrMode, num, srChip } from "../lib/format";
+import { bpm, displayArtist, displayTitle, duration, esc, fixed, keysOrMode, num, srChip, stars } from "../lib/format";
 import { currentSkin, loadSkin, loadSkinList, loadSkinSounds } from "../lib/skin/skins";
 import { activeMods, adjustDifficulty, chartMods, chartModsKey, MOD_NAMES, modEffect, modsFor, starsKnown, toggleMod, type Mod } from "../lib/mods";
 import { setPrefs, store } from "../lib/store";
@@ -43,6 +43,7 @@ import { PracticePanel } from "./practice";
 import { CORE_PATTERNS } from "../lib/dan";
 import type { CorePattern } from "../lib/types";
 import { ReplayPanel } from "./replay-panel";
+import { t } from "../lib/i18n";
 
 export type FullscreenMode = "visual" | "field";
 
@@ -50,7 +51,7 @@ const BARS = 72;
 
 /** the rulesets the playfield shows: all of them */
 const PLAYABLE = new Set([0, 1, 2, 3]);
-const PLAYABLE_NAMES = "osu!, osu!taiko, osu!catch and osu!mania";
+const PLAYABLE_NAMES = t("osu!, osu!taiko, osu!catch and osu!mania");
 const taikoChart = (d: ChartData): boolean => d.mode === 1 && !!d.taiko;
 const osuChart = (d: ChartData): boolean => d.mode === 0 && !!d.osu;
 const catchChart = (d: ChartData): boolean => d.mode === 2 && !!d.catch;
@@ -145,17 +146,17 @@ class Fullscreen {
     el.className = "fs";
     el.hidden = true;
     el.setAttribute("role", "dialog");
-    el.setAttribute("aria-label", "Now playing, fullscreen");
+    el.setAttribute("aria-label", t("Now playing, fullscreen"));
     el.innerHTML = `
       <div class="fs-bg" aria-hidden="true"><img alt="" /></div>
       <header class="fs-top" data-tauri-drag-region>
         <div class="fs-now" data-tauri-drag-region><div class="fs-now-title" data-tauri-drag-region></div><div class="fs-now-sub" data-tauri-drag-region></div></div>
-        <div class="seg-pill fs-modes" role="tablist" aria-label="View">
-          <button type="button" role="tab" data-mode="visual">Visualizer</button>
-          <button type="button" role="tab" data-mode="field">Playfield</button>
+        <div class="seg-pill fs-modes" role="tablist" aria-label="${t("View")}">
+          <button type="button" role="tab" data-mode="visual">${t("Visualizer")}</button>
+          <button type="button" role="tab" data-mode="field">${t("Playfield")}</button>
         </div>
         <div class="fs-top-r">
-          <button class="icon-btn fs-exit" type="button" data-tip="Leave fullscreen" aria-label="Leave fullscreen">${icon("fullscreen-exit")}</button>
+          <button class="icon-btn fs-exit" type="button" data-tip="${t("Leave fullscreen")}" aria-label="${t("Leave fullscreen")}">${icon("fullscreen-exit")}</button>
         </div>
       </header>
       <main class="fs-body">
@@ -170,33 +171,33 @@ class Fullscreen {
         </section>
         <section class="fs-field">
           <div class="fs-stage">
-            <canvas class="fs-pf" aria-label="Playfield"></canvas>
+            <canvas class="fs-pf" aria-label="${t("Playfield")}"></canvas>
             <div class="fs-empty" hidden></div>
           </div>
           <aside class="fs-info">
-            <button class="fs-diff" type="button" aria-label="Difficulty"></button>
+            <button class="fs-diff" type="button" aria-label="${t("Difficulty")}"></button>
             ${ReplayPanel.settingHtml()}
             <div class="fs-live">
-              <div class="fs-stat"><span class="fs-k">Notes per second</span><b class="num" data-live="nps">–</b><span class="fs-s num" data-live="peak"></span></div>
-              <div class="fs-stat fs-stat-pattern"><span class="fs-k">This second</span><b data-live="pattern">–</b><span class="fs-s" data-live="pattern-sub"></span></div>
+              <div class="fs-stat"><span class="fs-k">${t("Notes per second")}</span><b class="num" data-live="nps">–</b><span class="fs-s num" data-live="peak"></span></div>
+              <div class="fs-stat fs-stat-pattern"><span class="fs-k">${t("This second")}</span><b data-live="pattern">–</b><span class="fs-s" data-live="pattern-sub"></span></div>
               <div class="fs-stat"><span class="fs-k">BPM</span><b class="num" data-live="bpm">–</b><span class="fs-s num" data-live="bpm-sub"></span></div>
-              <div class="fs-stat"><span class="fs-k">Notes</span><b class="num" data-live="count">–</b><span class="fs-s num" data-live="count-sub"></span></div>
+              <div class="fs-stat"><span class="fs-k">${t("Notes")}</span><b class="num" data-live="count">–</b><span class="fs-s num" data-live="count-sub"></span></div>
             </div>
             ${ReplayPanel.panelHtml()}
             <div class="fs-graph">
-              <canvas aria-label="Note density"></canvas>
+              <canvas aria-label="${t("Note density")}"></canvas>
               <div class="fs-graph-loop" hidden></div>
               <div class="fs-graph-marks" aria-hidden="true"></div>
               <div class="graph-head"></div>
             </div>
-            <div class="fs-axis num"><span>0:00</span><span>Notes per second</span><span data-live="graph-end"></span></div>
+            <div class="fs-axis num"><span>0:00</span><span>${t("Notes per second")}</span><span data-live="graph-end"></span></div>
             ${PracticePanel.html()}
             <div class="fs-setting fs-setting-speed">
-              <span class="fs-k">Scroll speed</span>
+              <span class="fs-k">${t("Scroll speed")}</span>
               <div class="fs-speed">
-                <button class="icon-btn sm" type="button" data-speed="-1" data-tip="Slower (F3)" aria-label="Slower scroll">${icon("minus")}</button>
+                <button class="icon-btn sm" type="button" data-speed="-1" data-tip="${t("Slower (F3)")}" aria-label="${t("Slower scroll")}">${icon("minus")}</button>
                 <b class="num fs-speed-val"></b>
-                <button class="icon-btn sm" type="button" data-speed="1" data-tip="Faster (F4)" aria-label="Faster scroll">${icon("plus")}</button>
+                <button class="icon-btn sm" type="button" data-speed="1" data-tip="${t("Faster (F4)")}" aria-label="${t("Faster scroll")}">${icon("plus")}</button>
               </div>
               <span class="fs-speed-sub num"></span>
             </div>
@@ -206,9 +207,9 @@ class Fullscreen {
               <span class="fs-skin-sub"></span>
             </div>
             <div class="fs-setting">
-              <span class="fs-k">Hitsounds</span>
+              <span class="fs-k">${t("Hitsounds")}</span>
               <div class="fs-hs">
-                <div class="pb-vol fs-hs-vol" role="slider" aria-label="Hitsound volume" aria-valuemin="0" aria-valuemax="100" tabindex="0"><div class="pb-vol-fill"></div></div>
+                <div class="pb-vol fs-hs-vol" role="slider" aria-label="${t("Hitsound volume")}" aria-valuemin="0" aria-valuemax="100" tabindex="0"><div class="pb-vol-fill"></div></div>
                 <b class="num fs-hs-val"></b>
               </div>
               <span class="fs-hs-sub"></span>
@@ -219,14 +220,14 @@ class Fullscreen {
               <span class="fs-mods-sub"></span>
             </div>
             <div class="fs-setting">
-              <span class="fs-k">Rate</span>
+              <span class="fs-k">${t("Rate")}</span>
               <div class="fs-rate-ctl">${rateControlHtml()}</div>
             </div>
           </aside>
         </section>
       </main>
       <footer class="fs-bar">
-        <div class="pb-seek fs-seek" role="slider" aria-label="Seek" tabindex="0">
+        <div class="pb-seek fs-seek" role="slider" aria-label="${t("Seek")}" tabindex="0">
           <div class="pb-seek-track"><div class="pb-seek-fill"></div></div>
           <div class="pb-seek-head"></div>
           <div class="pb-seek-tip num"></div>
@@ -234,9 +235,9 @@ class Fullscreen {
         <div class="fs-row">
           <span class="fs-time num"><span data-live="cur">0:00</span> / <span data-live="dur">0:00</span><span class="fs-rate" data-live="rate"></span></span>
           <div class="fs-ctrl">
-            <button class="pb-btn pb-skip pb-prev fs-prev" type="button" data-tip="Previous" aria-label="Previous">${icon("skip-back")}</button>
-            <button class="pb-play fs-play" type="button" aria-label="Play"></button>
-            <button class="pb-btn pb-skip pb-next fs-next" type="button" data-tip="Next" aria-label="Next">${icon("skip-forward")}</button>
+            <button class="pb-btn pb-skip pb-prev fs-prev" type="button" data-tip="${t("Previous")}" aria-label="${t("Previous")}">${icon("skip-back")}</button>
+            <button class="pb-play fs-play" type="button" aria-label="${t("Play")}"></button>
+            <button class="pb-btn pb-skip pb-next fs-next" type="button" data-tip="${t("Next")}" aria-label="${t("Next")}">${icon("skip-forward")}</button>
           </div>
           <span></span>
         </div>
@@ -373,7 +374,7 @@ class Fullscreen {
     });
     const sub = el.querySelector(".fs-mods-sub")!;
     sub.innerHTML = on.length
-      ? `<button class="fs-speed-reset fs-mods-reset" type="button">no mods</button>${starsKnown(on, mode) ? "" : " · no star rating with them"}`
+      ? `<button class="fs-speed-reset fs-mods-reset" type="button">${t("no mods")}</button>${starsKnown(on, mode) ? "" : ` · ${t("no star rating with them")}`}`
       : "";
   }
 
@@ -419,7 +420,7 @@ class Fullscreen {
       this.replays.chart(map.id, null);
       this.syncSounds();
       this.renderHitsounds();
-      this.showEmpty(null, "Loading the chart…");
+      this.showEmpty(null, t("Loading the chart…"));
     }
     const job = ++this.skinJob;
     loadChart(map.id, mods)
@@ -449,7 +450,7 @@ class Fullscreen {
         this.live.clear();
         this.kick();
       })
-      .catch(() => this.mapId === map.id && this.showEmpty(null, "Couldn't read this chart."));
+      .catch(() => this.mapId === map.id && this.showEmpty(null, t("Couldn't read this chart.")));
   }
 
   // ── skins ─────────────────────────────────────────────────────────────
@@ -482,8 +483,8 @@ class Fullscreen {
     const lazer = this.skins?.skins.find((s) => s.id === this.skins?.selected);
     el.querySelector(".fs-skin-name")!.textContent = skin.name;
     const sub = el.querySelector(".fs-skin-sub")!;
-    if (!lazer || skin.id === lazer.id) sub.textContent = lazer ? "from lazer" : "";
-    else sub.innerHTML = `<button class="fs-speed-reset fs-skin-reset" type="button">back to lazer's ${esc(lazer.name)}</button>`;
+    if (!lazer || skin.id === lazer.id) sub.textContent = lazer ? t("from lazer") : "";
+    else sub.innerHTML = `<button class="fs-speed-reset fs-skin-reset" type="button">${t("back to lazer's {name}", { name: esc(lazer.name) })}</button>`;
   }
 
   private async setSkin(id: string | null): Promise<void> {
@@ -533,9 +534,9 @@ class Fullscreen {
     const slider = el.querySelector<HTMLElement>(".fs-hs-vol")!;
     slider.style.setProperty("--v", `${v * 100}%`);
     slider.setAttribute("aria-valuenow", String(Math.round(v * 100)));
-    el.querySelector(".fs-hs-val")!.textContent = v === 0 ? "Off" : `${Math.round(v * 100)} %`;
+    el.querySelector(".fs-hs-val")!.textContent = v === 0 ? t("Off") : `${Math.round(v * 100)} %`;
     const custom = this.field ? hitsounds.custom : null;
-    el.querySelector(".fs-hs-sub")!.textContent = custom === null ? "" : custom > 0 ? "the beatmap's own samples, then the skin's" : "from the skin";
+    el.querySelector(".fs-hs-sub")!.textContent = custom === null ? "" : custom > 0 ? t("the beatmap's own samples, then the skin's") : t("from the skin");
   }
 
   private setHitsoundVolume(v: number): void {
@@ -546,17 +547,17 @@ class Fullscreen {
   private skinMenu(anchor: HTMLElement): void {
     const list = this.skins;
     if (!list?.skins.length) {
-      openMenu(anchor, [{ group: "Skins" }, { label: "Import your lazer library to see its skins", disabled: true }], { minWidth: 300 });
+      openMenu(anchor, [{ group: "Skins" }, { label: t("Import your lazer library to see its skins"), disabled: true }], { minWidth: 300 });
       return;
     }
     const cur = currentSkin(list).id;
     // like lazer's list: its own skins first, then yours
     const ordered = [...list.skins.filter((s) => s.protected), ...list.skins.filter((s) => !s.protected)];
-    const entries: MenuEntry[] = [{ group: "osu!lazer skins" }];
+    const entries: MenuEntry[] = [{ group: t("osu!lazer skins") }];
     for (const s of ordered) {
       entries.push({
         label: s.name,
-        hint: s.id === list.selected ? "in lazer" : undefined,
+        hint: s.id === list.selected ? t("in lazer") : undefined,
         checked: s.id === cur,
         action: () => void this.setSkin(s.id),
       });
@@ -585,8 +586,8 @@ class Fullscreen {
     const maps = this.playableMaps();
     box.innerHTML = `
       ${icon("lanes-duo")}
-      <div class="fs-empty-title">The playfield shows ${PLAYABLE_NAMES}</div>
-      <p>${maps.length ? "This difficulty is for another ruleset. Pick one of the set's difficulties it shows:" : "This set has no difficulty it shows."}</p>
+      <div class="fs-empty-title">${t("The playfield shows {rulesets}", { rulesets: PLAYABLE_NAMES })}</div>
+      <p>${maps.length ? t("This difficulty is for another ruleset. Pick one of the set's difficulties it shows:") : t("This set has no difficulty it shows.")}</p>
       ${maps.length ? `<div class="fs-empty-list">${maps.map((mi) => this.diffButton(mi)).join("")}</div>` : ""}`;
   }
 
@@ -632,8 +633,8 @@ class Fullscreen {
     el.querySelector<HTMLButtonElement>("[data-speed='1']")!.disabled = s.speed >= SCROLL_SPEED_MAX;
     const ms = `${num(Math.round(scrollTime(s.speed)))} ms`;
     el.querySelector(".fs-speed-sub")!.innerHTML = s.fromLazer
-      ? `${ms} · from lazer${scrollUp() ? " · scrolling up" : ""}`
-      : `${ms} · <button class="fs-speed-reset" type="button">back to lazer's ${fmtSpeed(s.lazer)}</button>`;
+      ? `${ms} · ${t("from lazer")}${scrollUp() ? ` · ${t("scrolling up")}` : ""}`
+      : `${ms} · <button class="fs-speed-reset" type="button">${t("back to lazer's {name}", { name: fmtSpeed(s.lazer) })}</button>`;
   }
 
   private changeSpeed(step: number): void {
@@ -689,17 +690,17 @@ class Fullscreen {
     const el = this.el!;
     const a = player.audio;
     const d = Number.isFinite(a.duration) ? a.duration : 0;
-    const t = a.currentTime || 0;
+    const time = a.currentTime || 0;
     const r = player.rate;
     el.classList.toggle("playing", player.playing);
-    el.querySelector(".fs-play")!.setAttribute("aria-label", player.playing ? "Pause" : "Play");
+    el.querySelector(".fs-play")!.setAttribute("aria-label", player.playing ? t("Pause") : t("Play"));
     const seek = el.querySelector<HTMLElement>(".fs-seek")!;
     if (!seek.classList.contains("dragging")) {
-      seek.style.setProperty("--p", d > 0 ? `${(t / d) * 100}%` : "0%");
-      this.set("cur", duration((t * 1000) / r));
+      seek.style.setProperty("--p", d > 0 ? `${(time / d) * 100}%` : "0%");
+      this.set("cur", duration((time * 1000) / r));
     }
     this.set("dur", duration((d * 1000) / r));
-    this.set("rate", r === 1 ? "" : `${r.toFixed(2)}×`);
+    this.set("rate", r === 1 ? "" : `${fixed(r, 2)}×`);
   }
 
   private drawEq(dt: number): boolean {
@@ -739,39 +740,39 @@ class Fullscreen {
     if (!d || !field) return;
     this.practice.frame(player.audio.currentTime * 1000);
     const r = player.rate;
-    const t = player.audio.currentTime * 1000;
+    const time = player.audio.currentTime * 1000;
 
-    if (!(field instanceof ManiaPlayfield)) field.draw(t, r);
-    else field.draw(t, scrollTime(scrollSpeed().speed) * r, scrollUp(), r);
-    this.replays.frame(t);
+    if (!(field instanceof ManiaPlayfield)) field.draw(time, r);
+    else field.draw(time, scrollTime(scrollSpeed().speed) * r, scrollUp(), r);
+    this.replays.frame(time);
 
     // live numbers
     const a = d.analysis;
     const n = d.notes;
     // notes per second: the notes of the second around now, in real time
     const half = 500 * r;
-    const nps = (lowerBound(n, t + half) - lowerBound(n, t - half)) / 3;
+    const nps = (lowerBound(n, time + half) - lowerBound(n, time - half)) / 3;
     this.set("nps", nps.toFixed(0));
-    this.set("peak", `peak ${(a.npsPeak * r).toFixed(1)}`);
+    this.set("peak", t("peak {nps}", { nps: fixed(a.npsPeak * r, 1) }));
     // ManiaMapAnalyser's pattern of this second (its report names the chart the same way)
     const rep = d.report;
     let win: string | null = null;
     if (rep?.seconds && rep.labels) {
-      const i = rep.seconds[Math.floor((t - (rep.start ?? a.start)) / 1000)] ?? -1;
+      const i = rep.seconds[Math.floor((time - (rep.start ?? a.start)) / 1000)] ?? -1;
       const name = i >= 0 ? rep.labels[i] : null;
       win = name ? (CORE_PATTERNS[name as CorePattern]?.label ?? name) : null;
     } else {
-      const sec = Math.floor((t - a.start) / 1000);
+      const sec = Math.floor((time - a.start) / 1000);
       win = a.windows?.[sec] ? PATTERNS[a.windows[sec]!].label : null;
     }
-    const label = t < a.start ? "Intro" : t > a.end ? "Outro" : (win ?? "Light");
+    const label = time < a.start ? "Intro" : time > a.end ? "Outro" : (win ?? t("Light"));
     this.set("pattern", label);
-    this.set("pattern-sub", t < a.start || t > a.end ? "no notes" : win ? "ManiaMapAnalyser" : "not much going on");
-    const beat = bpmAt(d.beats, t) * r;
+    this.set("pattern-sub", time < a.start || time > a.end ? t("no notes") : win ? "ManiaMapAnalyser" : t("not much going on"));
+    const beat = bpmAt(d.beats, time) * r;
     this.set("bpm", beat ? bpm(beat) : "–");
-    this.set("bpm-sub", r === 1 ? "" : `${bpm(beat / r)} × ${r.toFixed(2)}`);
-    this.set("count", num(lowerBound(n, t + 1) / 3));
-    this.set("count-sub", `of ${num(n.length / 3)}`);
+    this.set("bpm-sub", r === 1 ? "" : `${bpm(beat / r)} × ${fixed(r, 2)}`);
+    this.set("count", num(lowerBound(n, time + 1) / 3));
+    this.set("count-sub", t("of {n}", { n: num(n.length / 3) }));
 
     // graph (redrawn when its size or chart changes) + playhead
     const graph = el.querySelector<HTMLCanvasElement>(".fs-graph canvas")!;
@@ -782,7 +783,7 @@ class Fullscreen {
       this.graphDrawn = key;
     }
     this.set("graph-end", duration(total / r));
-    el.querySelector<HTMLElement>(".fs-graph .graph-head")!.style.left = `${Math.min(100, Math.max(0, (t / total) * 100))}%`;
+    el.querySelector<HTMLElement>(".fs-graph .graph-head")!.style.left = `${Math.min(100, Math.max(0, (time / total) * 100))}%`;
   }
 
   // ── input ─────────────────────────────────────────────────────────────
@@ -906,16 +907,16 @@ class Fullscreen {
   private diffMenu(anchor: HTMLElement): void {
     const snap = store.snap!;
     const now = player.now!.map;
-    const entries: MenuEntry[] = [{ group: "Difficulties" }];
+    const entries: MenuEntry[] = [{ group: t("Difficulties") }];
     for (const mi of this.playableMaps()) {
       const m = snap.maps[mi];
-      entries.push({ label: `${m.version} · ${m.sr.toFixed(2)} stars · ${keysOrMode(m)}`, checked: mi === now, radio: "diff", action: () => player.selectMap(mi) });
+      entries.push({ label: `${m.version} · ${t("{sr} stars", { sr: stars(m.sr) })} · ${keysOrMode(m)}`, checked: mi === now, radio: "diff", action: () => player.selectMap(mi) });
     }
     openMenu(anchor, entries, { minWidth: 300 });
   }
 }
 
-const fmtSpeed = (s: number): string => (Number.isInteger(s) ? String(s) : s.toFixed(1));
+const fmtSpeed = (s: number): string => (Number.isInteger(s) ? String(s) : fixed(s, 1));
 
 const fullscreen = new Fullscreen();
 
