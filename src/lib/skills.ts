@@ -11,17 +11,18 @@
  * the pattern whose star rating lands there, at 1× or at a rate that gets them there.
  */
 import type { MapRow, Play } from "./types";
+import { t } from "./i18n";
 
 export const PATTERNS = ["stream", "jumpstream", "handstream", "chordjack", "jacks", "ln"] as const;
 export type SkillPattern = (typeof PATTERNS)[number];
 
 export const PATTERN_LABEL: Record<SkillPattern, string> = {
-  stream: "Stream",
-  jumpstream: "Jumpstream",
-  handstream: "Handstream",
-  chordjack: "Chordjack",
-  jacks: "Jacks",
-  ln: "Long notes",
+  stream: t("Stream"),
+  jumpstream: t("Jumpstream"),
+  handstream: t("Handstream"),
+  chordjack: t("Chordjack"),
+  jacks: t("Jacks"),
+  ln: t("Long notes"),
 };
 
 /** a pattern counts for a chart from this share (the analysis' tag threshold) */

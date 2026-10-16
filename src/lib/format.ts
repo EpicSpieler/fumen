@@ -1,5 +1,5 @@
 /* Formatting + osu! domain colours. Colours here are *content* (difficulty, grade), not decoration. */
-import { locale, t } from "./i18n";
+import { lang, locale, t } from "./i18n";
 import type { MapRow, SetRow } from "./types";
 
 export const MODE_LABEL = ["osu!", "osu!taiko", "osu!catch", "osu!mania"] as const;
@@ -53,7 +53,8 @@ export function bytes(n: number): string {
   }
   return `${u === 0 || v >= 100 ? Math.round(v) : fixed(v, 1)} ${units[u]}`;
 }
-export const pct = (v: number, digits = 2): string => `${fixed(v * 100, digits)}%`;
+/** "97.33%"; German puts a space before the sign: "97,33 %" */
+export const pct = (v: number, digits = 2): string => `${fixed(v * 100, digits)}${lang === "de" ? " %" : "%"}`;
 
 /** "7K" for mania, the ruleset name otherwise. */
 export function keysOrMode(map: MapRow): string {

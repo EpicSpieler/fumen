@@ -13,5 +13,7 @@ import { home } from "./de/home";
 import { library } from "./de/library";
 import { set } from "./de/set";
 import { chart } from "./de/chart";
+import { history } from "./de/history";
+import { skills } from "./de/skills";
 
-export const de: Record<string, string> = { ...common, ...shell, ...settings, ...player, ...menus, ...home, ...library, ...set, ...chart };
+export const de: Record<string, string> = { ...common, ...shell, ...settings, ...player, ...menus, ...home, ...library, ...set, ...chart, ...history, ...skills };
