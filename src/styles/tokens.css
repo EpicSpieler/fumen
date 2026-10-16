@@ -34,6 +34,10 @@
   --surface-2:   #313131;
   --surface-3:   #3c3c3c;
 
+  /* what tints surfaces: white on the dark themes, black on the light one (rgb channels) */
+  --ink: 255 255 255;
+  --ink-inverse: 0 0 0;
+
   /* lines — sparingly */
   --stroke:     rgba(255, 255, 255, .082);
   --stroke-dim: rgba(255, 255, 255, .050);
@@ -120,6 +124,46 @@
   --t1: #fff; --t2: rgba(255, 255, 255, .50); --t3: rgba(255, 255, 255, .33);
 }
 
+/* Light theme: grey base, white surfaces, black text by opacity, black lines and fills,
+   darker status colours, half the shadows */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --ink: 0 0 0;
+  --ink-inverse: 255 255 255;
+  --bg-base: #f0f0f0; --bg-surface: #ffffff; --bg-elevated: #fafafa; --bg-hover: #e6e6e6;
+  --surface-1: #ffffff; --surface-2: #dedede; --surface-3: #d0d0d0;
+  --stroke: rgba(0, 0, 0, .09); --stroke-dim: rgba(0, 0, 0, .055); --stroke-med: rgba(0, 0, 0, .16);
+  --fill-subtle: rgba(0, 0, 0, .045); --fill-mod: rgba(0, 0, 0, .075); --fill-strong: rgba(0, 0, 0, .11);
+  --t1: rgba(0, 0, 0, .90); --t2: rgba(0, 0, 0, .56); --t3: rgba(0, 0, 0, .38); --t4: rgba(0, 0, 0, .20);
+  --danger: #d32f2f; --success: #2e7d32; --warning: #b26a00; --info: #1565c0;
+  --danger-soft:  color-mix(in srgb, var(--danger) 10%, transparent);
+  --success-soft: color-mix(in srgb, var(--success) 10%, transparent);
+  --warning-soft: color-mix(in srgb, var(--warning) 12%, transparent);
+  --accent-dim:       color-mix(in srgb, var(--accent) 11%, transparent);
+  --accent-dim-hover: color-mix(in srgb, var(--accent) 17%, transparent);
+  --placeholder-gradient: linear-gradient(135deg, #e4e3ea, #d9d8df);
+  --elevation-1: 0 2px 8px rgba(0, 0, 0, .08);
+  --elevation-2: 0 4px 14px rgba(0, 0, 0, .10);
+  --elevation-3: 0 10px 24px rgba(0, 0, 0, .14);
+  --elevation-4: 0 18px 48px rgba(0, 0, 0, .18);
+  --elevation-5: 0 28px 70px rgba(0, 0, 0, .22);
+}
+
+/* the fullscreen player is a dark stage in every theme: the light theme gives it the dark tokens */
+:root[data-theme="light"] .fs {
+  color-scheme: dark;
+  --ink: 255 255 255;
+  --ink-inverse: 0 0 0;
+  --bg-base: #0d0d0d; --bg-surface: #141414; --bg-elevated: #1c1c1c; --bg-hover: #222222;
+  --surface-1: #1c1c1c; --surface-2: #313131; --surface-3: #3c3c3c;
+  --stroke: rgba(255, 255, 255, .082); --stroke-dim: rgba(255, 255, 255, .050); --stroke-med: rgba(255, 255, 255, .145);
+  --fill-subtle: rgba(255, 255, 255, .055); --fill-mod: rgba(255, 255, 255, .093); --fill-strong: rgba(255, 255, 255, .14);
+  --t1: rgba(255, 255, 255, .886); --t2: rgba(255, 255, 255, .544); --t3: rgba(255, 255, 255, .373); --t4: rgba(255, 255, 255, .200);
+  --danger: #ff7070; --success: #6bdf96; --warning: #f0b429; --info: #64b5f6;
+  --accent-ink: var(--accent-ink-dark);
+  --placeholder-gradient: linear-gradient(135deg, #1d1c24, #121116);
+}
+
 /* high contrast — on top of any theme */
 :root.hc {
   --t2: rgba(255, 255, 255, .85);
@@ -129,6 +173,12 @@
   --accent-dim: transparent;
   --accent-dim-hover: var(--fill-mod);
   --accent-soft: var(--fill-strong);
+}
+:root[data-theme="light"].hc {
+  --t2: rgba(0, 0, 0, .82);
+  --t3: rgba(0, 0, 0, .64);
+  --stroke: rgba(0, 0, 0, .45);
+  --stroke-med: rgba(0, 0, 0, .55);
 }
 
 /* reduced motion (setting or system) */

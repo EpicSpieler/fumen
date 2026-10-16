@@ -233,7 +233,7 @@
 }
 .mplay > * { min-width: 0; }
 .mplay:hover { background: var(--tint-hover); }
-.mplay.best { background: rgba(255, 255, 255, .035); }
+.mplay.best { background: rgb(var(--ink) / .035); }
 .mplay-when { color: var(--t3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mplay .grade { text-align: center; }
 .mplay-acc { text-align: right; font-weight: 600; color: var(--t1); }

@@ -118,6 +118,7 @@ export class SettingsView {
             <div class="seg-pill" data-seg="theme">
               <button type="button" data-v="dark" class="${p.theme === "dark" ? "active" : ""}">Dark</button>
               <button type="button" data-v="oled" class="${p.theme === "oled" ? "active" : ""}">OLED</button>
+              <button type="button" data-v="light" class="${p.theme === "light" ? "active" : ""}">Light</button>
             </div>
           </div>
           <div class="setting-row">

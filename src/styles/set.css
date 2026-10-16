@@ -165,3 +165,20 @@ body:not(.ambient-off) .set-hero-scrim {
   .diff-stats { display: none; }
   .details-grid { grid-template-columns: 1fr; }
 }
+
+/* Light theme: the artwork melts into a light page, so the hero's words are dark on a light scrim */
+:root[data-theme="light"] .set-hero-scrim,
+:root[data-theme="light"] body:not(.ambient-off) .set-hero-scrim {
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, .25) 0%, rgba(0, 0, 0, 0) 22%),
+    linear-gradient(0deg, color-mix(in srgb, var(--bg-base) 92%, transparent) 0%, color-mix(in srgb, var(--bg-base) 80%, transparent) 34%, color-mix(in srgb, var(--bg-base) 30%, transparent) 70%, transparent 100%);
+}
+:root[data-theme="light"] .set-kicker { color: var(--t2); }
+:root[data-theme="light"] .set-title { color: var(--t1); text-shadow: 0 1px 16px rgba(255, 255, 255, .55); }
+:root[data-theme="light"] .set-alt { color: var(--t2); }
+:root[data-theme="light"] .set-artist { color: rgba(0, 0, 0, .74); }
+:root[data-theme="light"] .set-meta { color: var(--t2); }
+:root[data-theme="light"] .set-meta b { color: var(--t1); }
+:root[data-theme="light"] .set-meta > * + *::before { color: var(--t4); }
+:root[data-theme="light"] .set-web { background: var(--fill-mod); }
+:root[data-theme="light"] .set-web:hover { background: var(--fill-strong); }

@@ -64,6 +64,8 @@ export function dissolve(rows: HTMLElement[], clip?: DOMRect, opts: { duration?:
   canvas.width = Math.round(vw * dpr);
   canvas.height = Math.round(vh * dpr);
   const ctx = canvas.getContext("2d")!;
+  // white smoke on the dark themes, dark on the light one
+  const ink = "rgb(" + (getComputedStyle(document.documentElement).getPropertyValue("--ink").trim() || "255 255 255") + ")";
   ctx.scale(dpr, dpr);
 
   const duration = opts.duration ?? 720;
@@ -117,7 +119,7 @@ export function dissolve(rows: HTMLElement[], clip?: DOMRect, opts: { duration?:
       }
 
       ctx.clearRect(0, 0, vw, vh);
-      ctx.fillStyle = "#fff";
+      ctx.fillStyle = ink;
       for (let i = parts.length - 1; i >= 0; i--) {
         const q = parts[i];
         q.age += dt;
