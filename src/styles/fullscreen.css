@@ -49,6 +49,7 @@
 /* it fills the app window, not the screen: the window's own controls move in beside the exit */
 .fs-top-r { display: flex; align-items: center; justify-content: flex-end; gap: 14px; }
 .fs-top:has(.win-controls) { padding-top: 6px; padding-right: 6px; }
+:root.mac .fs-top { padding-left: 92px; }
 .fs-exit .ic { width: 20px; height: 20px; }
 
 .fs-body { position: relative; min-height: 0; }

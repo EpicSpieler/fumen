@@ -18,7 +18,7 @@ import "./styles/skills.css";
 import "./styles/browse.css";
 
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { api, asApiError, isTauri, onAnalysis, thumbUrl } from "./lib/api";
+import { api, asApiError, isMac, isTauri, onAnalysis, thumbUrl } from "./lib/api";
 import { esc, num } from "./lib/format";
 import { current, goSection, initRouterInput, router, sectionRoot, type Route } from "./lib/router";
 import { describeScan, isScanning, runScan } from "./lib/scan";
@@ -59,6 +59,7 @@ const MARK = `<svg class="side-mark" viewBox="0 0 24 24" aria-hidden="true"><rec
 
 const app = document.getElementById("app")!;
 app.className = "app";
+document.documentElement.classList.toggle("mac", isMac);
 app.innerHTML = `
   <nav class="sidebar">
     <div class="side-head" data-tauri-drag-region>
@@ -112,11 +113,11 @@ app.innerHTML = `
   </nav>
   <div class="main">
     <div class="topbar" data-tauri-drag-region>
-      <div class="win-controls">
+      ${isMac ? "" : `<div class="win-controls">
         <button class="win-btn" id="win-min" type="button" aria-label="Minimise">${icon("win-min")}</button>
         <button class="win-btn" id="win-max" type="button" aria-label="Maximise">${icon("win-max", "ic-max")}${icon("win-restore", "ic-restore")}</button>
         <button class="win-btn win-close" id="win-close" type="button" aria-label="Close">${icon("win-close")}</button>
-      </div>
+      </div>`}
     </div>
     <main class="content"></main>
     <footer class="player-bar"></footer>
@@ -742,16 +743,19 @@ $(".profile-sub").addEventListener("click", () => {
 async function initWindow(): Promise<void> {
   if (!isTauri) return;
   const win = getCurrentWindow();
-  $("#win-min").addEventListener("click", () => void win.minimize());
-  $("#win-max").addEventListener("click", () => void win.toggleMaximize());
-  $("#win-close").addEventListener("click", () => void win.close());
-  const sync = async () => {
-    const max = await win.isMaximized().catch(() => false);
-    document.body.classList.toggle("win-maximized", max);
-    $<HTMLElement>("#win-max").dataset.tip = max ? "Restore" : "Maximise";
-  };
-  await win.onResized(() => void sync());
-  void sync();
+  // macOS keeps its own buttons (the title bar is see-through, see tauri.macos.conf.json)
+  if (!isMac) {
+    $("#win-min").addEventListener("click", () => void win.minimize());
+    $("#win-max").addEventListener("click", () => void win.toggleMaximize());
+    $("#win-close").addEventListener("click", () => void win.close());
+    const sync = async () => {
+      const max = await win.isMaximized().catch(() => false);
+      document.body.classList.toggle("win-maximized", max);
+      $<HTMLElement>("#win-max").dataset.tip = max ? "Restore" : "Maximise";
+    };
+    await win.onResized(() => void sync());
+    void sync();
+  }
   // lazer may change while Fumen is open: check when the window regains focus
   let lastCheck = 0;
   await win.onFocusChanged(({ payload: focused }) => {
@@ -765,7 +769,7 @@ async function initWindow(): Promise<void> {
 
 window.addEventListener("keydown", (e) => {
   const typing = (e.target as HTMLElement).closest("input, textarea, [contenteditable]");
-  if ((e.ctrlKey && e.key.toLowerCase() === "f") || (e.key === "/" && !typing)) {
+  if (((isMac ? e.metaKey : e.ctrlKey) && e.key.toLowerCase() === "f") || (e.key === "/" && !typing)) {
     if (!store.snap) return;
     e.preventDefault();
     focusSearch();

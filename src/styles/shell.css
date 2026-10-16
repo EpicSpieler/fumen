@@ -70,6 +70,10 @@ body.ambient-off .ambient-art { display: none; }
   padding-right: 6px;
 }
 .win-controls { display: flex; align-items: center; gap: 2px; }
+/* macOS: the system's buttons sit top left over the sidebar's head (trafficLightPosition in
+   tauri.macos.conf.json); collapsed, the head makes room below them */
+:root.mac .side-head { padding-left: 66px; }
+:root.mac body.sidebar-collapsed .side-head { padding-left: 0; height: 84px; align-items: flex-end; padding-bottom: 6px; }
 .win-btn {
   display: grid;
   place-items: center;

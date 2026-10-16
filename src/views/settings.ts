@@ -5,7 +5,7 @@ import { api, asApiError } from "../lib/api";
 import { esc, MODE_LABEL, num, relativeTime } from "../lib/format";
 import { collectionEvents, fumenCollections, loadCollections, putIntoLazer, saveCollectionDb } from "../lib/collections";
 import { syncHistory } from "../lib/history";
-import { checkForUpdate, downloadText, installUpdate, updateEvents, updateState } from "../lib/updater";
+import { canUpdate, checkForUpdate, downloadText, installUpdate, updateEvents, updateState } from "../lib/updater";
 import { describeScan, isScanning, runScan } from "../lib/scan";
 import { DEFAULT_ACCENT, events, refreshStatus, setPrefs, store } from "../lib/store";
 import type { OsuAccount } from "../lib/types";
@@ -184,7 +184,10 @@ export class SettingsView {
     const s = updateState();
     let desc = "Fumen looks for updates when it starts and every few hours. Installing one restarts it.";
     let control = `<button class="btn s-update-check" type="button">Check for updates</button>`;
-    if (s.phase === "checking") control = `<button class="btn" type="button" disabled>Checking…</button>`;
+    if (!canUpdate) {
+      desc = "On macOS, Fumen doesn't update itself yet: new versions are on fumen.dertesti.dev.";
+      control = "";
+    } else if (s.phase === "checking") control = `<button class="btn" type="button" disabled>Checking…</button>`;
     else if (s.phase === "current") desc = `You have the latest version (checked ${relativeTime(s.at)}).`;
     else if (s.phase === "available") {
       desc = `Fumen ${esc(s.version)} is out. Installing it restarts Fumen.`;
