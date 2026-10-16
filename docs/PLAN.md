@@ -463,7 +463,11 @@ sections below is the order of the work.
       pattern where Rust fills something in; the test checks it against src-tauri's source). Fumen
       starts in the system's language (German or else English) until one is picked. Game words
       stay as osu! says them (judgements, mods, pattern names, dan names)
-- [ ] A website with downloads
+- [x] A website with downloads — fumen.dertesti.dev: what Fumen does, four looping scenes drawn
+      in the page (`site/public/home.js`: each a pure function of time, so the loop never jumps; they
+      run only on screen and hold one frame with reduced motion), and the download buttons, which
+      `/download/info` and `/download/<windows|mac-arm|mac-intel>` point at the newest files in the
+      updates folder. A Mac visitor gets the macOS build first
 
 ## After 1.0
 
