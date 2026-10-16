@@ -6,6 +6,7 @@ import { differences, mainPattern, similarTo, type Similar } from "../lib/simila
 import { store } from "../lib/store";
 import type { MapRow } from "../lib/types";
 import { openSet, setMenu } from "./actions";
+import { t } from "../lib/i18n";
 
 /** listed before "Show more", and with it */
 const FEW = 5;
@@ -65,16 +66,16 @@ export class SimilarMaps {
   private render(): void {
     const snap = store.snap!;
     const map = snap.maps[this.mapIdx];
-    const head = `<div class="similar-head"><div class="label-caps">Similar maps</div><span class="similar-sub">${esc(basis(map))}</span></div>`;
+    const head = `<div class="similar-head"><div class="label-caps">${t("Similar maps")}</div><span class="similar-sub">${esc(basis(map))}</span></div>`;
     if (!this.list.length) {
-      this.el.innerHTML = `${head}<p class="chart-note">Nothing in your library is much like this one${map.mode === 3 ? ` in ${Math.round(map.cs)}K` : ""}.</p>`;
+      this.el.innerHTML = `${head}<p class="chart-note">${map.mode === 3 ? t("Nothing in your library is much like this one in {keys}K.", { keys: Math.round(map.cs) }) : t("Nothing in your library is much like this one.")}</p>`;
       return;
     }
     const shown = this.all ? this.list : this.list.slice(0, FEW);
     this.el.innerHTML = `
       ${head}
       <div class="sim-list">${shown.map((s) => row(map, s)).join("")}</div>
-      ${this.list.length > FEW ? `<button class="btn btn-ghost btn-sm similar-more" type="button">${this.all ? "Show fewer" : "Show more"}</button>` : ""}`;
+      ${this.list.length > FEW ? `<button class="btn btn-ghost btn-sm similar-more" type="button">${this.all ? t("Show fewer") : t("Show more")}</button>` : ""}`;
   }
 
   /** Scrolls the section into view (asked for from a menu). */
@@ -96,13 +97,13 @@ function open(mi: number): void {
 function basis(m: MapRow): string {
   switch (m.mode) {
     case 3:
-      return "pattern mix, star rating, density and long notes";
+      return t("pattern mix, star rating, density and long notes");
     case 1:
-      return "star rating, BPM and density";
+      return t("star rating, BPM and density");
     case 2:
-      return "star rating, BPM, approach rate and fruit size";
+      return t("star rating, BPM, approach rate and fruit size");
     default:
-      return "star rating, BPM, approach rate and circle size";
+      return t("star rating, BPM, approach rate and circle size");
   }
 }
 
@@ -114,7 +115,7 @@ function row(target: MapRow, s: Similar): string {
   const bg = m.bg ?? set.bg;
   const trait = m.mode === 3 ? mainPattern(m) : m.bpm ? `${bpm(m.bpm)} BPM` : "";
   const apart = differences(target, m, s);
-  const sub = [esc(m.version), trait, apart.length ? apart.join(", ") : "much the same"].filter(Boolean).join(" · ");
+  const sub = [esc(m.version), trait, apart.length ? apart.join(", ") : t("much the same")].filter(Boolean).join(" · ");
   const pct = Math.round(s.score * 100);
   return `
     <div class="sim-row" data-map="${s.mapIdx}" role="button" tabindex="0">
@@ -124,6 +125,6 @@ function row(target: MapRow, s: Similar): string {
         <div class="t-sub">${sub}</div>
       </div>
       <span class="sim-sr">${srChip(m.sr)}</span>
-      <b class="num sim-score" data-tip="${pct}% alike">${pct}%</b>
+      <b class="num sim-score" data-tip="${t("{pct}% alike", { pct })}">${pct}%</b>
     </div>`;
 }

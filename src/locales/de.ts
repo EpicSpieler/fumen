@@ -7,5 +7,10 @@
 import { common } from "./de/common";
 import { shell } from "./de/shell";
 import { settings } from "./de/settings";
+import { player } from "./de/player";
+import { menus } from "./de/menus";
+import { home } from "./de/home";
+import { library } from "./de/library";
+import { set } from "./de/set";
 
-export const de: Record<string, string> = { ...common, ...shell, ...settings };
+export const de: Record<string, string> = { ...common, ...shell, ...settings, ...player, ...menus, ...home, ...library, ...set };

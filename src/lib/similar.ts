@@ -13,6 +13,7 @@
  */
 import { PATTERN_LABEL, PATTERNS } from "./skills";
 import type { MapRow } from "./types";
+import { t } from "./i18n";
 
 /** One part of the fingerprint: its name, what a unit of it is, and its weight per ruleset
  * (osu!, osu!taiko, osu!catch, osu!mania; 0 = left out). */
@@ -181,16 +182,16 @@ export function differences(a: MapRow, b: MapRow, l: Likeness, max = 2): string[
     words.push({ units: Math.abs(units), text: units > 0 ? more : less });
   };
   const d = l.diffs;
-  say(d.sr, "harder", "easier");
-  say(d.density, "denser", "lighter");
-  say(d.length, "longer", "shorter");
-  if (a.mode !== 3) say(d.bpm, "faster", "slower");
-  if (a.mode === 3) say(d.holds, "more long notes", "fewer long notes");
-  else if (a.mode === 0) say(d.holds, "more sliders", "fewer sliders");
-  else if (a.mode === 2) say(d.holds, "more juice streams", "fewer juice streams");
-  say(d.ar, "higher AR", "lower AR");
-  if (a.mode === 0) say(d.cs, "smaller circles", "bigger circles");
-  else if (a.mode === 2) say(d.cs, "smaller fruits", "bigger fruits");
+  say(d.sr, t("harder"), t("easier"));
+  say(d.density, t("denser"), t("lighter"));
+  say(d.length, t("longer"), t("shorter"));
+  if (a.mode !== 3) say(d.bpm, t("faster"), t("slower"));
+  if (a.mode === 3) say(d.holds, t("more long notes"), t("fewer long notes"));
+  else if (a.mode === 0) say(d.holds, t("more sliders"), t("fewer sliders"));
+  else if (a.mode === 2) say(d.holds, t("more juice streams"), t("fewer juice streams"));
+  say(d.ar, t("higher AR"), t("lower AR"));
+  if (a.mode === 0) say(d.cs, t("smaller circles"), t("bigger circles"));
+  else if (a.mode === 2) say(d.cs, t("smaller fruits"), t("bigger fruits"));
   // the pattern the mix moved toward most (long notes are said above already)
   if (d.patterns !== undefined && d.patterns >= SAY && a.shares && b.shares) {
     let best = -1;
@@ -200,7 +201,7 @@ export function differences(a: MapRow, b: MapRow, l: Likeness, max = 2): string[
       const g = (b.shares[i] ?? 0) - (a.shares[i] ?? 0);
       if (g > gain) [best, gain] = [i, g];
     }
-    if (best >= 0 && gain >= 15) words.push({ units: d.patterns, text: `more ${PATTERN_LABEL[PATTERNS[best]].toLowerCase()}` });
+    if (best >= 0 && gain >= 15) words.push({ units: d.patterns, text: t("more {pattern}", { pattern: PATTERN_LABEL[PATTERNS[best]].toLowerCase() }) });
   }
   return words
     .sort((x, y) => y.units - x.units)

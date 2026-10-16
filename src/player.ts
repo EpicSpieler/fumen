@@ -9,7 +9,7 @@
  * once, they stay on for whatever plays.
  */
 import { fileUrl, thumbUrl } from "./lib/api";
-import { displayArtist, displayTitle, duration, esc } from "./lib/format";
+import { displayArtist, displayTitle, duration, esc, fixed } from "./lib/format";
 import { go } from "./lib/router";
 import { Emitter, events, setPrefs, store } from "./lib/store";
 import type { Mod } from "./lib/mods";
@@ -18,6 +18,7 @@ import { toast } from "./ui/controls";
 import { icon } from "./ui/icons";
 import { setContentArt } from "./ui/theme";
 import { setMenu } from "./views/actions";
+import { t } from "./lib/i18n";
 
 export interface NowPlaying {
   set: number;
@@ -61,7 +62,7 @@ class Player {
     });
     this.audio.addEventListener("error", () => {
       if (!this.now) return;
-      toast("This song's audio file couldn't be played.", { kind: "danger" });
+      toast(t("This song's audio file couldn't be played."), { kind: "danger" });
       this.stop();
     });
     events.on("prefs", (p) => {
@@ -110,7 +111,7 @@ class Player {
       this.bus.emit("queue", null);
       return;
     }
-    if (!this.load(setIdx, mapIdx, opts.at)) toast("This set has no audio file.");
+    if (!this.load(setIdx, mapIdx, opts.at)) toast(t("This set has no audio file."));
   }
 
   /** Switches the playing difficulty within the set; keeps playing when it's the same song. */
@@ -289,40 +290,40 @@ export const player = new Player();
 // ── bar ────────────────────────────────────────────────────────────────────
 
 const REPEAT_TIP: Record<RepeatMode, string> = {
-  off: "Repeat: off",
-  all: "Repeat: list",
-  one: "Repeat: this song",
+  off: t("Repeat: off"),
+  all: t("Repeat: list"),
+  one: t("Repeat: this song"),
 };
 
 export function mountPlayerBar(host: HTMLElement, opts: { onFullscreen: () => void }): void {
   host.innerHTML = `
-    <div class="pb-seek" role="slider" aria-label="Seek" tabindex="0">
+    <div class="pb-seek" role="slider" aria-label="${t("Seek")}" tabindex="0">
       <div class="pb-seek-track"><div class="pb-seek-fill"></div></div>
       <div class="pb-seek-head"></div>
       <div class="pb-seek-tip num"></div>
     </div>
     <div class="pb-row">
       <div class="pb-left">
-        <button class="pb-art" type="button" data-tip="Open beatmap set" aria-label="Open beatmap set"><img alt="" /></button>
+        <button class="pb-art" type="button" data-tip="${t("Open beatmap set")}" aria-label="${t("Open beatmap set")}"><img alt="" /></button>
         <div class="pb-meta">
           <button class="pb-title" type="button"></button>
           <div class="pb-artist"></div>
-          <div class="pb-time num"><span class="pb-cur">0:00</span> / <span class="pb-dur">0:00</span><button class="pb-rate" type="button" data-tip="Back to normal speed" hidden></button></div>
+          <div class="pb-time num"><span class="pb-cur">0:00</span> / <span class="pb-dur">0:00</span><button class="pb-rate" type="button" data-tip="${t("Back to normal speed")}" hidden></button></div>
         </div>
       </div>
       <div class="pb-center">
-        <button class="pb-btn pb-shuffle" type="button" aria-label="Shuffle">${icon("shuffle")}</button>
-        <button class="pb-btn pb-skip pb-prev" type="button" data-tip="Previous" aria-label="Previous">${icon("skip-back")}</button>
-        <button class="pb-play" type="button" aria-label="Play"></button>
-        <button class="pb-btn pb-skip pb-next" type="button" data-tip="Next" aria-label="Next">${icon("skip-forward")}</button>
-        <button class="pb-btn pb-repeat" type="button" aria-label="Repeat"></button>
+        <button class="pb-btn pb-shuffle" type="button" aria-label="${t("Shuffle")}">${icon("shuffle")}</button>
+        <button class="pb-btn pb-skip pb-prev" type="button" data-tip="${t("Previous")}" aria-label="${t("Previous")}">${icon("skip-back")}</button>
+        <button class="pb-play" type="button" aria-label="${t("Play")}"></button>
+        <button class="pb-btn pb-skip pb-next" type="button" data-tip="${t("Next")}" aria-label="${t("Next")}">${icon("skip-forward")}</button>
+        <button class="pb-btn pb-repeat" type="button" aria-label="${t("Repeat")}"></button>
       </div>
       <div class="pb-right">
-        <button class="pb-btn pb-mute" type="button" aria-label="Mute"></button>
-        <div class="pb-vol" role="slider" aria-label="Volume" aria-valuemin="0" aria-valuemax="100" tabindex="0"><div class="pb-vol-fill"></div></div>
-        <button class="pb-btn pb-full" type="button" data-tip="Fullscreen" aria-label="Fullscreen">${icon("fullscreen")}</button>
-        <button class="pb-btn pb-more" type="button" data-tip="More" aria-label="More">${icon("more-vert")}</button>
-        <button class="pb-btn pb-close" type="button" data-tip="Close player" aria-label="Close player">${icon("x")}</button>
+        <button class="pb-btn pb-mute" type="button" aria-label="${t("Mute")}"></button>
+        <div class="pb-vol" role="slider" aria-label="${t("Volume")}" aria-valuemin="0" aria-valuemax="100" tabindex="0"><div class="pb-vol-fill"></div></div>
+        <button class="pb-btn pb-full" type="button" data-tip="${t("Fullscreen")}" aria-label="${t("Fullscreen")}">${icon("fullscreen")}</button>
+        <button class="pb-btn pb-more" type="button" data-tip="${t("More")}" aria-label="${t("More")}">${icon("more-vert")}</button>
+        <button class="pb-btn pb-close" type="button" data-tip="${t("Close player")}" aria-label="${t("Close player")}">${icon("x")}</button>
       </div>
     </div>`;
 
@@ -351,7 +352,7 @@ export function mountPlayerBar(host: HTMLElement, opts: { onFullscreen: () => vo
     vol.style.setProperty("--v", `${v * 100}%`);
     vol.setAttribute("aria-valuenow", String(Math.round(v * 100)));
     mute.innerHTML = icon(v === 0 ? "volume-off" : v < 0.45 ? "volume-low" : "volume");
-    mute.dataset.tip = v === 0 ? "Unmute" : "Mute";
+    mute.dataset.tip = v === 0 ? t("Unmute") : t("Mute");
   };
   const setVolume = (v: number) => {
     player.setVolume(v);
@@ -405,14 +406,14 @@ export function mountPlayerBar(host: HTMLElement, opts: { onFullscreen: () => vo
 
   const renderState = (playing: boolean) => {
     host.classList.toggle("playing", playing);
-    playBtn.setAttribute("aria-label", playing ? "Pause" : "Play");
+    playBtn.setAttribute("aria-label", playing ? t("Pause") : t("Play"));
     if ("mediaSession" in navigator) navigator.mediaSession.playbackState = player.now ? (playing ? "playing" : "paused") : "none";
   };
 
   const renderModes = () => {
     const p = store.prefs;
     shuffle.classList.toggle("on", p.shuffle);
-    shuffle.dataset.tip = p.shuffle ? "Shuffle: on" : "Shuffle: off";
+    shuffle.dataset.tip = p.shuffle ? t("Shuffle: on") : t("Shuffle: off");
     shuffle.setAttribute("aria-pressed", String(p.shuffle));
     repeat.classList.toggle("on", p.repeat !== "off");
     repeat.innerHTML = icon(p.repeat === "one" ? "repeat-one" : "repeat");
@@ -431,8 +432,8 @@ export function mountPlayerBar(host: HTMLElement, opts: { onFullscreen: () => vo
 
   const renderRate = (rate: number) => {
     rateBtn.hidden = rate === 1;
-    rateBtn.textContent = `${rate.toFixed(2)}×`;
-    rateBtn.setAttribute("aria-label", `Playing at ${rate.toFixed(2)}×, back to normal speed`);
+    rateBtn.textContent = `${fixed(rate, 2)}×`;
+    rateBtn.setAttribute("aria-label", t("Playing at {rate}×, back to normal speed", { rate: fixed(rate, 2) }));
     renderTime();
   };
 

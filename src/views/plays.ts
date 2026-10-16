@@ -9,6 +9,7 @@ import { store } from "../lib/store";
 import type { Play } from "../lib/types";
 import { icon } from "../ui/icons";
 import { openGoalDialog } from "./goal-dialog";
+import { t, tn } from "../lib/i18n";
 
 /** plays listed before "Show all" */
 const FEW = 5;
@@ -46,14 +47,14 @@ export class MapPlays {
   private render(): void {
     const map = store.snap?.maps[this.mapIdx];
     if (!map) return;
-    const head = `<div class="label-caps">Your plays</div><button class="btn btn-ghost btn-sm plays-goal" type="button" data-tip="Set an accuracy to reach on this difficulty">${icon("flag")}<span>Set a goal</span></button>`;
+    const head = `<div class="label-caps">${t("Your plays")}</div><button class="btn btn-ghost btn-sm plays-goal" type="button" data-tip="${t("Set an accuracy to reach on this difficulty")}">${icon("flag")}<span>${t("Set a goal")}</span></button>`;
     if (!historyNow()) {
       this.el.innerHTML = `<div class="plays-head">${head}</div><div class="skeleton" style="height:40px"></div>`;
       return;
     }
     const plays = playsOf(map.id);
     if (!plays.length) {
-      const note = map.played ? `Played ${relativeTime(map.played)}, without a score osu!lazer kept.` : "Not played yet.";
+      const note = map.played ? t("Played {when}, without a score osu!lazer kept.", { when: relativeTime(map.played) }) : t("Not played yet.");
       this.el.innerHTML = `<div class="plays-head">${head}</div><p class="chart-note">${note}</p>`;
       return;
     }
@@ -61,16 +62,16 @@ export class MapPlays {
     const best = passes.reduce<Play | undefined>((b, p) => (!b || p.score > b.score ? p : b), undefined);
     const first = plays[plays.length - 1];
     const words = [
-      `${num(plays.length)} ${plays.length === 1 ? "play" : "plays"}`,
-      best ? `best ${pct(best.acc)}${best.pp ? `, ${num(Math.round(best.pp))}pp` : ""}` : "no pass yet",
-      `first ${date(first.date)}`,
+      tn(plays.length, "{n} play", "{n} plays"),
+      best ? `${t("best {acc}", { acc: pct(best.acc) })}${best.pp ? `, ${num(Math.round(best.pp))}pp` : ""}` : t("no pass yet"),
+      t("first {date}", { date: date(first.date) }),
     ];
     const shown = this.all ? plays : plays.slice(0, FEW);
     this.el.innerHTML = `
       <div class="plays-head">${head}<div class="meta-line num">${words.map((w) => `<span>${w}</span>`).join("")}</div></div>
       ${passes.length >= 3 ? accuracyGraph([...passes].reverse(), best) : ""}
       <div class="plays-list">${shown.map((p) => row(p, map.mode, p === best)).join("")}</div>
-      ${plays.length > FEW ? `<button class="btn btn-ghost btn-sm plays-all" type="button">${this.all ? "Show fewer" : `Show all ${num(plays.length)}`}</button>` : ""}`;
+      ${plays.length > FEW ? `<button class="btn btn-ghost btn-sm plays-all" type="button">${this.all ? t("Show fewer") : t("Show all {n}", { n: num(plays.length) })}</button>` : ""}`;
   }
 
   destroy(): void {
@@ -91,7 +92,7 @@ function row(p: Play, mapMode: number, isBest: boolean): string {
       <span class="mplay-mods">${esc(mods)}</span>
       <span class="num mplay-pp">${p.pp ? `${num(Math.round(p.pp))}pp` : ""}</span>
       <span class="num mplay-score">${num(p.score)}</span>
-      ${p.id ? `<button class="icon-btn mplay-web" type="button" data-id="${p.id}" data-tip="View score on osu! website" aria-label="View score on osu! website">${icon("external")}</button>` : `<span></span>`}
+      ${p.id ? `<button class="icon-btn mplay-web" type="button" data-id="${p.id}" data-tip="${t("View score on osu! website")}" aria-label="${t("View score on osu! website")}">${icon("external")}</button>` : `<span></span>`}
     </div>`;
 }
 
