@@ -18,12 +18,14 @@ pub struct Settings {
     pub stable_path: Option<String>,
     /// stable's beatmaps in the library too (when it's found).
     pub use_stable: bool,
+    /// The start ping (ping.rs): counted among the people using Fumen.
+    pub start_ping: bool,
     pub ui: Map<String, Value>,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Settings { lazer_path: None, auto_rescan: true, stable_path: None, use_stable: true, ui: Map::new() }
+        Settings { lazer_path: None, auto_rescan: true, stable_path: None, use_stable: true, start_ping: true, ui: Map::new() }
     }
 }
 

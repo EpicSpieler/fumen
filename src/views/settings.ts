@@ -179,6 +179,13 @@ export class SettingsView {
             </div>
           </div>
           <div class="setting-row" data-row="update"></div>
+          <div class="setting-row">
+            <div class="setting-text">
+              <div class="setting-title">${t("Count me in")}</div>
+              <div class="setting-desc">${t("When Fumen starts, it tells fumen.dertesti.dev that it did: a random number made on this PC and Fumen's version, nothing else. That's how many people use it.")}</div>
+            </div>
+            <input type="checkbox" role="switch" data-setting="startPing" aria-label="${t("Count me in")}" ${store.settings?.startPing !== false ? "checked" : ""} />
+          </div>
         </section>
       </div>`;
     this.el.querySelectorAll<HTMLElement>(".seg-pill").forEach((s) => attachSegIndicator(s));
@@ -466,6 +473,8 @@ export class SettingsView {
     if (input.dataset.pref) {
       setPrefs({ [input.dataset.pref]: input.checked } as never);
       applyAppearance();
+    } else if (input.dataset.setting === "startPing") {
+      api.updateSettings({ startPing: input.checked }).then((s) => (store.settings = s));
     } else if (input.dataset.setting === "autoRescan") {
       api.updateSettings({ autoRescan: input.checked }).then((s) => (store.settings = s));
     } else if (input.dataset.setting === "useStable") {

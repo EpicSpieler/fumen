@@ -14,6 +14,9 @@ export const settings: Record<string, string> = {
 
   // library
   "Keep up to date": "Aktuell halten",
+  "Count me in": "Mitzählen",
+  "When Fumen starts, it tells fumen.dertesti.dev that it did: a random number made on this PC and Fumen's version, nothing else. That's how many people use it.":
+    "Beim Start sagt Fumen fumen.dertesti.dev Bescheid: eine Zufallszahl, die auf diesem PC entsteht, und Fumens Version, sonst nichts. So lässt sich zählen, wie viele Fumen nutzen.",
   "Re-import when osu!lazer's or osu!stable's library changed since the last import.":
     "Neu importieren, wenn sich die Bibliothek von osu!lazer oder osu!stable seit dem letzten Import geändert hat.",
   "osu!lazer folder": "osu!lazer-Ordner",
