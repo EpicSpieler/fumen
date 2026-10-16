@@ -32,7 +32,7 @@ const TYPES = {
 };
 
 /** what /updates/ hands out: a plain file name, no folders */
-const UPDATE_FILE = /^[A-Za-z0-9][A-Za-z0-9._-]*\.(json|exe|sig|zip)$/;
+const UPDATE_FILE = /^[A-Za-z0-9][A-Za-z0-9._-]*\.(json|exe|sig|zip|dmg)$/;
 
 const PAGE_HEADERS = {
   "Content-Security-Policy": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",

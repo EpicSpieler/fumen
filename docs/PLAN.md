@@ -444,6 +444,15 @@ sections below is the order of the work.
       dark on Light (`deriveAccent(color, light)`). The fullscreen player stays a dark stage and
       gets the dark tokens back (`:root[data-theme="light"] .fs`); the set hero gets a light scrim
       and dark text; the delete smoke is dark on Light. High contrast works on top of Light too
+- [ ] macOS — the code side in 0.7.3, waiting for the tester. lazer's app in /Applications or
+      ~/Applications (`osu!.app/Contents/MacOS`: its assemblies, runtime and `sq.version`), its data
+      in ~/Library/Application Support/osu, running = a process from an osu!.app (`ps`); the importer
+      works as on Windows (lazer's folder hard-linked into Fumen's cache, nothing written into the
+      signed app), with its launcher built for macOS. osu!stable has no macOS build: not looked for.
+      The window keeps macOS's own buttons over the sidebar's head (`tauri.macos.conf.json`), ⌘F
+      searches. Built on GitHub's Macs (`npm run mac`, by hand: macOS minutes count ten times on a
+      private repo), Apple Silicon tested against lazer's macOS release (from GitHub) first. Not
+      signed by Apple, no self-update on macOS until the release
 - [ ] English and German
 - [ ] A website with downloads
 
@@ -471,7 +480,8 @@ sections below is the order of the work.
 
 - GitHub repo `fumen` (private until 0.1 is solid), `main` branch, small focused commits.
 - CI (GitHub Actions): frontend (typecheck, UI tests, build) and backend (windows-latest: helpers
-  build, `cargo clippy`, Rust tests), each only when its side changes.
+  build, `cargo clippy`, Rust tests), each only when its side changes. macOS (`mac.yml`) only by
+  hand: `npm run mac`.
 - After a lazer update: `npm run verify-lazer -- --push` with lazer closed.
 - Site changes: `node scripts/deploy-site.mjs` (the VPS's `.env` holds the osu! secret, never git).
 - Releases: `npm run release -- patch` on the PC (signed NSIS installer → GitHub release in the

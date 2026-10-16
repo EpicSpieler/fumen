@@ -182,9 +182,16 @@ Installing restarts Fumen (Tauri's updater checks the signature first; not while
 going into lazer). The signing key is `~/.tauri/fumen-updater.key` on the machine that releases,
 never in the repo; without it, installed copies can't be updated, so keep a copy somewhere safe.
 
+`npm run mac` builds the macOS app on GitHub's Macs (`.github/workflows/mac.yml`; a Mac app can't
+be built on Windows) for Apple Silicon and Intel and puts the disk images on the site's updates
+folder (the commit in their names). The Apple Silicon build is tested first against osu!lazer's
+macOS release: lazer's own import into a fresh library, read back by Fumen's reader. The app isn't
+signed by Apple (first start: right-click → Open, or System Settings › Privacy & Security › Open
+Anyway) and doesn't update itself on macOS yet.
+
 ## Development
 
-Requirements: Node 22+, Rust (stable), .NET 8 SDK, Windows (WebView2).
+Requirements: Node 22+, Rust (stable), .NET 8 SDK, Windows (WebView2) or macOS 11+.
 
 ```bash
 npm install

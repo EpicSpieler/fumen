@@ -25,6 +25,7 @@ const updates = join(scratch, "updates");
 mkdirSync(updates);
 writeFileSync(join(updates, "latest.json"), JSON.stringify({ version: "0.4.0" }));
 writeFileSync(join(updates, "Fumen_0.4.0_x64-setup.exe"), "MZ installer");
+writeFileSync(join(updates, "Fumen_0.4.0_abc1234_aarch64.dmg"), "disk image");
 writeFileSync(join(scratch, "secret.json"), "{}");
 const listen = (server) => new Promise((r) => server.listen(0, "127.0.0.1", () => r(server.address().port)));
 
@@ -75,6 +76,9 @@ describe("site", () => {
     expect(exe.headers.get("content-length")).toBe("12");
     expect(exe.headers.get("cache-control")).toContain("immutable");
     expect(await exe.text()).toBe("MZ installer");
+    const dmg = await fetch(base + "/updates/Fumen_0.4.0_abc1234_aarch64.dmg");
+    expect(dmg.status).toBe(200);
+    expect(await dmg.text()).toBe("disk image");
     const head = await fetch(base + "/updates/latest.json", { method: "HEAD" });
     expect(head.status).toBe(200);
     expect(await head.text()).toBe("");
