@@ -57,6 +57,8 @@ body.has-player .main { grid-template-rows: var(--topbar-h) minmax(0, 1fr) var(-
     color-mix(in srgb, var(--bg-base) 86%, transparent) 100%);
 }
 body.ambient-off .ambient-art { display: none; }
+/* light: the cover brightened, so the base stays light */
+:root[data-theme="light"] .ambient-art { filter: blur(70px) saturate(1.3) brightness(1.18); }
 
 /* ---------- Window controls (float top right, no surface) ---------- */
 .topbar {
@@ -120,13 +122,13 @@ body.win-maximized .win-btn .ic-restore { display: block; }
   align-items: center;
   height: 38px;
   border-radius: var(--r-full);
-  background: rgba(255, 255, 255, .08);
+  background: rgb(var(--ink) / .08);
   -webkit-backdrop-filter: blur(14px);
           backdrop-filter: blur(14px);
   transition: background .15s var(--ease-std), box-shadow .15s var(--ease-std);
 }
-.search:hover { background: rgba(255, 255, 255, .1); }
-.search:focus-within { background: rgba(255, 255, 255, .13); box-shadow: inset 0 0 0 1px var(--accent-line); }
+.search:hover { background: rgb(var(--ink) / .1); }
+.search:focus-within { background: rgb(var(--ink) / .13); box-shadow: inset 0 0 0 1px var(--accent-line); }
 .search .search-ic { position: absolute; left: 13px; width: 17px; height: 17px; color: var(--t3); pointer-events: none; }
 .search input {
   flex: 1;
@@ -193,7 +195,7 @@ body.win-maximized .win-btn .ic-restore { display: block; }
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  background: radial-gradient(circle 70px at var(--rx, -200px) var(--ry, -200px), rgba(255, 255, 255, .07), transparent);
+  background: radial-gradient(circle 70px at var(--rx, -200px) var(--ry, -200px), rgb(var(--ink) / .07), transparent);
   opacity: 0;
   transition: opacity .18s;
   pointer-events: none;
@@ -210,7 +212,7 @@ body.win-maximized .win-btn .ic-restore { display: block; }
   min-height: 0;
   padding: 4px;
   border-radius: min(20px, var(--r-full));
-  background: rgba(255, 255, 255, .05);
+  background: rgb(var(--ink) / .05);
 }
 .side-box-head {
   display: flex;

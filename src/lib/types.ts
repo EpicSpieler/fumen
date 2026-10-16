@@ -432,7 +432,7 @@ export interface UiPrefs {
   ambient: boolean;
   reduceMotion: boolean;
   unicode: boolean;
-  theme: "dark" | "oled";
+  theme: "dark" | "oled" | "light";
   volume: number;
   layout: LibraryLayout;
   sort: string;

@@ -76,14 +76,15 @@ function luminance([r, g, b]: RGB): number {
   return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
 }
 
-/** Bounded accent variants from any source colour. */
-export function deriveAccent(color: string): { accent: string; ink: string; onAccent: string } {
+/** Bounded accent variants from any source colour. `light`: for the light theme, where the ink
+ * (accent as text) has to be dark instead of light. */
+export function deriveAccent(color: string, light = false): { accent: string; ink: string; onAccent: string } {
   const rgb = hexToRgb(color) ?? hexToRgb(DEFAULT_ACCENT)!;
   const [h, s0, l0] = rgbToHsl(...rgb);
   const s = clamp(s0, 0.55, 0.92);
   const l = clamp(l0, 0.56, 0.68);
   const accent = hslToRgb(h, s, l);
-  const ink = hslToRgb(h, clamp(s, 0.5, 0.85), clamp(l + 0.18, 0.76, 0.85));
+  const ink = light ? hslToRgb(h, clamp(s, 0.55, 0.9), clamp(l - 0.2, 0.38, 0.46)) : hslToRgb(h, clamp(s, 0.5, 0.85), clamp(l + 0.18, 0.76, 0.85));
   return { accent: toHex(accent), ink: toHex(ink), onAccent: luminance(accent) > 0.32 ? "#0b0c0e" : "#ffffff" };
 }
 
@@ -91,8 +92,11 @@ export function deriveAccent(color: string): { accent: string; ink: string; onAc
 let contentAccent: string | null = null;
 
 function applyAccent(color: string): void {
-  const a = deriveAccent(color);
+  const light = store.prefs.theme === "light";
+  const a = deriveAccent(color, light);
   const root = document.documentElement.style;
+  // the ink on the dark stages the light theme keeps (the fullscreen player)
+  root.setProperty("--accent-ink-dark", light ? deriveAccent(color).ink : a.ink);
   root.setProperty("--accent", a.accent);
   root.setProperty("--accent-ink", a.ink);
   root.setProperty("--on-accent", a.onAccent);

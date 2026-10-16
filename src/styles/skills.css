@@ -51,7 +51,7 @@
 /* ---------- Pattern list ---------- */
 .skills-list { display: flex; flex-direction: column; gap: 2px; padding: 8px; }
 .skill { border-radius: var(--r-lg); transition: background .12s var(--ease-std); }
-.skill.open { background: rgba(255, 255, 255, .035); }
+.skill.open { background: rgb(var(--ink) / .035); }
 .skill-head {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto 72px 18px;
