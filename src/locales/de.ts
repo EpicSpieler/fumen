@@ -12,5 +12,6 @@ import { menus } from "./de/menus";
 import { home } from "./de/home";
 import { library } from "./de/library";
 import { set } from "./de/set";
+import { chart } from "./de/chart";
 
-export const de: Record<string, string> = { ...common, ...shell, ...settings, ...player, ...menus, ...home, ...library, ...set };
+export const de: Record<string, string> = { ...common, ...shell, ...settings, ...player, ...menus, ...home, ...library, ...set, ...chart };

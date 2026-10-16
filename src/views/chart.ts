@@ -16,7 +16,7 @@
 import { asApiError } from "../lib/api";
 import { danAt, loadChart } from "../lib/charts";
 import { CORE_PATTERNS, danReadings, MODE_LABEL, patternGroups, SV_AMOUNT } from "../lib/dan";
-import { bpm, duration, esc, num, srChip } from "../lib/format";
+import { bpm, duration, esc, fixed, num, srChip } from "../lib/format";
 import { store } from "../lib/store";
 import type { ChartData, DanRating } from "../lib/types";
 import { player } from "../player";
@@ -27,6 +27,7 @@ import { rateClick, rateControlHtml, starsAtRate, syncRateControl } from "../ui/
 import { openFullscreen } from "./fullscreen";
 import { MapPlays } from "./plays";
 import { SimilarMaps } from "./similar";
+import { t } from "../lib/i18n";
 
 export class ChartPanel {
   readonly el: HTMLElement;
@@ -111,7 +112,7 @@ export class ChartPanel {
   // ── rendering ─────────────────────────────────────────────────────────
 
   private renderError(message: string): void {
-    this.el.innerHTML = `<div class="chart-error">${icon("alert")}<span>Couldn't read this chart. ${esc(message)}</span></div><div class="chart-plays"></div><div class="chart-similar"></div>`;
+    this.el.innerHTML = `<div class="chart-error">${icon("alert")}<span>${t("Couldn't read this chart. {error}", { error: esc(message) })}</span></div><div class="chart-plays"></div><div class="chart-similar"></div>`;
     this.mountPlays();
   }
 
@@ -150,19 +151,19 @@ export class ChartPanel {
           <div class="rate-info num"></div>
         </div>
         <div class="chart-graph">
-          <canvas class="graph-canvas" aria-label="Note density"></canvas>
+          <canvas class="graph-canvas" aria-label="${t("Note density")}"></canvas>
           <div class="graph-head"></div>
           <div class="graph-tip num"></div>
         </div>
-        <div class="graph-axis num"><span>0:00</span><span class="graph-hint">Notes per second${d.kiai.length ? " · kiai shaded" : ""}</span><span class="axis-end">${duration(this.total() / player.rate)}</span></div>
+        <div class="graph-axis num"><span>0:00</span><span class="graph-hint">${d.kiai.length ? t("Notes per second · kiai shaded") : t("Notes per second")}</span><span class="axis-end">${duration(this.total() / player.rate)}</span></div>
         <div class="chart-stats${mania ? " has-dan" : ""}">${this.statsHtml(d)}</div>
         ${mania ? this.maniaBlocks(d) : ""}
         <div class="chart-plays"></div>
         <div class="chart-similar"></div>
         <div class="chart-actions">
-          ${field ? `<button class="btn btn-primary btn-sm chart-field" type="button">${icon("fullscreen")}<span>Open playfield</span></button>` : ""}
-          <button class="btn btn-sm chart-play" type="button">${icon("play", "ic-play")}${icon("pause", "ic-pause")}<span>Play from here</span></button>
-          <span class="chart-help">Click the graph to move through the song.</span>
+          ${field ? `<button class="btn btn-primary btn-sm chart-field" type="button">${icon("fullscreen")}<span>${t("Open playfield")}</span></button>` : ""}
+          <button class="btn btn-sm chart-play" type="button">${icon("play", "ic-play")}${icon("pause", "ic-pause")}<span>${t("Play from here")}</span></button>
+          <span class="chart-help">${t("Click the graph to move through the song.")}</span>
         </div>
       </div>`;
 
@@ -184,17 +185,17 @@ export class ChartPanel {
     const r = player.rate;
     const dan =
       d.mode === 3 && d.keys > 0
-        ? `<div class="cstat cstat-dan is-loading" data-tip="Estimated dan (course tier), from ManiaMapAnalyser by Leo_Black: Azusa for 4K rice, Sunny's star rating on the dan tables otherwise. A guide, not a verdict.">${this.danHtml || `<span class="cstat-k">Dan</span><b>–</b><span class="cstat-s">&nbsp;</span>`}</div>`
+        ? `<div class="cstat cstat-dan is-loading" data-tip="${t("Estimated dan (course tier), from ManiaMapAnalyser by Leo_Black: Azusa for 4K rice, Sunny's star rating on the dan tables otherwise. A guide, not a verdict.")}">${this.danHtml || `<span class="cstat-k">${t("Dan")}</span><b>–</b><span class="cstat-s">&nbsp;</span>`}</div>`
         : "";
     const stats: [string, string, string][] = [
-      ["Peak", (a.npsPeak * r).toFixed(1), "notes/s"],
-      ["Average", (a.npsAvg * r).toFixed(1), "notes/s"],
-      ["Longest burst", a.longestBurst ? duration(a.longestBurst / r) : "–", "without a breather"],
+      [t("Peak"), fixed(a.npsPeak * r, 1), t("notes/s")],
+      [t("Average"), fixed(a.npsAvg * r, 1), t("notes/s")],
+      [t("Longest burst"), a.longestBurst ? duration(a.longestBurst / r) : "–", t("without a breather")],
     ];
     if (d.mode === 3 && d.keys > 0) {
-      stats.push(["Long notes", `${Math.round(a.lnTime * 100)}%`, "of the time held"], ["Jacks", `${Math.round(a.jackRatio * 100)}%`, "of rows"]);
+      stats.push([t("Long notes"), `${Math.round(a.lnTime * 100)}%`, t("of the time held")], ["Jacks", `${Math.round(a.jackRatio * 100)}%`, t("of rows")]);
     } else {
-      stats.push(["Objects", num(a.notes), `${num(a.holds)} with a length`]);
+      stats.push([t("Objects"), num(a.notes), t("{n} with a length", { n: num(a.holds) })]);
     }
     return dan + stats.map(([k, v, s]) => `<div class="cstat"><span class="cstat-k">${k}</span><b class="num">${v}</b><span class="cstat-s">${s}</span></div>`).join("");
   }
@@ -221,17 +222,17 @@ export class ChartPanel {
   }
 
   private danCard(d: ChartData, dan: DanRating | null, failed: boolean, rate: number): string {
-    const k = `<span class="cstat-k">Dan${rate !== 1 ? ` at ${rate.toFixed(2)}×` : ""}</span>`;
+    const k = `<span class="cstat-k">${rate !== 1 ? t("Dan at {rate}×", { rate: fixed(rate, 2) }) : t("Dan")}</span>`;
     if (!dan) {
-      const why = failed ? "couldn't be rated" : [4, 6, 7, 10].includes(d.keys) ? "too short to rate" : `no dan tables for ${d.keys}K`;
+      const why = failed ? t("couldn't be rated") : [4, 6, 7, 10].includes(d.keys) ? t("too short to rate") : t("no dan tables for {keys}K", { keys: d.keys });
       return `${k}<b>–</b><span class="cstat-s">${why}</span>`;
     }
     const { main, other, otherKind } = danReadings(dan, d.report);
     const sub = other
       ? `${otherKind}: ${esc(other)}`
       : dan.by === "azusa" && dan.value !== undefined
-        ? `Azusa <span class="num">${dan.value.toFixed(2)}</span>`
-        : `Sunny <span class="num">${dan.sunny.toFixed(2)}★</span>`;
+        ? `Azusa <span class="num">${fixed(dan.value, 2)}</span>`
+        : `Sunny <span class="num">${fixed(dan.sunny, 2)}★</span>`;
     return `${k}<b class="dan-main">${esc(main)}</b><span class="cstat-s">${sub}</span>`;
   }
 
@@ -242,10 +243,10 @@ export class ChartPanel {
     const map = store.snap!.maps[this.mapIdx];
     syncRateControl(this.el);
     const sr = starsAtRate(map.sr, d.stars);
-    const tip = r === 1 ? "Star rating" : `Star rating at ${r.toFixed(2)}×, calculated by Fumen`;
+    const tip = r === 1 ? t("Star rating") : t("Star rating at {rate}×, calculated by Fumen", { rate: fixed(r, 2) });
     this.el.querySelector(".rate-info")!.innerHTML = [
       sr !== undefined ? `<span data-tip="${tip}">${srChip(sr, "lg", icon("star-fill"))}</span>` : "",
-      `<span data-tip="Length">${duration(map.length / r)}</span>`,
+      `<span data-tip="${t("Length")}">${duration(map.length / r)}</span>`,
       `<span>${bpm(map.bpm * r)} BPM</span>`,
     ].join("");
   }
@@ -265,10 +266,10 @@ export class ChartPanel {
     const rep = d.report;
     const groups = rep ? patternGroups(rep) : [];
     const head = rep
-      ? `<div class="pat-tags"><b>${esc(rep.category)}</b><span>${MODE_LABEL[rep.mode]}</span>${rep.svAmount >= SV_AMOUNT ? `<span data-tip="Scroll speed changes for ${Math.round(rep.svAmount / 1000)} s of the chart">SV</span>` : ""}</div>`
+      ? `<div class="pat-tags"><b>${esc(rep.category)}</b><span>${MODE_LABEL[rep.mode]}</span>${rep.svAmount >= SV_AMOUNT ? `<span data-tip="${t("Scroll speed changes for {s} s of the chart", { s: Math.round(rep.svAmount / 1000) })}">SV</span>` : ""}</div>`
       : "";
-    const top = `<div class="pat-head"><div class="label-caps">Patterns</div>${head}</div>`;
-    if (!groups.length) return `${top}<p class="chart-note">Light throughout: no pattern stands out.</p>`;
+    const top = `<div class="pat-head"><div class="label-caps">${t("Patterns")}</div>${head}</div>`;
+    if (!groups.length) return `${top}<p class="chart-note">${t("Light throughout: no pattern stands out.")}</p>`;
     const max = Math.max(1, ...groups.map((g) => g.amount));
     const r = player.rate;
     const rows = groups
@@ -282,10 +283,10 @@ export class ChartPanel {
         const speed = g.bpm
           ? `<span class="pat-val num">${g.mixed ? "~" : ""}<span class="pat-bpm" data-bpm="${g.bpm}">${Math.round(g.bpm * r)}</span> BPM</span>`
           : `<span class="pat-val"></span>`;
-        return `<div class="pat-item" data-tip="${esc(info.hint)}${g.mixed ? " (mixed speeds, around this one)" : ""}">
+        return `<div class="pat-item" data-tip="${esc(info.hint)}${g.mixed ? ` ${t("(mixed speeds, around this one)")}` : ""}">
               <div class="pat-row">
                 <span class="pat-name">${info.label}</span>
-                <div class="bar"><i style="width:${((g.amount / max) * 100).toFixed(1)}%"></i></div>
+                <div class="bar"><i style="width:${(g.amount / max) * 100}%"></i></div>
                 ${speed}
               </div>
               ${spec ? `<div class="pat-spec">${spec}</div>` : ""}
@@ -299,7 +300,7 @@ export class ChartPanel {
     const a = d.analysis;
 
     const rows = a.chords.reduce((s, n) => s + n, 0) || 1;
-    const chordNames = ["Singles", "Jumps", "Hands", "Quads+"];
+    const chordNames = [t("Singles"), t("Jumps"), t("Hands"), t("Quads+")];
     const chords = a.chords.map((n, i) => ({ name: chordNames[i], share: n / rows, i })).filter((c) => c.share > 0);
 
     const max = Math.max(1, ...a.lanes);
@@ -317,16 +318,16 @@ export class ChartPanel {
           ${this.patternsHtml(d)}
         </section>
         <section class="chart-block">
-          <div class="label-caps">Chords</div>
+          <div class="label-caps">${t("Chords")}</div>
           <div class="stack">${chords.map((c) => `<i class="stack-${c.i}" style="flex:${c.share}" data-tip="${c.name}: ${Math.round(c.share * 100)}%"></i>`).join("")}</div>
           <div class="stack-legend">${chords.map((c) => `<span><i class="stack-${c.i}"></i>${c.name} <b class="num">${Math.round(c.share * 100)}%</b></span>`).join("")}</div>
-          <div class="label-caps lanes-label">Columns</div>
+          <div class="label-caps lanes-label">${t("Columns")}</div>
           <div class="lanes" style="--keys:${keys}">
-            ${a.lanes.map((n, i) => `<i class="tone-${laneTone(i, keys)}" style="height:${Math.max(4, (n / max) * 100)}%" data-tip="Column ${i + 1}: ${num(n)} notes"></i>`).join("")}
+            ${a.lanes.map((n, i) => `<i class="tone-${laneTone(i, keys)}" style="height:${Math.max(4, (n / max) * 100)}%" data-tip="${t("Column {i}: {n} notes", { i: i + 1, n: num(n) })}"></i>`).join("")}
           </div>
           ${
             keys > 1
-              ? `<div class="hands num">Left hand <b>${Math.round((left / hands) * 100)}%</b> · right hand <b>${Math.round((right / hands) * 100)}%</b>${centre ? ` · middle column ${Math.round((centre / all) * 100)}% of all notes` : ""}</div>`
+              ? `<div class="hands num">${t("Left hand {left} · right hand {right}", { left: `<b>${Math.round((left / hands) * 100)}%</b>`, right: `<b>${Math.round((right / hands) * 100)}%</b>` })}${centre ? ` · ${t("middle column {pct}% of all notes", { pct: Math.round((centre / all) * 100) })}` : ""}</div>`
               : ""
           }
         </section>
@@ -350,7 +351,7 @@ export class ChartPanel {
     const btn = this.el.querySelector<HTMLElement>(".chart-play");
     if (btn) {
       btn.classList.toggle("is-playing", playing);
-      btn.querySelector("span")!.textContent = playing ? "Pause" : "Play from here";
+      btn.querySelector("span")!.textContent = playing ? t("Pause") : t("Play from here");
     }
   }
 

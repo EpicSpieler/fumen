@@ -252,7 +252,7 @@ export class SetView {
     const btn = this.el.querySelector<HTMLElement>(".set-play");
     if (!btn) return;
     btn.classList.toggle("is-playing", playing);
-    btn.querySelector("span")!.textContent = playing ? "Pause" : player.isCurrent(this.setIdx) ? "Resume" : "Play";
+    btn.querySelector("span")!.textContent = playing ? t("Pause") : player.isCurrent(this.setIdx) ? t("Resume") : t("Play");
     this.el.querySelectorAll<HTMLElement>(".diff").forEach((d) => d.classList.toggle("playing", player.isCurrent(this.setIdx) && player.now?.map === +d.dataset.map!));
   }
 

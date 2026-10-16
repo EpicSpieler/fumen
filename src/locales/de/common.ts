@@ -27,6 +27,7 @@ export const common: Record<string, string> = {
   "Try again": "Nochmal versuchen",
   Play: "Abspielen",
   Pause: "Pause",
+  Resume: "Fortsetzen",
   Next: "Nächster",
   Previous: "Vorheriger",
   More: "Mehr",

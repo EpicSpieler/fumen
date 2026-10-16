@@ -10,11 +10,12 @@
  *
  * A click on the graph still seeks; only a drag picks a part.
  */
-import { duration, num } from "../lib/format";
+import { duration, fixed, num } from "../lib/format";
 import { hardest, metronome, notesIn, savedSection, saveSection, snapBeat, type Section } from "../lib/practice";
 import type { ChartData, PatternName } from "../lib/types";
 import { player, RATE_MIN, RATE_STEP } from "../player";
 import { icon } from "../ui/icons";
+import { t } from "../lib/i18n";
 
 /** song ms played before A, to see the part coming */
 const LEAD = 1500;
@@ -48,11 +49,11 @@ export class PracticePanel {
   static html(): string {
     return `
       <div class="fs-setting fs-practice">
-        <span class="fs-k">Practice</span>
+        <span class="fs-k">${t("Practice")}</span>
         <div class="fs-pr-ctl">
-          <button class="chip-toggle fs-pr-hard" type="button" data-tip="Loop the densest 16 seconds">${icon("repeat")}Hardest part</button>
-          <button class="chip-toggle fs-pr-climb" type="button" aria-pressed="false" data-tip="Start the loop 0.20× slower, 0.05× faster each time round">Speed up</button>
-          <button class="chip-toggle fs-pr-clicks" type="button" aria-pressed="false" data-tip="A tick on every beat, higher on the bar's first">${icon("metronome")}Metronome</button>
+          <button class="chip-toggle fs-pr-hard" type="button" data-tip="${t("Loop the densest 16 seconds")}">${icon("repeat")}${t("Hardest part")}</button>
+          <button class="chip-toggle fs-pr-climb" type="button" aria-pressed="false" data-tip="${t("Start the loop {down}× slower, {up}× faster each time round", { down: fixed(0.2, 2), up: fixed(0.05, 2) })}">${t("Speed up")}</button>
+          <button class="chip-toggle fs-pr-clicks" type="button" aria-pressed="false" data-tip="${t("A tick on every beat, higher on the bar's first")}">${icon("metronome")}${t("Metronome")}</button>
         </div>
         <span class="fs-pr-sub"></span>
       </div>`;
@@ -173,14 +174,14 @@ export class PracticePanel {
     press(".fs-pr-clicks", this.clicks);
     const parts: string[] = [];
     if (s && this.data) {
-      parts.push(`${duration(s.a / r)} – ${duration(s.b / r)}`, `${num(notesIn(this.data, s))} notes`);
-      if (this.round) parts.push(`round ${num(this.round + 1)}`);
+      parts.push(`${duration(s.a / r)} – ${duration(s.b / r)}`, t("{n} notes", { n: num(notesIn(this.data, s)) }));
+      if (this.round) parts.push(t("round {n}", { n: num(this.round + 1) }));
     }
-    if (this.climb) parts.push(`${r.toFixed(2)}× of ${this.climb.to.toFixed(2)}×`);
+    if (this.climb) parts.push(t("{rate}× of {to}×", { rate: fixed(r, 2), to: fixed(this.climb.to, 2) }));
     const sub = el.querySelector(".fs-pr-sub")!;
     sub.innerHTML = s
-      ? `${parts.join(" · ")} · <button class="fs-speed-reset fs-pr-clear" type="button">stop looping</button>`
-      : `Drag across the graph to loop a part${parts.length ? ` · ${parts.join(" · ")}` : ""}`;
+      ? `${parts.join(" · ")} · <button class="fs-speed-reset fs-pr-clear" type="button">${t("stop looping")}</button>`
+      : `${t("Drag across the graph to loop a part")}${parts.length ? ` · ${parts.join(" · ")}` : ""}`;
     if (s && this.data) this.band(s.a, s.b);
     else el.querySelector<HTMLElement>(".fs-graph-loop")!.hidden = true;
   }

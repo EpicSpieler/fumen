@@ -12,7 +12,7 @@
  * the judging (lib/replay) keeps the score's own rate, so watching it slower changes nothing.
  */
 import { api, asApiError } from "../lib/api";
-import { date, num, pct } from "../lib/format";
+import { date, fixed, num, pct } from "../lib/format";
 import { maniaWindows, ManiaReplay, MISS, playedNotes, unreplayed } from "../lib/replay";
 import { CatchReplay, catchUnreplayed } from "../lib/catch-replay";
 import { OsuReplay, osuOd, osuUnreplayed } from "../lib/osu-replay";
@@ -28,6 +28,7 @@ import { CatchPlayfield } from "../ui/catch/playfield";
 import { ManiaPlayfield } from "../ui/mania/playfield";
 import { OsuPlayfield } from "../ui/osu/playfield";
 import { TaikoPlayfield } from "../ui/taiko/playfield";
+import { t, tn } from "../lib/i18n";
 
 const DRAWN: readonly string[] = ["EZ", "HR", "HD", "FI", "FL", "MR"];
 /** the rulesets */
@@ -74,8 +75,8 @@ export class ReplayPanel {
   static settingHtml(): string {
     return `
       <div class="fs-setting fs-replay-set" hidden>
-        <span class="fs-k">Played by</span>
-        <button class="fs-skin fs-replay-pick" type="button" aria-label="Who plays it"><span class="fs-replay-name">Autoplay</span>${icon("chevron-down")}</button>
+        <span class="fs-k">${t("Played by")}</span>
+        <button class="fs-skin fs-replay-pick" type="button" aria-label="${t("Who plays it")}"><span class="fs-replay-name">Autoplay</span>${icon("chevron-down")}</button>
         <span class="fs-replay-sub"></span>
       </div>`;
   }
@@ -84,19 +85,19 @@ export class ReplayPanel {
     return `
       <div class="fs-replay" hidden>
         <div class="fs-replay-top">
-          <div class="fs-stat fs-acc" data-tip="Judged the way osu!lazer judges it now. Scores from before mid-2025 were judged with older hit windows, so they can come out a little different here."><span class="fs-k">Accuracy so far</span><b class="num" data-r="acc">–</b><span class="fs-s num" data-r="acc-sub"></span></div>
+          <div class="fs-stat fs-acc" data-tip="${t("Judged the way osu!lazer judges it now. Scores from before mid-2025 were judged with older hit windows, so they can come out a little different here.")}"><span class="fs-k">${t("Accuracy so far")}</span><b class="num" data-r="acc">–</b><span class="fs-s num" data-r="acc-sub"></span></div>
           <div class="fs-counts num" data-r="counts"></div>
         </div>
         <div class="fs-errors-box">
-          <canvas class="fs-errors" aria-label="Hit errors"></canvas>
-          <div class="fs-errors-axis num"><span>early</span><span data-r="err"></span><span>late</span></div>
+          <canvas class="fs-errors" aria-label="${t("Hit errors")}"></canvas>
+          <div class="fs-errors-axis num"><span>${t("early")}</span><span data-r="err"></span><span>${t("late")}</span></div>
         </div>
         <div class="fs-miss-nav">
-          <span class="fs-k">Misses</span>
+          <span class="fs-k">${t("Misses")}</span>
           <b class="num" data-r="misses">–</b>
           <span class="fs-miss-btns">
-            <button class="icon-btn sm fs-miss-prev" type="button" data-tip="The miss before" aria-label="The miss before">${icon("chevron-left")}</button>
-            <button class="icon-btn sm fs-miss-next" type="button" data-tip="The next miss" aria-label="The next miss">${icon("chevron-right")}</button>
+            <button class="icon-btn sm fs-miss-prev" type="button" data-tip="${t("The miss before")}" aria-label="${t("The miss before")}">${icon("chevron-left")}</button>
+            <button class="icon-btn sm fs-miss-next" type="button" data-tip="${t("The next miss")}" aria-label="${t("The next miss")}">${icon("chevron-right")}</button>
           </span>
         </div>
       </div>`;
@@ -118,20 +119,20 @@ export class ReplayPanel {
   }
 
   /** Every frame: the numbers so far and the error bar. */
-  frame(t: number): void {
+  frame(time: number): void {
     const r = this.replay;
     if (!r) return;
-    const s = r.stats(t);
+    const s = r.stats(time);
     this.set("acc", s.judged ? pct(s.accuracy) : "–");
-    this.set("acc-sub", s.judged ? `${num(s.judged)} judged` : "nothing judged yet");
+    this.set("acc-sub", s.judged ? t("{n} judged", { n: num(s.judged) }) : t("nothing judged yet"));
     this.set(
       "counts",
       r.results.map((i) => `<span style="--c:${COLOURS[i]}"><i>${("names" in r ? r.names[i] : undefined) ?? NAMES[i]}</i><b>${num(s.counts[i])}</b></span>`).join(""),
       true,
     );
-    const before = this.misses.filter((m) => m <= t).length;
-    this.set("misses", this.misses.length ? `${num(before)} of ${num(this.misses.length)}` : "none");
-    this.drawErrors(r, t);
+    const before = this.misses.filter((m) => m <= time).length;
+    this.set("misses", this.misses.length ? t("{shown} of {n}", { shown: num(before), n: num(this.misses.length) }) : t("none"));
+    this.drawErrors(r, time);
   }
 
   /** Handles a click in the panel; true when it was one. */
@@ -166,14 +167,14 @@ export class ReplayPanel {
   private menu(anchor: HTMLElement): void {
     const list = this.list ?? [];
     const entries: MenuEntry[] = [
-      { group: "Played by" },
+      { group: t("Played by") },
       { label: "Autoplay", checked: !this.playing, radio: "replay", action: () => this.stop(true) },
     ];
-    if (list.length) entries.push({ group: "Replays in osu!lazer" });
+    if (list.length) entries.push({ group: t("Replays in osu!lazer") });
     for (const e of list) {
       const mods = e.mods.filter((m) => m !== "CL");
       entries.push({
-        label: `${e.user ?? "Someone"} · ${e.accuracy !== undefined ? pct(e.accuracy) : "–"}${mods.length ? ` · ${mods.join("")}` : ""}`,
+        label: `${e.user ?? t("Someone")} · ${e.accuracy !== undefined ? pct(e.accuracy) : "–"}${mods.length ? ` · ${mods.join("")}` : ""}`,
         hint: e.date ? date(e.date) : undefined,
         checked: this.playing?.entry.id === e.id,
         radio: "replay",
@@ -181,23 +182,23 @@ export class ReplayPanel {
         action: () => void this.start(e),
       });
     }
-    if (!list.length) entries.push({ label: this.list ? "No replays of this difficulty in lazer" : "Looking for replays…", disabled: true });
+    if (!list.length) entries.push({ label: this.list ? t("No replays of this difficulty in lazer") : t("Looking for replays…"), disabled: true });
     // the player's own scores on osu!
-    entries.push({ group: "Your scores on osu!" });
+    entries.push({ group: t("Your scores on osu!") });
     if (this.online === null) {
       entries.push({
-        label: this.asking ? "Asking osu!…" : "Find your replays on osu!",
+        label: this.asking ? t("Asking osu!…") : t("Find your replays on osu!"),
         icon: "search",
         disabled: this.asking,
         action: () => void this.askOsu(anchor),
       });
-    } else if (!this.online.length) entries.push({ label: "No other scores of yours on osu!", disabled: true });
+    } else if (!this.online.length) entries.push({ label: t("No other scores of yours on osu!"), disabled: true });
     for (const o of this.online ?? []) {
       const mods = o.mods.filter((m) => m !== "CL");
       const e: Entry = { ...o, id: `osu:${o.id}`, online: true, scoreId: o.id };
       entries.push({
         label: `${pct(o.accuracy)}${mods.length ? ` · ${mods.join("")}` : ""} · ${num(o.score)}`,
-        hint: o.hasReplay ? (o.cached ? date(o.date) : `${date(o.date)} · download`) : "no replay on osu!",
+        hint: o.hasReplay ? (o.cached ? date(o.date) : `${date(o.date)} · ${t("download")}`) : t("no replay on osu!"),
         checked: this.playing?.entry.id === e.id,
         radio: "replay",
         disabled: !o.hasReplay || this.blocked(o.mods),
@@ -222,7 +223,7 @@ export class ReplayPanel {
       if (mapId !== this.mapId) return;
       this.online = list;
     } catch (err) {
-      toast(`Couldn't ask osu!: ${asApiError(err).message}`, { kind: "danger", timeout: 5000 });
+      toast(t("Couldn't ask osu!: {error}", { error: asApiError(err).message }), { kind: "danger", timeout: 5000 });
       return;
     } finally {
       this.asking = false;
@@ -240,10 +241,10 @@ export class ReplayPanel {
         const o = this.online?.find((x) => x.id === e.scoreId);
         if (o) o.cached = true;
       }
-      if (r.mode !== this.data?.mode) throw new Error("This replay is of another ruleset.");
+      if (r.mode !== this.data?.mode) throw new Error(t("This replay is of another ruleset."));
       frames = r.frames;
     } catch (err) {
-      toast(`Couldn't read the replay: ${asApiError(err).message}`, { kind: "danger", timeout: 5000 });
+      toast(t("Couldn't read the replay: {error}", { error: asApiError(err).message }), { kind: "danger", timeout: 5000 });
       return;
     }
     if (job !== this.job) return;
@@ -307,13 +308,13 @@ export class ReplayPanel {
   private render(): void {
     const el = this.root;
     const p = this.playing;
-    el.querySelector(".fs-replay-name")!.textContent = p ? (p.entry.user ?? "Someone") : "Autoplay";
+    el.querySelector(".fs-replay-name")!.textContent = p ? (p.entry.user ?? t("Someone")) : "Autoplay";
     const sub = el.querySelector(".fs-replay-sub")!;
     if (p) {
       const e = p.entry;
       const mods = e.mods.filter((m) => m !== "CL");
       sub.textContent = [e.accuracy !== undefined ? pct(e.accuracy) : "", mods.join(""), e.date ? date(e.date) : ""].filter(Boolean).join(" · ");
-    } else sub.textContent = this.list === null ? "" : this.list.length ? `${num(this.list.length)} ${this.list.length === 1 ? "replay" : "replays"} in lazer` : "no replays in lazer";
+    } else sub.textContent = this.list === null ? "" : this.list.length ? tn(this.list.length, "{n} replay in lazer", "{n} replays in lazer") : t("no replays in lazer");
     el.querySelector<HTMLElement>(".fs-replay")!.hidden = !this.replay;
     el.querySelector<HTMLElement>(".fs-live")!.classList.toggle("has-replay", !!this.replay);
   }
@@ -335,7 +336,7 @@ export class ReplayPanel {
   }
 
   /** The latest hits against lazer's windows (the best in the middle, the widest hit at the ends). */
-  private drawErrors(r: ManiaReplay | TaikoReplay | OsuReplay | CatchReplay, t: number): void {
+  private drawErrors(r: ManiaReplay | TaikoReplay | OsuReplay | CatchReplay, time: number): void {
     const windows = r.barWindows();
     const box = this.root.querySelector<HTMLElement>(".fs-errors-box")!;
     box.hidden = !windows.length;
@@ -363,11 +364,11 @@ export class ReplayPanel {
     let sum = 0;
     let n = 0;
     let i = js.length - 1;
-    while (i >= 0 && js[i].time > t) i--;
-    for (; i >= 0 && t - js[i].time < life; i--) {
+    while (i >= 0 && js[i].time > time) i--;
+    for (; i >= 0 && time - js[i].time < life; i--) {
       const j = js[i];
       if (j.tail || !Number.isFinite(j.offset) || j.result === MISS) continue;
-      ctx.globalAlpha = 1 - (t - j.time) / life;
+      ctx.globalAlpha = 1 - (time - j.time) / life;
       ctx.fillStyle = COLOURS[j.result];
       ctx.fillRect(x(j.offset) - 1, 4, 2, h - 8);
       sum += j.offset;
@@ -384,7 +385,7 @@ export class ReplayPanel {
       ctx.lineTo(ax, 5);
       ctx.fill();
     }
-    this.set("err", n ? `${sum / n >= 0 ? "+" : "−"}${Math.abs(sum / n / (this.playing?.entry.rate ?? 1)).toFixed(1)} ms on average` : "");
+    this.set("err", n ? t("{ms} ms on average", { ms: `${sum / n >= 0 ? "+" : "−"}${fixed(Math.abs(sum / n / (this.playing?.entry.rate ?? 1)), 1)}` }) : "");
   }
 }
 
