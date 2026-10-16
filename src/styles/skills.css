@@ -4,6 +4,26 @@
 
 .skills-view { container-type: inline-size; }
 .skills-head { padding: 22px 0 18px; }
+
+/* under rework: a note on top, the rest greyed and out of reach */
+.skills-rework {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 18px;
+  padding: 12px 16px;
+  border-radius: var(--r-xl);
+  background: var(--warning-soft);
+  font-size: var(--fs-12);
+  line-height: 1.45;
+}
+.skills-rework-ic { flex: none; width: 18px; height: 18px; margin-top: 1px; color: var(--warning); }
+.skills-rework div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.skills-rework b { color: var(--t1); font-size: var(--fs-13); font-weight: 600; }
+.skills-rework span { color: var(--t2); }
+.is-rework .skills-tools,
+.is-rework .compare-bar,
+.is-rework .skills-body { opacity: .4; filter: grayscale(1); pointer-events: none; user-select: none; }
 .skills-keys > button { padding: 0 12px; font-variant-numeric: tabular-nums; }
 .skills-loading { padding-top: 4px; }
 .skills-empty { padding-top: 72px; }
