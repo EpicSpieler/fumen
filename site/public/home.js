@@ -495,103 +495,150 @@ function text(c, s, x, y, font, color, align = "left", spacing = 0) {
   if ("letterSpacing" in c) c.letterSpacing = "0px";
 }
 
-// ── 3. skills, next to other players ─────────────────────────────────────
+// ── 3. adding a pile of links at once ────────────────────────────────────
 
-const AXES = ["Stream", "Jumpstream", "Handstream", "Chordjack", "Jacks", "Long notes"];
-const YOU = [4.54, 5.3, 4.42, 4.76, 3.37, 5.05];
-const PLAYERS = [
-  { name: "Kiyomi", color: "#ff8fb1", meta: "#12,408 · 7,950pp", v: [5.12, 4.62, 4.94, 5.41, 4.78, 3.92] },
-  { name: "hollowfox", color: "#6bdf96", meta: "#4,215 · 9,870pp", v: [4.08, 5.66, 5.2, 4.31, 3.62, 5.84] },
-  { name: "Rin_7k", color: "#64b5f6", meta: "#27,930 · 6,410pp", v: [5.58, 5.08, 3.98, 4.9, 5.32, 4.41] },
+const ADDS = [
+  { t: "Starfall Parade", a: "Kagerou", c: 8, id: 2104837, dl: 1.6 },
+  { t: "Velvet Hour", a: "nanami", c: 9, id: 1987265, dl: 2.1 },
+  { t: "Summer Static", a: "Kumo Lab", c: 2, id: 2230914, dl: 1.3 },
+  { t: "Tidal Clock", a: "Aoi", c: 5, id: 1764302, dl: 2.4 },
+  { t: "Lantern Rain", a: "FUYU", c: 6, id: 2311458, dl: 1.8 },
 ];
 
-function skillsScene() {
-  const HOLD = 2.7;
-  const MORPH = 1.3;
-  const EACH = HOLD + MORPH;
-  const T = EACH * PLAYERS.length;
-  const CX = 158;
-  const CY = 172;
-  const R = 96;
-  const LO = 2;
-  const HI = 6;
-  const at = (i, v, out = 0) => {
-    const a = -Math.PI / 2 + (i * Math.PI) / 3;
-    const r = ((clamp(v, LO, HI) - LO) / (HI - LO)) * R + out;
-    return [CX + Math.cos(a) * r, CY + Math.sin(a) * r];
-  };
-  const poly = (vals) => vals.map((v, i) => at(i, v).map((n) => n.toFixed(1)).join(",")).join(" ");
-  /** who's compared at t, and how far the change to the next one is */
-  const who = (t) => {
-    const i = Math.floor(t / EACH) % PLAYERS.length;
-    const p = inOut(span(t - i * EACH, HOLD, EACH));
-    return { i, j: (i + 1) % PLAYERS.length, p };
-  };
-  const theirs = (t) => {
-    const { i, j, p } = who(t);
-    return PLAYERS[i].v.map((v, k) => lerp(v, PLAYERS[j].v[k], p));
+function bulkScene() {
+  const PASTE = 1.25;
+  const GO = 2.15;
+  const START = 2.6;
+  const IMPORT = 0.7;
+  const AGAIN = 10.6;
+  const BASE = 4519;
+  // when each set starts downloading, goes into lazer and is in
+  const rows = ADDS.map((m, i) => {
+    const s = START + i * 0.45;
+    return { ...m, s, imp: s + m.dl, done: s + m.dl + IMPORT };
+  });
+  const ALL = Math.max(...rows.map((r) => r.done));
+  /** how far a set is (0–1): the download is most of it, the import the rest */
+  const share = (r, t) => (t < r.s ? 0 : t < r.imp ? 0.85 * dlAt(r, t) : t < r.done ? 0.85 + 0.15 * span(t, r.imp, r.done) : 1);
+  // a download that isn't perfectly even: quick start, a short stall, the rest
+  const dlAt = (r, t) => {
+    const x = span(t, r.s, r.imp);
+    return clamp(x + 0.06 * Math.sin(x * Math.PI * 2) * (1 - x));
   };
   return {
-    duration: T,
-    still: 1.2,
+    duration: 12,
+    still: 4.4,
     build(root) {
-      let svg = "";
-      for (let s = LO + 1; s <= HI; s++) svg += `<polygon class="sx-grid" points="${poly(AXES.map(() => s))}"/>`;
-      for (let i = 0; i < 6; i++) {
-        const [x, y] = at(i, HI);
-        svg += `<line class="sx-spoke" x1="${CX}" y1="${CY}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}"/>`;
-      }
-      svg += `<polygon class="sx-you" points="${poly(YOU)}"/>`;
-      svg += `<polygon class="sx-them" points="${poly(PLAYERS[0].v)}"/>`;
-      const [gx, gy] = at(4, 4);
-      svg += `<path class="sx-goal" d="M${gx.toFixed(1)} ${(gy - 4.5).toFixed(1)}l4.5 4.5-4.5 4.5-4.5-4.5z"/>`;
-      AXES.forEach((name, i) => {
-        const [x, y] = at(i, HI, 13);
-        const anchor = Math.abs(x - CX) < 2 ? "middle" : x > CX ? "start" : "end";
-        svg += `<text class="sx-axis" x="${x.toFixed(1)}" y="${(y + (y < CY - 5 ? -2 : y > CY + 5 ? 10 : 4)).toFixed(1)}" text-anchor="${anchor}">${name}</text>`;
+      el("div", "sx-b-title", root, "Add beatmaps");
+      el("div", "sx-b-sub", root, "From the download mirrors into osu!lazer");
+      el("div", "sx-tabs sx-b-tabs", root, `<span class="on">Links</span><span>Maps you've played</span>`);
+      const box = el("div", "sx-b-box", root);
+      const ph = el("div", "sx-b-ph", box, "https://osu.ppy.sh/beatmapsets/…<br>https://osu.ppy.sh/beatmaps/…");
+      const lines = rows.map((r) => el("div", "sx-b-line", box, `https://osu.ppy.sh/beatmapsets/<b>${r.id}</b>`));
+      const caret = el("span", "sx-b-caret", box);
+      const overall = el("div", "sx-b-overall", root);
+      const count = el("span", "num", overall);
+      const meta = el("span", "sx-b-meta num", overall);
+      const bar = el("i", "", el("div", "sx-b-bar", overall));
+      const list = rows.map((r, i) => {
+        const row = el("div", "sx-b-row", root);
+        el("img", "", row).src = cover(r.c);
+        el("div", "sx-b-text", row, `<b>${r.t}</b><span>${r.a}</span>`);
+        const state = el("div", "sx-b-state", row);
+        const wait = el("span", "sx-b-wait", state, "Waiting");
+        const dl = el("span", "sx-b-dl", state);
+        const fill = el("i", "", el("span", "sx-b-track", dl));
+        const pc = el("em", "num", dl);
+        const imp = el("span", "sx-b-imp", state, "Going into osu!lazer");
+        const ok = el("span", "sx-b-ok", state, `<svg viewBox="0 0 24 24"><path d="m5.5 12.5 4.2 4.2 8.8-9.4" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>In osu!lazer`);
+        css(row, "top", `${102 + i * 36}px`);
+        return { row, wait, dl, fill, pc, imp, ok };
       });
-      const radar = el("div", "sx-radar", root, `<svg viewBox="0 0 322 340" width="322" height="340">${svg}</svg>`);
-      const them = radar.querySelector(".sx-them");
-      const side = el("div", "sx-side", root);
-      const who1 = el("div", "sx-who", side);
-      const whoA = el("div", "sx-who-in", who1);
-      const whoB = el("div", "sx-who-in", who1);
-      const rows = AXES.map((name, i) => {
-        const row = el("div", "sx-row", side);
-        el("div", "sx-row-name", row, name);
-        const bars = el("div", "sx-bars", row);
-        const you = el("i", "sx-bar you", bars);
-        const th = el("i", "sx-bar them", bars);
-        el("b", "sx-val num", row, fmt(YOU[i]));
-        const tv = el("span", "sx-val them num", row);
-        css(you, "transform", `scaleX(${((YOU[i] - LO) / (HI - LO)).toFixed(3)})`);
-        return { th, tv };
-      });
-      el("div", "sx-legend", side, `<span class="you">You</span><span class="them">Them</span><span class="goal">Goal</span>`);
-      const whoHtml = (p) => `<span class="sx-avatar" style="background:${p.color}">${p.name[0].toUpperCase()}</span><span><small>Compared with</small><b>${p.name}</b><em class="num">${p.meta}</em></span>`;
-      let shown = -1;
-      const rgb = (h) => [1, 3, 5].map((k) => parseInt(h.slice(k, k + 2), 16));
+      const note = el("div", "sx-b-note", root);
+      el("span", "sx-b-close", root, "Close");
+      const go = el("span", "sx-b-go", root);
+      const NOTES = [
+        [0, "Set or beatmap links, osu:// links or set IDs", ""],
+        [PASTE, "5 links", ""],
+        [GO, "You can close this; the import carries on.", ""],
+        [ALL, `5 sets added · osu!lazer has ${(BASE + 5).toLocaleString("en")} now`, "ok"],
+        [AGAIN, "Set or beatmap links, osu:// links or set IDs", ""],
+      ];
+      const LABELS = [[0, "Import", ""], [GO, "Importing…", "busy"], [ALL, "Add more", ""], [AGAIN, "Import", ""]];
+      const move = cursor(
+        root,
+        [[0, 512, 318], [0.3, 512, 318], [0.85, 230, 150], [1.5, 230, 150], [1.95, 496, 313], [2.4, 496, 313], [3.0, 540, 330], [9.8, 540, 330], [10.35, 496, 313], [10.8, 496, 313], [11.5, 512, 330], [12, 512, 330]],
+        [0.9, GO, AGAIN],
+        [[0.15, 2.95], [9.85, 11.4]],
+      );
+      /** the entry of a [time, …] list in force at t, and how far from its change (for a dip) */
+      const at = (list, t) => {
+        let i = 0;
+        while (i < list.length - 1 && t >= list[i + 1][0]) i++;
+        const dip = Math.min(...list.slice(1).map(([b]) => Math.abs(t - b)));
+        return [list[i], clamp(dip / 0.14)];
+      };
+      let shownNote = "";
+      let shownLabel = "";
       return (t) => {
-        const v = theirs(t);
-        them.setAttribute("points", poly(v));
-        const { i, j, p } = who(t);
-        const [a, b] = [rgb(PLAYERS[i].color), rgb(PLAYERS[j].color)];
-        css(root, "--them", `rgb(${a.map((n, k) => Math.round(lerp(n, b[k], p))).join(",")})`);
-        if (shown !== i) {
-          shown = i;
-          whoA.innerHTML = whoHtml(PLAYERS[i]);
-          whoB.innerHTML = whoHtml(PLAYERS[j]);
-        }
-        const out = outCubic(clamp(p * 2));
-        const inn = outQuint(clamp(p * 2 - 1));
-        css(whoA, "opacity", (1 - out).toFixed(3));
-        css(whoA, "transform", `translateY(${(-10 * out).toFixed(2)}px)`);
-        css(whoB, "opacity", inn.toFixed(3));
-        css(whoB, "transform", `translateY(${(10 * (1 - inn)).toFixed(2)}px)`);
-        rows.forEach((r, k) => {
-          css(r.th, "transform", `scaleX(${((v[k] - LO) / (HI - LO)).toFixed(3)})`);
-          r.tv.textContent = fmt(v[k]);
+        move(t);
+        // the field: pasted links, then the rows take its place, then it's back, empty
+        const pasted = t >= PASTE && t < AGAIN + 0.3;
+        const fieldOut = outCubic(span(t, GO + 0.1, GO + 0.4)) * (1 - outCubic(span(t, AGAIN + 0.15, AGAIN + 0.5)));
+        css(box, "opacity", (1 - fieldOut).toFixed(3));
+        css(box, "background-color", t >= 0.9 && t < GO + 0.4 ? "rgba(255,255,255,.075)" : "rgba(255,255,255,.045)");
+        css(ph, "opacity", pasted ? "0" : "1");
+        lines.forEach((l, k) => {
+          const p = pasted ? outQuint(span(t, PASTE + k * 0.045, PASTE + 0.3 + k * 0.045)) : 0;
+          css(l, "opacity", p.toFixed(3));
+          css(l, "transform", `translateX(${(-6 * (1 - p)).toFixed(2)}px)`);
         });
+        css(caret, "opacity", t >= 0.9 && t < GO && (t * 1000) % 1000 < 560 ? "1" : "0");
+        css(caret, "transform", pasted ? `translate(${lines[4].offsetWidth + 14}px, ${12 + 4 * 22}px)` : "translate(14px, 12px)");
+        // progress
+        const total = rows.reduce((n, r) => n + share(r, t), 0) / rows.length;
+        const finished = rows.filter((r) => t >= r.done).length;
+        const downloading = rows.filter((r) => t >= r.s && t < r.imp).length;
+        const going = rows.filter((r) => t >= r.imp && t < r.done).length;
+        const live = t >= GO + 0.25 && t < AGAIN + 0.5;
+        const showRows = live ? outQuint(span(t, GO + 0.25, GO + 0.6)) * (1 - outCubic(span(t, AGAIN, AGAIN + 0.35))) : 0;
+        css(overall, "opacity", showRows.toFixed(3));
+        count.innerHTML = `<b>${finished}</b> of 5`;
+        meta.textContent = [downloading && `${downloading} downloading`, going && `${going} going into osu!lazer`].filter(Boolean).join(" · ");
+        css(bar, "transform", `scaleX(${(t < AGAIN ? total : 1).toFixed(4)})`);
+        list.forEach((l, i) => {
+          const r = rows[i];
+          const inn = live ? outQuint(span(t, GO + 0.3 + i * 0.05, GO + 0.7 + i * 0.05)) * (1 - outCubic(span(t, AGAIN + i * 0.04, AGAIN + 0.3 + i * 0.04))) : 0;
+          css(l.row, "opacity", inn.toFixed(3));
+          css(l.row, "transform", `translateY(${(6 * (1 - inn)).toFixed(2)}px)`);
+          const phase = t < r.s ? 0 : t < r.imp ? 1 : t < r.done ? 2 : 3;
+          const fade = (from) => (phase === from ? 1 : 0);
+          css(l.wait, "opacity", fade(0));
+          css(l.dl, "opacity", fade(1));
+          css(l.imp, "opacity", fade(2));
+          const okIn = phase === 3 ? outBack(span(t, r.done, r.done + 0.35)) : 0;
+          css(l.ok, "opacity", clamp(okIn).toFixed(3));
+          css(l.ok, "transform", `scale(${(0.85 + 0.15 * okIn).toFixed(3)})`);
+          const d = phase === 1 ? dlAt(r, t) : 0;
+          css(l.fill, "transform", `scaleX(${d.toFixed(4)})`);
+          l.pc.textContent = `${Math.round(d * 100)}%`;
+        });
+        // the foot: what's going on, and the button
+        const [[, text, cls], o] = at(NOTES, t);
+        if (text + cls !== shownNote) {
+          shownNote = text + cls;
+          note.textContent = text;
+          note.className = `sx-b-note ${cls}`;
+        }
+        css(note, "opacity", o.toFixed(3));
+        const [[, label, busy], lo] = at(LABELS, t);
+        if (label + busy !== shownLabel) {
+          shownLabel = label + busy;
+          go.textContent = label;
+          go.className = `sx-b-go ${busy}`;
+        }
+        css(go, "color", `rgba(255,255,255,${(busy ? 0.7 : 1) * (0.25 + 0.75 * lo)})`);
+        css(go, "transform", `scale(${(1 - 0.05 * Math.max(bump(t, GO - 0.1, GO + 0.1), bump(t, AGAIN - 0.1, AGAIN + 0.1))).toFixed(3)})`);
       };
     },
   };
@@ -733,7 +780,7 @@ function careScene() {
 
 // ── running the scenes ───────────────────────────────────────────────────
 
-const SCENES = { search: searchScene, chart: chartScene, skills: skillsScene, care: careScene };
+const SCENES = { search: searchScene, chart: chartScene, bulk: bulkScene, care: careScene };
 const reduced = matchMedia("(prefers-reduced-motion: reduce)");
 const running = new Set();
 let raf = 0;
@@ -804,29 +851,9 @@ async function downloads() {
   } catch {
     return;
   }
-  const mac = /mac/i.test(navigator.userAgentData?.platform ?? navigator.platform ?? "") && !/iPhone|iPad/.test(navigator.userAgent);
   const winMeta = document.querySelector("[data-win-meta]");
   if (info.windows) winMeta.textContent = `Version ${info.windows.version} · ${mb(info.windows.size)} · Windows 10 and 11, 64-bit`;
-  const macBuild = info.macArm ?? info.macIntel;
-  const macMeta = document.querySelector("[data-mac-meta]");
-  if (macBuild) macMeta.textContent = `Version ${macBuild.version} · macOS 11 or newer`;
-  for (const [sel, ok] of [["[data-mac-arm]", info.macArm], ["[data-mac-intel]", info.macIntel]]) {
-    const a = document.querySelector(sel);
-    if (!ok) {
-      a.setAttribute("aria-disabled", "true");
-      a.removeAttribute("href");
-    }
-  }
-  const sub = document.querySelector("[data-main-sub]");
-  if (mac && info.macArm) {
-    document.querySelector("[data-main]").href = "/download/mac-arm";
-    document.querySelector("[data-main-label]").textContent = "Download for macOS";
-    document.querySelector("[data-main-icon] use").setAttribute("href", "#i-laptop");
-    sub.textContent = `Version ${info.macArm.version} · Apple silicon · Free`;
-    document.querySelector("[data-also]").innerHTML = `Also for <a href="#download">${info.macIntel ? "Windows and Intel Macs" : "Windows"}</a> · <a href="/roadmap">See what's coming</a>`;
-  } else if (info.windows) {
-    sub.textContent = `Version ${info.windows.version} · ${mb(info.windows.size)} · Free`;
-  }
+  if (info.windows) document.querySelector("[data-main-sub]").textContent = `Version ${info.windows.version} · ${mb(info.windows.size)} · Free`;
 }
 
 document.fonts.ready.then(() => document.querySelectorAll("[data-scene]").forEach(mount));
