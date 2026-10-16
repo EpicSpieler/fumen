@@ -5,17 +5,18 @@
  * - --accent / --accent-ink are registered with @property, so changes glide (.9s).
  * - Ambient: the current content image heavily blurred behind the app, crossfading on change.
  */
+import { t } from "../lib/i18n";
 import { DEFAULT_ACCENT, store } from "../lib/store";
 
 export const ACCENT_PRESETS = [
-  { label: "Violet", color: "#8b7cff" },
-  { label: "Magenta", color: "#e040fb" },
-  { label: "Pink", color: "#ff66aa" },
-  { label: "Coral", color: "#ff7a5c" },
-  { label: "Amber", color: "#f0a63a" },
-  { label: "Lime", color: "#8bd450" },
-  { label: "Teal", color: "#39c5bb" },
-  { label: "Sky", color: "#4fa8ff" },
+  { label: t("Violet"), color: "#8b7cff" },
+  { label: t("Magenta"), color: "#e040fb" },
+  { label: t("Pink"), color: "#ff66aa" },
+  { label: t("Coral"), color: "#ff7a5c" },
+  { label: t("Amber"), color: "#f0a63a" },
+  { label: t("Lime"), color: "#8bd450" },
+  { label: t("Teal"), color: "#39c5bb" },
+  { label: t("Sky"), color: "#4fa8ff" },
 ];
 
 // ── colour maths ───────────────────────────────────────────────────────────

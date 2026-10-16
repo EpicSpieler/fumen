@@ -433,6 +433,8 @@ export interface UiPrefs {
   reduceMotion: boolean;
   unicode: boolean;
   theme: "dark" | "oled" | "light";
+  /** the UI's language; unset = the system's (src/lib/i18n.ts) */
+  lang?: "en" | "de";
   volume: number;
   layout: LibraryLayout;
   sort: string;

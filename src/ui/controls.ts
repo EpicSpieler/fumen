@@ -8,6 +8,7 @@
  *  - Segments:   attachSegIndicator() slides a surface under the active option.
  *  - Dialogs:    uiConfirm / uiPrompt / toast instead of confirm() / prompt() / alert().
  */
+import { t } from "../lib/i18n";
 import { icon, type IconName } from "./icons";
 
 export const reduceMotion = (): boolean =>
@@ -448,10 +449,10 @@ export function uiConfirm(
           <button class="btn ${opts.danger ? "btn-danger" : "btn-primary"}" data-act="ok"></button>
         </div>
       </div>`;
-    bd.querySelector(".dialog-title")!.textContent = opts.title ?? "Confirm";
+    bd.querySelector(".dialog-title")!.textContent = opts.title ?? t("Confirm");
     bd.querySelector(".dialog-msg")!.textContent = message;
-    bd.querySelector('[data-act="cancel"]')!.textContent = opts.cancelLabel ?? "Cancel";
-    bd.querySelector('[data-act="ok"]')!.textContent = opts.confirmLabel ?? "OK";
+    bd.querySelector('[data-act="cancel"]')!.textContent = opts.cancelLabel ?? t("Cancel");
+    bd.querySelector('[data-act="ok"]')!.textContent = opts.confirmLabel ?? t("OK");
     document.body.appendChild(bd);
     setTimeout(() => bd.querySelector<HTMLButtonElement>('[data-act="ok"]')!.focus(), 30);
     const finish = (ok: boolean) => {
@@ -494,7 +495,7 @@ export function uiPrompt(
         <div class="dialog-msg"></div>
         <input class="dialog-input" type="text" spellcheck="false" autocomplete="off" />
         <div class="dialog-actions">
-          <button class="btn btn-ghost" data-act="cancel">Cancel</button>
+          <button class="btn btn-ghost" data-act="cancel">${t("Cancel")}</button>
           <button class="btn btn-primary" data-act="ok"></button>
         </div>
       </div>`;
@@ -508,7 +509,7 @@ export function uiPrompt(
     input.maxLength = opts.maxLength ?? 100;
     input.setAttribute("aria-label", opts.title ?? message);
     const ok = bd.querySelector<HTMLButtonElement>('[data-act="ok"]')!;
-    ok.textContent = opts.confirmLabel ?? "OK";
+    ok.textContent = opts.confirmLabel ?? t("OK");
     const sync = () => (ok.disabled = !input.value.trim());
     sync();
     input.addEventListener("input", sync);
