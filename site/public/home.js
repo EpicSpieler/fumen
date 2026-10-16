@@ -644,7 +644,141 @@ function bulkScene() {
   };
 }
 
-// ── 4. library care: pick, delete, smoke ─────────────────────────────────
+// ── 4. browse the mirrors and take everything a search finds ─────────────
+
+const FOUND = [
+  { t: "Starlight Tuning", a: "kanzaki P feat. Hatsune Miku", by: "Rinzler", sr: [2.4, 3.9, 5.2], c: 1 },
+  { t: "Leek Parade", a: "Harumaki feat. Hatsune Miku", by: "Ameya", sr: [1.9, 3.1, 4.4], c: 3 },
+  { t: "Mirai Signal", a: "TOKU feat. Hatsune Miku", by: "sorane", sr: [3.6, 4.8, 6.1], c: 0, have: true },
+  { t: "Teal Rain", a: "Mizore P feat. Hatsune Miku", by: "Kiyomi", sr: [2.2, 4.1], c: 2 },
+  { t: "Thirty-Nine", a: "Ookami feat. Hatsune Miku", by: "hollowfox", sr: [2.8, 4.5, 5.7], c: 5 },
+  { t: "Paper Planets", a: "Nanairo feat. Hatsune Miku", by: "Rin_7k", sr: [1.6, 2.9, 4.0], c: 7 },
+  { t: "Digital Bouquet", a: "kanzaki P feat. Hatsune Miku", by: "Orbit", sr: [3.3, 5.0], c: 4, have: true },
+  { t: "Glass Melody", a: "Haru feat. Hatsune Miku", by: "Tsukiko", sr: [2.5, 3.7, 4.9], c: 6 },
+  { t: "Snowlit Stage", a: "Yuzu P feat. Hatsune Miku", by: "Ameya", sr: [3.0, 4.6, 6.4], c: 8 },
+];
+
+function browseScene() {
+  const Q = "miku";
+  const TYPE = 0.13;
+  const SHOW = 2.0;
+  const ASK = 4.4;
+  const YES = 5.35;
+  const RUN = 5.6;
+  const END = 10.0;
+  const CLEAR = 11.1;
+  const TOTAL = 112;
+  // the sets not in the library yet take their turn, one after another
+  let k = 0;
+  const rows = FOUND.map((m) => (m.have ? { ...m } : { ...m, s: RUN + k * 0.38, d: RUN + k++ * 0.38 + 1.1 }));
+  const scrollAt = (t) => (t < CLEAR + 0.4 ? 84 * inOut(span(t, 2.5, 3.5)) : 0);
+  return {
+    duration: 13,
+    still: 4.1,
+    build(root) {
+      const field = el("div", "sx-field sx-w-field", root);
+      field.insertAdjacentHTML("beforeend", `<svg class="sx-field-ic" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="m15.5 15.5 4.5 4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`);
+      const ph = el("span", "sx-ph", field, "Title, artist, mapper or tags");
+      const text = el("span", "sx-w-text", field);
+      const caret = el("span", "sx-caret", field);
+      el("div", "sx-w-sort", root, `<i>Sort</i>Best match`);
+      const empty = el("div", "sx-w-empty", root, `<svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="m15.5 15.5 4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><span>osu!'s beatmaps, found through the mirrors</span>`);
+      const sum = el("div", "sx-w-sum", root);
+      const sumA = el("span", "sx-w-sum-a num", sum, `<b>128 sets</b> · from osu.direct`);
+      const sumB = el("span", "sx-w-sum-b num", sum);
+      const sumC = el("span", "sx-w-sum-c", sum, `<svg viewBox="0 0 24 24"><path d="m5.5 12.5 4.2 4.2 8.8-9.4" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>${TOTAL} sets added to osu!lazer`);
+      const bar = el("i", "", el("div", "sx-w-bar", sum));
+      const all = el("span", "sx-w-all", root, `<svg viewBox="0 0 24 24"><path d="M12 4v11m-4.5-4.5L12 15l4.5-4.5M5 19.5h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Add all ${TOTAL} new`);
+      const clip = el("div", "sx-w-list", root);
+      const list = rows.map((r, i) => {
+        const row = el("div", "sx-w-row", clip);
+        el("img", "", row).src = cover(r.c);
+        el("div", "sx-w-text2", row, `<b>${r.t}</b><span>${r.a} · mapped by ${r.by}</span>`);
+        el("div", "sx-w-chips", row, r.sr.map(srChip).join(""));
+        const act = el("div", "sx-w-act", row);
+        if (r.have) {
+          el("span", "sx-w-lib on", act, `<svg viewBox="0 0 24 24"><path d="M5 5.5h3v13H5zM10.5 5.5h3v13h-3zM16 6.3l2.8-.8 3 12.5-2.8.8z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>In library`);
+          return { row, i };
+        }
+        const add = el("span", "sx-w-add", act, `<svg viewBox="0 0 24 24"><path d="M12 4v11m-4.5-4.5L12 15l4.5-4.5M5 19.5h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Add`);
+        const wait = el("span", "sx-w-wait", act, "Waiting");
+        const dl = el("span", "sx-w-dl", act);
+        const fill = el("i", "", dl);
+        const lib = el("span", "sx-w-lib", act, `<svg viewBox="0 0 24 24"><path d="m5.5 12.5 4.2 4.2 8.8-9.4" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>In library`);
+        return { row, i, add, wait, dl, fill, lib };
+      });
+      const shade = el("div", "sx-w-shade", root);
+      const modal = el("div", "sx-w-modal", root, `<b>Add ${TOTAL} sets?</b><p>They download from the mirrors a few at a time and go into osu!lazer, which stays closed until they're in.</p>`);
+      const foot = el("div", "sx-w-modal-foot", modal);
+      el("span", "sx-w-cancel", foot, "Cancel");
+      const yes = el("span", "sx-w-yes", foot, "Add them");
+      const move = cursor(
+        root,
+        [[0, 520, 322], [0.3, 520, 322], [0.9, 150, 31], [1.9, 150, 31], [2.6, 536, 250], [3.6, 536, 250], [4.25, 478, 72], [4.6, 478, 72], [5.15, 382, 218], [5.5, 382, 218], [6.2, 536, 322], [10.3, 536, 322], [10.85, 150, 31], [11.2, 150, 31], [11.8, 520, 322], [13, 520, 322]],
+        [0.95, ASK, YES, 10.9],
+        [[0.15, 2.7], [3.65, 6.1], [10.35, 11.75]],
+      );
+      let shown = "";
+      return (t) => {
+        move(t);
+        // the search
+        const q = t >= 1.2 && t < CLEAR ? Q.slice(0, clamp(Math.floor((t - 1.2) / TYPE) + 1, 0, Q.length)) : "";
+        if (q !== shown) {
+          shown = q;
+          text.textContent = q;
+        }
+        css(ph, "opacity", q ? "0" : "1");
+        const focused = t >= 0.95 && t < 2.3;
+        css(field, "background-color", focused || (t >= 10.9 && t < 11.5) ? "rgba(255,255,255,.11)" : "rgba(255,255,255,.07)");
+        css(caret, "opacity", focused && (t < 1.2 + Q.length * TYPE + 0.3 || (t * 1000) % 1000 < 560) ? "1" : "0");
+        css(text, "background-color", t >= 10.9 && t < CLEAR ? "rgba(139,124,255,.35)" : "transparent");
+        // results in, results out
+        const res = outQuint(span(t, SHOW, SHOW + 0.4)) * (1 - outCubic(span(t, CLEAR, CLEAR + 0.35)));
+        css(empty, "opacity", (1 - outQuint(span(t, SHOW - 0.2, SHOW + 0.1)) * (1 - span(t, CLEAR + 0.3, CLEAR + 0.7))).toFixed(3));
+        css(sum, "opacity", res.toFixed(3));
+        css(all, "opacity", (res * (1 - span(t, YES, YES + 0.25))).toFixed(3));
+        css(all, "transform", `scale(${(1 - 0.05 * bump(t, ASK - 0.1, ASK + 0.1)).toFixed(3)})`);
+        // the summary: found → adding → added
+        const going = t >= YES + 0.1 && t < CLEAR + 0.4;
+        const doneIn = t >= END ? outQuint(span(t, END, END + 0.4)) : 0;
+        const goIn = going ? outQuint(span(t, YES + 0.1, YES + 0.45)) : 0;
+        css(sumA, "opacity", (1 - goIn).toFixed(3));
+        css(sumB, "opacity", (goIn * (1 - doneIn)).toFixed(3));
+        css(sumC, "opacity", doneIn.toFixed(3));
+        const n = Math.round(TOTAL * inOut(span(t, RUN, END)));
+        sumB.innerHTML = `Adding · <b>${t < END ? n : TOTAL}</b> of ${TOTAL}`;
+        css(bar.parentElement, "opacity", (goIn * (1 - doneIn)).toFixed(3));
+        css(bar, "transform", `scaleX(${(t < END ? inOut(span(t, RUN, END)) : 1).toFixed(4)})`);
+        // the list
+        const sc = scrollAt(t);
+        list.forEach((l) => {
+          const r = rows[l.i];
+          const inn = res > 0 ? outQuint(span(t, SHOW + l.i * 0.05, SHOW + 0.45 + l.i * 0.05)) * (1 - outCubic(span(t, CLEAR + l.i * 0.03, CLEAR + 0.3 + l.i * 0.03))) : 0;
+          css(l.row, "opacity", inn.toFixed(3));
+          css(l.row, "transform", `translateY(${(l.i * 40 - sc + 8 * (1 - inn)).toFixed(1)}px)`);
+          if (r.have) return;
+          const live = t < CLEAR + 0.4;
+          const phase = !live || t < YES + 0.05 ? 0 : t < r.s ? 1 : t < r.d ? 2 : 3;
+          css(l.add, "opacity", phase === 0 ? 1 : 0);
+          css(l.wait, "opacity", phase === 1 ? 1 : 0);
+          css(l.dl, "opacity", phase === 2 ? 1 : 0);
+          css(l.fill, "transform", `scaleX(${(phase === 2 ? clamp(span(t, r.s, r.d) * 1.08) : 0).toFixed(3)})`);
+          const okIn = phase === 3 ? outBack(span(t, r.d, r.d + 0.35)) : 0;
+          css(l.lib, "opacity", clamp(okIn).toFixed(3));
+          css(l.lib, "transform", `scale(${(0.85 + 0.15 * okIn).toFixed(3)})`);
+        });
+        // asking first
+        const ask = outQuint(span(t, ASK + 0.05, ASK + 0.35)) * (1 - outCubic(span(t, YES + 0.05, YES + 0.3)));
+        css(shade, "opacity", (ask * 0.6).toFixed(3));
+        css(modal, "opacity", ask.toFixed(3));
+        css(modal, "transform", `translate(-50%, -50%) scale(${(0.94 + 0.06 * ask).toFixed(3)})`);
+        css(yes, "transform", `scale(${(1 - 0.05 * bump(t, YES - 0.1, YES + 0.1)).toFixed(3)})`);
+      };
+    },
+  };
+}
+
+// ── 5. library care: pick, delete, smoke ─────────────────────────────────
 
 const ROWS = [
   { t: "Shooting Star", a: "Nightcord", sub: "osu!lazer · 5 difficulties", size: "38.2 MB", c: 0, newest: true },
@@ -780,7 +914,7 @@ function careScene() {
 
 // ── running the scenes ───────────────────────────────────────────────────
 
-const SCENES = { search: searchScene, chart: chartScene, bulk: bulkScene, care: careScene };
+const SCENES = { search: searchScene, chart: chartScene, bulk: bulkScene, browse: browseScene, care: careScene };
 const reduced = matchMedia("(prefers-reduced-motion: reduce)");
 const running = new Set();
 let raf = 0;
