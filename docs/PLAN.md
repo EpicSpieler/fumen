@@ -471,7 +471,7 @@ sections below is the order of the work.
   as on Windows (lazer's folder hard-linked into Fumen's cache, nothing written into the signed
   app), with its launcher built for macOS. osu!stable has no macOS build: not looked for. The window
   keeps macOS's own buttons over the sidebar's head (`tauri.macos.conf.json`), ⌘F searches. Built on
-  GitHub's Macs (`npm run mac`, by hand: macOS minutes count ten times on a private repo), Apple
+  GitHub's Macs (`npm run mac`, by hand, with milestone releases), Apple
   Silicon tested against lazer's macOS release (from GitHub) first. Not signed by Apple, no
   self-update on macOS until the release
 - 1.1 Pools (moved from 0.5): the pool builder as in the roadmap table; similar maps fill or replace
@@ -500,9 +500,8 @@ sections below is the order of the work.
   hand: `npm run mac`, with milestone releases (minor versions) only.
 - After a lazer update: `npm run verify-lazer -- --push` with lazer closed.
 - Site changes: `node scripts/deploy-site.mjs` (the VPS's `.env` holds the osu! secret, never git).
-- Releases: `npm run release -- patch` on the PC (signed NSIS installer → GitHub release in the
-  private repo + fumen.dertesti.dev/updates/, which Tauri's updater reads). Built locally, not in
-  CI: Windows minutes count double on a private repo.
+- Releases: `npm run release -- patch` on the PC (signed NSIS installer → GitHub release + fumen.dertesti.dev/updates/, which Tauri's updater
+  reads). Built locally, where the updater's signing key is; it never goes to GitHub.
 
 ## Risks
 
