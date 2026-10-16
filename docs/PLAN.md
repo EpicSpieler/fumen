@@ -434,6 +434,19 @@ sections below is the order of the work.
       the ones lazer imported itself (same difficulty, within 2 s). On the user's PC: 3 plays,
       two under an earlier name — all three in the history
 
+## v1.0 — release
+
+- [x] Installer and auto-update — signed updater on GitHub Releases, `npm run release`
+- [x] Dark, OLED, Light and High contrast — 0.7.2. Light follows Kodama's light palette (grey base
+      #f0f0f0, white surfaces, black text by opacity .90/.56/.38/.20, darker status colours, half
+      the shadows). Surface tints go through `--ink` (rgb channels: white on the dark themes, black
+      on Light), so the same rules serve every theme; the accent's ink (accent as text) is derived
+      dark on Light (`deriveAccent(color, light)`). The fullscreen player stays a dark stage and
+      gets the dark tokens back (`:root[data-theme="light"] .fs`); the set hero gets a light scrim
+      and dark text; the delete smoke is dark on Light. High contrast works on top of Light too
+- [ ] English and German
+- [ ] A website with downloads
+
 ## After 1.0
 
 - 1.1 Pools (moved from 0.5): the pool builder as in the roadmap table; similar maps fill or replace

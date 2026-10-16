@@ -101,7 +101,7 @@ const VERSIONS = [
     items: [
       [1, "Installer and auto-update"],
       [0, "English and German"],
-      [0, "Dark, OLED, Light and High contrast"],
+      [1, "Dark, OLED, Light and High contrast"],
       [0, "A website with downloads"],
     ],
     explain: [["themes", "<b>Themes and languages,</b> the same app in four looks."]],
