@@ -1,0 +1,69 @@
+# Fumen, in full
+
+> Fumen is a free desktop app for osu!lazer players on Windows 10 and 11: a beatmap library that reads what osu!lazer already has, searches it the way osu! does, analyses charts, plays replays and keeps the library tidy. Made by DerTesti; not made by or affiliated with ppy or osu!. The short version of this file is at https://fumen.dertesti.dev/llms.txt.
+
+## Install
+
+- Download the Windows installer from https://fumen.dertesti.dev/ (the button points at the newest version). It's free.
+- You need osu!lazer on the same computer. Fumen finds its library by itself; Settings can point it at another folder.
+- osu!stable is read too when it's installed (its osu!.db, Songs folder and collection.db, read only). A difficulty that's in both games shows once.
+- Fumen updates itself: it looks for a new version when it starts and every few hours, and Settings shows when one is out.
+- macOS: Fumen builds for macOS, but nobody has tested it yet, so there's no download for it yet. Linux and macOS are planned for version 1.6.
+
+## How it treats osu!lazer
+
+- Fumen reads osu!lazer's database from a private copy, never the original.
+- Beatmaps and collections it puts into osu!lazer go in through osu!lazer's own code, only while osu!lazer is closed, only on osu!lazer versions tested with Fumen, and with a backup of the database first.
+- Deleting goes through osu!lazer's own Delete; scores stay. It's final the next time osu!lazer opens its database.
+- osu!stable's files are never written.
+- Beatmaps are downloaded from community mirrors (such as osu.direct and catboy.best), never directly from osu!'s servers. Your own replays come from osu! only when you ask for one, one at a time, and are kept.
+
+## Search
+
+Every word has to appear in the title, artist, mapper, source, tags or difficulty name. `"quoted phrase"` matches a phrase, `-word` leaves it out. Filters are `key<op>value` with `=`, `!=`, `<`, `<=`, `>`, `>=`:
+
+- `sr>4.5` star rating, `dt>5` / `ht<3` star rating with Double Time / Half Time
+- `keys=7` osu!mania key count, `mode=mania` (or osu, taiko, catch) ruleset
+- `bpm<=200`, `length<2:30` (also `90s`, `1m30s`), `od`, `hp`, `ar`, `cs`
+- `status=ranked` (approved, qualified, loved, pending, wip, graveyard; short forms r, a, q, l, p, w, g)
+- `creator=…` (or mapper), `artist=…`, `title=…`, `source=…`, `tags=…`, `diff=…`
+- `played=no` never played, `played>30` not played for 30 days, `added<7` added in the last 7 days, `plays>10`, `grade>=A`, `year=2024` (ranked year)
+- `ln>30` long-note share in %, `notes>1000`, `nps>8`, `peak>15` peak notes per second
+- `pattern=jumpstream` (stream, handstream, chordjack, jacks, long notes, stamina and the community's short forms) from the chart analysis
+- `dan=gamma`, `dan>=13`, `dan>="reform 8"` estimated osu!mania dan
+- `game=stable` / `game=lazer` which osu! a map is in
+
+Ruleset and key buttons, a star range, status and played / not played filters sit beside the search. Any search can be saved as a smart collection that fills itself.
+
+## Features
+
+- Library: a cover grid and a list of sets that open to their difficulties; smooth with tens of thousands of difficulties. Home page with recently played and added, most played, maps you haven't played in a while and quick picks. A player with a queue, shuffle, repeat and media keys.
+- Charts: every difficulty is analysed once in the background. Notes per second (a graph you can click to jump), peak and average density, longest burst, the patterns in a chart and, for osu!mania, an estimated dan.
+- Fullscreen player: a visualizer, or the playfield of any ruleset (osu!, osu!taiko, osu!catch, osu!mania) with live numbers beside it. osu!mania uses your osu!lazer scroll speed; your own skins work. Mods like Hard Rock, Hidden, Flashlight and Mirror play the way lazer plays them, at any rate.
+- Practice: loop the hardest part of a chart (or any part) at any rate, with a metronome, slowly speeding up if you want.
+- Replays: your osu!lazer replays and your scores on osu!, for all four rulesets, played back on the playfield with every judgement, and the hit error.
+- Browse: osu!'s beatmaps through the mirrors, with previews; add one set, or every set a search finds that you don't have yet.
+- Add beatmaps: paste many links (set and beatmap links, osu:// links or set IDs), or let Fumen find every map you've played on osu! that osu!lazer doesn't have. They download a few at a time and go into osu!lazer.
+- Collections: your own (drag sets onto them), smart ones from a search, osu!lazer's and osu!stable's; into osu!lazer or as a collection.db for osu!stable and Collection Manager; saved in the cloud under your osu! login and merged on another PC.
+- History: a year of plays, top plays and most played maps, osu!stable's scores included.
+- Library care: duplicates, broken files (missing or unreadable audio and backgrounds), sets never played and what takes the space; clean up by ruleset, status or age.
+- Looks: Dark, OLED, Light and High contrast themes, an accent colour from the artwork, English and German.
+- Skills: a skill per osu!mania pattern from your passes, with goals and comparison with other players. Being reworked; greyed out for now.
+
+## Roadmap
+
+Versions 0.1 (library) to 1.0 (release) are out. After 1.0: a tournament pool builder (1.1), tournament tools such as schedules, match results and an OBS overlay (1.2), sessions and weekly reports (1.3), skins (1.4), Discord Rich Presence (1.5), Linux and macOS (1.6), and a mapping lens (1.7). Details: https://fumen.dertesti.dev/roadmap
+
+## Privacy
+
+- When it starts, Fumen sends one ping to fumen.dertesti.dev: a random id made on the PC and the app's version, nothing else. It's how many people use Fumen gets counted. Settings › About › Count me in turns it off.
+- The osu! login goes through fumen.dertesti.dev because osu!'s OAuth needs a client secret that a desktop app can't keep. The tokens stay on your PC.
+- Collections saved to the cloud are stored under your osu! user id.
+
+## FAQ
+
+- Does Fumen change my osu!lazer library? Only when you add beatmaps, put collections in or delete sets, and then through osu!lazer's own code while osu!lazer is closed.
+- Can it get me banned? It doesn't touch the game while you play and downloads from mirrors, not from osu!'s servers.
+- Does it work without osu!lazer? No, it's a library for osu!lazer; osu!stable is read alongside it.
+- Is it open source? Not yet; the repository is private.
+- Where do I send ideas or bugs? To DerTesti, for example on the Rhythm Prodigies Discord.

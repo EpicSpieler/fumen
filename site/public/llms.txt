@@ -18,6 +18,10 @@ Fumen finds osu!lazer's library by itself and reads it from a private copy, so i
 - Looks: Dark, OLED, Light and High contrast themes.
 - Skills (a skill per osu!mania pattern) are being reworked and greyed out for now.
 
+## More
+
+- [Everything in detail](https://fumen.dertesti.dev/llms-full.txt): install, how it treats osu!lazer, the full search syntax, features, roadmap, privacy and FAQ.
+
 ## Getting it
 
 - [Homepage and download](https://fumen.dertesti.dev/): the Windows installer, free. macOS is built but not tested yet, so it comes later.

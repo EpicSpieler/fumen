@@ -8,4 +8,12 @@
     <loc>https://fumen.dertesti.dev/roadmap</loc>
     <lastmod>2026-10-17</lastmod>
   </url>
+  <url>
+    <loc>https://fumen.dertesti.dev/llms.txt</loc>
+    <lastmod>2026-10-17</lastmod>
+  </url>
+  <url>
+    <loc>https://fumen.dertesti.dev/llms-full.txt</loc>
+    <lastmod>2026-10-17</lastmod>
+  </url>
 </urlset>
