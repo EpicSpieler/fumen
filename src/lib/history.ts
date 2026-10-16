@@ -1,9 +1,10 @@
 /* history.ts — the player's plays (lazer's local scores plus osu!'s), loaded when first needed
  * and kept until they change, and the syncs with osu! that feed them. */
 import { api, asApiError, onHistoryChanged } from "./api";
-import { esc, num } from "./format";
+import { esc, fixed, num } from "./format";
 import { Emitter, events, reloadLibrary, store } from "./store";
 import type { ApiError, History, MapRow, OnlineMap, Play, Snapshot, SyncSummary } from "./types";
+import { locale, t } from "./i18n";
 
 /** a sync at start only when the last one is older than this */
 const SYNC_EVERY = 10 * 60 * 1000;
@@ -133,7 +134,7 @@ const RATE_MODS: Record<string, number> = { DT: 1.5, NC: 1.5, HT: 0.75, DC: 0.75
 /** "HD DT", with the rate when it isn't the mod's usual one ("HT 0.90×"). */
 export function modsText(p: Play): string {
   return (p.mods ?? [])
-    .map((m) => (m in RATE_MODS && p.rate !== undefined && Math.abs(p.rate - RATE_MODS[m]) > 1e-6 ? `${m} ${p.rate.toFixed(2)}×` : m))
+    .map((m) => (m in RATE_MODS && p.rate !== undefined && Math.abs(p.rate - RATE_MODS[m]) > 1e-6 ? `${m} ${fixed(p.rate, 2)}×` : m))
     .join(" ");
 }
 
@@ -153,10 +154,10 @@ export function hitsText(p: Play): string {
     .join(", ");
 }
 
-const dtf = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
-const timeFmt = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit" });
-const dayMonthFmt = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short" });
-const fullDayFmt = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" });
+const dtf = new Intl.DateTimeFormat(locale, { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+const timeFmt = new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit" });
+const dayMonthFmt = new Intl.DateTimeFormat(locale, { day: "numeric", month: "short" });
+const fullDayFmt = new Intl.DateTimeFormat(locale, { day: "numeric", month: "short", year: "numeric" });
 
 /** "14:32" */
 export const timeOfDay = (ms: number): string => timeFmt.format(new Date(ms));
@@ -165,14 +166,14 @@ export const timeOfDay = (ms: number): string => timeFmt.format(new Date(ms));
 export function playWhen(ms: number): string {
   const day = (t: number) => new Date(t).toDateString();
   const now = Date.now();
-  if (day(ms) === day(now)) return `Today, ${timeOfDay(ms)}`;
-  if (day(ms) === day(now - 86_400_000)) return `Yesterday, ${timeOfDay(ms)}`;
+  if (day(ms) === day(now)) return t("Today, {time}", { time: timeOfDay(ms) });
+  if (day(ms) === day(now - 86_400_000)) return t("Yesterday, {time}", { time: timeOfDay(ms) });
   return (new Date(ms).getFullYear() === new Date(now).getFullYear() ? dayMonthFmt : fullDayFmt).format(new Date(ms));
 }
 
 /** Tooltip for when a play was: the time, and where Fumen knows it from. */
 export function playWhenTip(p: Play): string {
-  const where = p.source === "osu" ? " · from osu!" : p.source === "lazer" ? " · this computer only" : "";
+  const where = p.source === "osu" ? ` · ${t("from osu!")}` : p.source === "lazer" ? ` · ${t("this computer only")}` : "";
   const client = p.stable ? " · osu!stable" : "";
   return esc(`${dtf.format(new Date(p.date))}${client}${where}`);
 }
@@ -180,5 +181,5 @@ export function playWhenTip(p: Play): string {
 /** Tooltip for a play's grade: score, combo and judgements. */
 export function playScoreTip(p: Play): string {
   const hits = hitsText(p);
-  return esc([`${num(p.score)} score`, `${num(p.combo)}x combo`, hits].filter(Boolean).join(" · "));
+  return esc([t("{n} score", { n: num(p.score) }), t("{n}x combo", { n: num(p.combo) }), hits].filter(Boolean).join(" · "));
 }

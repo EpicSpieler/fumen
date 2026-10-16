@@ -25,6 +25,16 @@ export const common: Record<string, string> = {
   Search: "Suchen",
   Change: "Ändern",
   "Try again": "Nochmal versuchen",
+  Play: "Abspielen",
+  Pause: "Pause",
+  Next: "Nächster",
+  Previous: "Vorheriger",
+  More: "Mehr",
+  Fullscreen: "Vollbild",
+  Delete: "Löschen",
+  Copy: "Kopieren",
+  Name: "Name",
+  "Open beatmap set": "Beatmap-Set öffnen",
 
   // parts of the app
   Home: "Start",

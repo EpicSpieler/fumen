@@ -9,8 +9,8 @@
 import { thumbUrl } from "../lib/api";
 import { shortDan } from "../lib/dan";
 import {
-  bpm, date, displayArtist, displayTitle, duration, esc, holdRatio, keysOrMode, mapPatternText, modeLabel, num, rankInfo,
-  relativeTime, srChip, srColor, stars,
+  bpm, date, displayArtist, displayTitle, duration, esc, fixed, holdRatio, keysOrMode, mapPatternText, modeLabel, num, pct,
+  rankInfo, relativeTime, srChip, srColor, stars,
 } from "../lib/format";
 import {
   DEFAULT_FILTER, filterLibrary, parseQuery, sortSets, type FilterResult, type FilterState, type SetResult, type SetSort,
@@ -25,25 +25,26 @@ import { VirtualList } from "../ui/virtual";
 import { createSmartCollection, DRAG_TYPE, updateSmartCollection } from "../lib/collections";
 import { collectionPicker, openSet, setMenu } from "./actions";
 import { openDeleteWindow } from "./delete-window";
+import { t, tn } from "../lib/i18n";
 
 const SET_SORTS: { value: SetSort; label: string }[] = [
-  { value: "added", label: "Date added" },
-  { value: "title", label: "Title" },
-  { value: "artist", label: "Artist" },
-  { value: "creator", label: "Mapper" },
-  { value: "sr", label: "Star rating" },
+  { value: "added", label: t("Date added") },
+  { value: "title", label: t("Title") },
+  { value: "artist", label: t("Artist") },
+  { value: "creator", label: t("Mapper") },
+  { value: "sr", label: t("Star rating") },
   { value: "bpm", label: "BPM" },
-  { value: "length", label: "Length" },
-  { value: "ranked", label: "Ranked date" },
-  { value: "played", label: "Last played" },
-  { value: "peak", label: "Peak density" },
+  { value: "length", label: t("Length") },
+  { value: "ranked", label: t("Ranked date") },
+  { value: "played", label: t("Last played") },
+  { value: "peak", label: t("Peak density") },
 ];
 
 /** Sorts where "descending" is the natural first click. */
 const DESC_FIRST = new Set<string>(["added", "sr", "bpm", "length", "ranked", "played", "od", "hp", "objects", "ln", "nps", "grade", "peak"]);
 
 /** The list's date column follows the sort: when sorting by a date, it shows that date. */
-const DATE_COLUMN: Partial<Record<SetSort, string>> = { added: "Added", played: "Played", ranked: "Ranked" };
+const DATE_COLUMN: Partial<Record<SetSort, string>> = { added: t("Added"), played: t("Played"), ranked: t("Ranked") };
 
 interface Column {
   key: SetSort | "date" | null;
@@ -54,14 +55,14 @@ interface Column {
 const LIST_COLUMNS: Column[] = [
   { key: null, label: "", cls: "l-chev" },
   { key: null, label: "", cls: "l-art" },
-  { key: "title", label: "Title", cls: "l-title" },
-  { key: "creator", label: "Mapper", cls: "l-creator hide-1" },
-  { key: null, label: "Difficulties", cls: "l-diffs" },
-  { key: "sr", label: "Stars", cls: "l-sr" },
+  { key: "title", label: t("Title"), cls: "l-title" },
+  { key: "creator", label: t("Mapper"), cls: "l-creator hide-1" },
+  { key: null, label: t("Difficulties"), cls: "l-diffs" },
+  { key: "sr", label: t("Stars"), cls: "l-sr" },
   { key: "bpm", label: "BPM", cls: "l-num" },
-  { key: "length", label: "Length", cls: "l-num" },
-  { key: "date", label: "Added", cls: "l-date hide-2" },
-  { key: null, label: "Best", cls: "l-best" },
+  { key: "length", label: t("Length"), cls: "l-num" },
+  { key: "date", label: t("Added"), cls: "l-date hide-2" },
+  { key: null, label: t("Best"), cls: "l-best" },
   { key: null, label: "", cls: "l-open" },
 ];
 
@@ -74,7 +75,7 @@ const GROUP_GAP = 8;
 type Line = { kind: "set"; r: SetResult } | { kind: "map"; set: number; map: number; last: boolean; n: number };
 
 const MODES = [
-  { mode: -1, label: "All" },
+  { mode: -1, label: t("All") },
   { mode: 0, label: "osu!" },
   { mode: 1, label: "taiko" },
   { mode: 2, label: "catch" },
@@ -83,13 +84,13 @@ const MODES = [
 const KEY_COUNTS = [4, 5, 6, 7, 8, 9, 10];
 
 const STATUS_FILTERS = [
-  { label: "Ranked", values: [1] },
-  { label: "Approved", values: [2] },
-  { label: "Qualified", values: [3] },
-  { label: "Loved", values: [4] },
-  { label: "Pending / WIP", values: [0, -1] },
-  { label: "Graveyard", values: [-2] },
-  { label: "Local", values: [-3, -4] },
+  { label: t("Ranked"), values: [1] },
+  { label: t("Approved"), values: [2] },
+  { label: t("Qualified"), values: [3] },
+  { label: t("Loved"), values: [4] },
+  { label: t("Pending / WIP"), values: [0, -1] },
+  { label: t("Graveyard"), values: [-2] },
+  { label: t("Local"), values: [-3, -4] },
 ];
 
 export interface LibraryOptions {
@@ -150,24 +151,24 @@ export class LibraryView {
           <div class="view-sub lib-count num"></div>
         </div>
         <div class="lib-head-tools">
-          <button class="icon-btn lib-shown" type="button" aria-label="The sets shown here" data-tip="The sets shown here">${icon("more-vert")}</button>
+          <button class="icon-btn lib-shown" type="button" aria-label="${t("The sets shown here")}" data-tip="${t("The sets shown here")}">${icon("more-vert")}</button>
           <span class="lib-sort-host"></span>
-          <button class="icon-btn lib-sort-dir" type="button" aria-label="Sort direction"></button>
-          <div class="seg-pill lib-layout" role="tablist" aria-label="Layout">
-            <button type="button" data-layout="grid" data-tip="Covers" aria-label="Covers">${icon("grid")}</button>
-            <button type="button" data-layout="list" data-tip="List" aria-label="List">${icon("rows")}</button>
+          <button class="icon-btn lib-sort-dir" type="button" aria-label="${t("Sort direction")}"></button>
+          <div class="seg-pill lib-layout" role="tablist" aria-label="${t("Layout")}">
+            <button type="button" data-layout="grid" data-tip="${t("Covers")}" aria-label="${t("Covers")}">${icon("grid")}</button>
+            <button type="button" data-layout="list" data-tip="${t("List")}" aria-label="${t("List")}">${icon("rows")}</button>
           </div>
         </div>
       </header>
       <div class="lib-toolbar">
-        <div class="seg-pill lib-modes" role="tablist" aria-label="Ruleset">
+        <div class="seg-pill lib-modes" role="tablist" aria-label="${t("Ruleset")}">
           ${MODES.map((m) => `<button type="button" data-mode="${m.mode}">${m.label}</button>`).join("")}
         </div>
-        <div class="lib-keys" role="group" aria-label="Keys">
+        <div class="lib-keys" role="group" aria-label="${t("Keys")}">
           ${KEY_COUNTS.map((k) => `<button type="button" data-keys="${k}">${k}K</button>`).join("")}
         </div>
         <span class="lib-toolbar-gap"></span>
-        <button class="btn btn-ghost lib-filters-btn" type="button">${icon("sliders")}<span>Filters</span></button>
+        <button class="btn btn-ghost lib-filters-btn" type="button">${icon("sliders")}<span>${t("Filters")}</span></button>
       </div>
       <div class="lib-active" hidden></div>
       <div class="lib-list-head" hidden></div>
@@ -179,8 +180,8 @@ export class LibraryView {
       const more = document.createElement("button");
       more.className = "icon-btn lib-more";
       more.type = "button";
-      more.dataset.tip = "Collection";
-      more.setAttribute("aria-label", "Collection actions");
+      more.dataset.tip = t("Collection");
+      more.setAttribute("aria-label", t("Collection actions"));
       more.innerHTML = icon("more");
       more.addEventListener("click", () => o.menu!(more));
       el.querySelector(".lib-title-row")!.appendChild(more);
@@ -189,14 +190,14 @@ export class LibraryView {
     this.body = el.querySelector(".lib-body")!;
 
     // sort select
-    const sortSel = createSelect(SET_SORTS, this.setSort, (v) => this.setSortKey(v), { prefix: "Sort", tip: "Sort sets by" });
+    const sortSel = createSelect(SET_SORTS, this.setSort, (v) => this.setSortKey(v), { prefix: t("Sort"), tip: t("Sort sets by") });
     sortSel.el.classList.add("lib-sort");
     el.querySelector(".lib-sort-host")!.replaceWith(sortSel.el);
     this.syncSortUi = () => {
       sortSel.value = this.setSort;
       const dirBtn = el.querySelector<HTMLButtonElement>(".lib-sort-dir")!;
       dirBtn.innerHTML = icon(this.setDesc ? "arrow-down" : "arrow-up");
-      dirBtn.dataset.tip = this.setDesc ? "Descending" : "Ascending";
+      dirBtn.dataset.tip = this.setDesc ? t("Descending") : t("Ascending");
     };
 
     this.list = new VirtualList({
@@ -381,7 +382,7 @@ export class LibraryView {
         <div class="card-art${set.bg ? "" : " img-missing"}">
           ${art}
           ${this.keysBadge(maps)}
-          <button class="card-play" type="button" aria-label="Play">${icon("play", "ic-play")}${icon("pause", "ic-pause")}</button>
+          <button class="card-play" type="button" aria-label="${t("Play")}">${icon("play", "ic-play")}${icon("pause", "ic-pause")}</button>
         </div>
         <div class="card-title">${esc(displayTitle(set, unicode))}</div>
         <div class="card-sub">${esc(displayArtist(set, unicode))}</div>
@@ -420,13 +421,13 @@ export class LibraryView {
       .map((m) => `<i${m.sr >= 7.7 ? ` class="deep"` : ""} style="--c:${srColor(m.sr)}"></i>`)
       .join("");
     const total = set.maps.filter((mi) => this.filter.showHidden || !snap.maps[mi].hidden).length;
-    const count = maps.length < total ? `${maps.length} of ${total}` : `${maps.length} ${maps.length === 1 ? "diff" : "diffs"}`;
+    const count = maps.length < total ? t("{shown} of {n}", { shown: maps.length, n: total }) : tn(maps.length, "{n} diff", "{n} diffs");
     const bpmText = Math.round(bpmLo) === Math.round(bpmHi) ? bpm(bpmHi) : `${bpm(bpmLo)}–${bpm(bpmHi)}`;
     const bg = set.bg;
     const g = best ? rankInfo(best.rank) : null;
     return `
       <div class="l-chev">${icon("chevron-right")}</div>
-      <div class="l-art"><div class="t-art${bg ? "" : " img-missing"}">${bg ? `<img src="${thumbUrl(bg, 160)}" alt="" loading="lazy" decoding="async" />` : ""}<button class="t-play" type="button" aria-label="Play">${icon("play", "ic-play")}${icon("pause", "ic-pause")}</button></div></div>
+      <div class="l-art"><div class="t-art${bg ? "" : " img-missing"}">${bg ? `<img src="${thumbUrl(bg, 160)}" alt="" loading="lazy" decoding="async" />` : ""}<button class="t-play" type="button" aria-label="${t("Play")}">${icon("play", "ic-play")}${icon("pause", "ic-pause")}</button></div></div>
       <div class="l-title"><div class="t-title">${esc(displayTitle(set, unicode))}</div><div class="t-sub">${esc(displayArtist(set, unicode))}</div></div>
       <div class="l-creator hide-1">${esc(set.creator)}</div>
       <div class="l-diffs"><span class="card-strip">${strip}</span><span class="t-sub num">${count} · ${esc(keysText(maps))}</span></div>
@@ -435,14 +436,14 @@ export class LibraryView {
       <div class="l-num num">${duration(len)}</div>
       <div class="l-date hide-2">${this.dateText(set.added, set.ranked, played)}</div>
       <div class="l-best">${g ? `<span class="grade" style="--c:${g.color}">${g.label}</span>` : `<span class="t-none">–</span>`}</div>
-      <div class="l-open"><button class="icon-btn sm" type="button" data-open data-tip="Open set" aria-label="Open set">${icon("arrow-right")}</button></div>`;
+      <div class="l-open"><button class="icon-btn sm" type="button" data-open data-tip="${t("Open set")}" aria-label="${t("Open set")}">${icon("arrow-right")}</button></div>`;
   }
 
   /** The date column's value for the current sort. */
   private dateText(added: number | undefined, ranked: number | undefined, played: number): string {
     switch (this.setSort) {
       case "played":
-        return played ? relativeTime(played) : `<span class="t-none">never</span>`;
+        return played ? relativeTime(played) : `<span class="t-none">${t("never")}</span>`;
       case "ranked":
         return ranked ? date(ranked) : `<span class="t-none">–</span>`;
       default:
@@ -462,10 +463,10 @@ export class LibraryView {
         <span class="d-name"><b>${esc(m.version)}</b>${m.dan || pat ? `<span class="t-pat">${esc([m.dan ? shortDan(m.dan, holdRatio(m)) : "", pat].filter(Boolean).join(" · "))}</span>` : ""}</span>
         <span class="d-num hide-2"><i>OD</i>${fmt1(m.od)}</span>
         <span class="d-num hide-1"><i>HP</i>${fmt1(m.hp)}</span>
-        <span class="d-num">${num(m.objects)}<i>${mania ? "notes" : "objects"}</i></span>
-        <span class="d-num hide-1">${m.peak !== undefined ? `${m.peak.toFixed(1)}<i>peak</i>` : `<span class="t-none">–</span>`}</span>
-        <span class="d-num hide-2"><i>${HOLDS[m.mode] ?? "Holds"}</i>${Math.round(holdRatio(m) * 100)}%</span>
-        <span class="d-best">${best ? `<span class="grade" style="--c:${best.color}">${best.label}</span><span class="t-acc num">${(m.best!.acc * 100).toFixed(2)}%</span>` : `<span class="t-none">not played</span>`}</span>
+        <span class="d-num">${num(m.objects)}<i>${mania ? t("notes") : t("objects")}</i></span>
+        <span class="d-num hide-1">${m.peak !== undefined ? `${fixed(m.peak, 1)}<i>${t("peak")}</i>` : `<span class="t-none">–</span>`}</span>
+        <span class="d-num hide-2"><i>${HOLDS[m.mode] ?? t("Holds")}</i>${Math.round(holdRatio(m) * 100)}%</span>
+        <span class="d-best">${best ? `<span class="grade" style="--c:${best.color}">${best.label}</span><span class="t-acc num">${pct(m.best!.acc)}</span>` : `<span class="t-none">${t("not played")}</span>`}</span>
         <span class="d-go">${icon("arrow-right")}</span>
       </div>`;
   }
@@ -480,8 +481,8 @@ export class LibraryView {
     const countEl = this.el.querySelector(".lib-count")!;
     const extra = this.o.subtitle?.();
     countEl.textContent = filtered
-      ? `${num(sets.length)} of ${num(totalSets)} sets · ${num(mapCount)} difficulties`
-      : `${num(totalSets)} sets · ${num(totalMaps)} difficulties${extra ? ` · ${extra}` : ""}`;
+      ? `${tn(totalSets, "{shown} of {n} set", "{shown} of {n} sets", { shown: num(sets.length) })} · ${tn(mapCount, "{n} difficulty", "{n} difficulties")}`
+      : `${tn(totalSets, "{n} set", "{n} sets")} · ${tn(totalMaps, "{n} difficulty", "{n} difficulties")}${extra ? ` · ${extra}` : ""}`;
 
     // active filter summary, in words
     const words: string[] = [];
@@ -489,12 +490,12 @@ export class LibraryView {
       words.push(STATUS_FILTERS.filter((s) => s.values.every((v) => this.filter.status.includes(v))).map((s) => s.label).join(", "));
     }
     if (this.filter.srMin > 0 || this.filter.srMax < Infinity) {
-      words.push(this.filter.srMax < Infinity ? `${this.filter.srMin.toFixed(1)}–${this.filter.srMax.toFixed(1)} stars` : `${this.filter.srMin.toFixed(1)}+ stars`);
+      words.push(this.filter.srMax < Infinity ? t("{min}–{max} stars", { min: fixed(this.filter.srMin, 1), max: fixed(this.filter.srMax, 1) }) : t("{min}+ stars", { min: fixed(this.filter.srMin, 1) }));
     }
-    if (this.filter.played !== "any") words.push(this.filter.played === "played" ? "Played" : "Not played");
-    if (this.filter.showHidden) words.push("Including hidden");
+    if (this.filter.played !== "any") words.push(this.filter.played === "played" ? t("Played") : t("Not played"));
+    if (this.filter.showHidden) words.push(t("Including hidden"));
     const q = parseQuery(this.filter.text);
-    if (q.conds.length) words.push(`Query: ${q.conds.length} filter${q.conds.length > 1 ? "s" : ""}`);
+    if (q.conds.length) words.push(tn(q.conds.length, "Query: {n} filter", "Query: {n} filters"));
     // the main library can keep a search as a smart collection, ruleset and keys included
     const savable = !!this.o.onSmartSaved;
     const searching = savable && (words.length > 0 || !!this.filter.text.trim() || this.filter.mode !== -1 || this.filter.keys.length > 0);
@@ -502,11 +503,11 @@ export class LibraryView {
     const active = this.el.querySelector<HTMLElement>(".lib-active")!;
     active.hidden = !words.length && !searching && !this.editing;
     const save = this.editing
-      ? `<span class="lib-editing">Editing <b>${esc(this.editing.name)}</b></span><button class="btn btn-sm btn-primary lib-smart-update" type="button">Save search</button><button class="btn btn-ghost btn-sm lib-smart-stop" type="button">Done</button>`
+      ? `<span class="lib-editing">${t("Editing {name}", { name: `<b>${esc(this.editing.name)}</b>` })}</span><button class="btn btn-sm btn-primary lib-smart-update" type="button">${t("Save search")}</button><button class="btn btn-ghost btn-sm lib-smart-stop" type="button">${t("Done")}</button>`
       : searching
-        ? `<button class="btn btn-ghost btn-sm lib-smart-save" type="button">${icon("collection")}<span>Save as smart collection</span></button>`
+        ? `<button class="btn btn-ghost btn-sm lib-smart-save" type="button">${icon("collection")}<span>${t("Save as smart collection")}</span></button>`
         : "";
-    active.innerHTML = `<span class="lib-active-words">${words.map((w) => `<span>${esc(w)}</span>`).join("")}</span>${save}${words.length ? `<button class="btn btn-ghost btn-sm lib-reset" type="button">Reset filters</button>` : ""}`;
+    active.innerHTML = `<span class="lib-active-words">${words.map((w) => `<span>${esc(w)}</span>`).join("")}</span>${save}${words.length ? `<button class="btn btn-ghost btn-sm lib-reset" type="button">${t("Reset filters")}</button>` : ""}`;
     const filterCount = (this.filter.status.length ? 1 : 0) + (this.filter.srMin > 0 || this.filter.srMax < Infinity ? 1 : 0) + (this.filter.played !== "any" ? 1 : 0) + (this.filter.showHidden ? 1 : 0);
     const fb = this.el.querySelector<HTMLElement>(".lib-filters-btn")!;
     fb.classList.toggle("active", filterCount > 0);
@@ -533,8 +534,8 @@ export class LibraryView {
     if (none) {
       const anyFilter = filtered || this.filter.text;
       empty.innerHTML = anyFilter
-        ? `${icon("search-duo")}<div class="empty-title">Nothing matches</div><div class="empty-sub">Try fewer words or loosen a filter.</div><button class="btn btn-sm lib-reset" type="button">Reset search and filters</button>`
-        : `${icon("collection-duo")}<div class="empty-title">Nothing here yet</div><div class="empty-sub">${esc(this.o.emptyHint ?? "")}</div>`;
+        ? `${icon("search-duo")}<div class="empty-title">${t("Nothing matches")}</div><div class="empty-sub">${t("Try fewer words or loosen a filter.")}</div><button class="btn btn-sm lib-reset" type="button">${t("Reset search and filters")}</button>`
+        : `${icon("collection-duo")}<div class="empty-title">${t("Nothing here yet")}</div><div class="empty-sub">${esc(this.o.emptyHint ?? "")}</div>`;
     }
   }
 
@@ -730,7 +731,7 @@ export class LibraryView {
   private openFilters(anchor: HTMLElement): void {
     // A menu hosts the status list; the star range + played toggle live in a custom panel row.
     const f = this.filter;
-    const entries: MenuEntry[] = [{ group: "Status" }];
+    const entries: MenuEntry[] = [{ group: t("Status") }];
     for (const s of STATUS_FILTERS) {
       entries.push({
         label: s.label,
@@ -746,11 +747,11 @@ export class LibraryView {
         },
       });
     }
-    entries.push({ group: "Plays" });
+    entries.push({ group: t("Plays") });
     for (const p of [
-      { v: "any", label: "Any" },
-      { v: "played", label: "Played" },
-      { v: "unplayed", label: "Not played" },
+      { v: "any", label: t("Any") },
+      { v: "played", label: t("Played") },
+      { v: "unplayed", label: t("Not played") },
     ] as const) {
       entries.push({
         label: p.label,
@@ -764,7 +765,7 @@ export class LibraryView {
       });
     }
     entries.push("sep", {
-      label: "Show hidden difficulties",
+      label: t("Show hidden difficulties"),
       checked: f.showHidden,
       keepOpen: true,
       action: () => {
@@ -806,23 +807,23 @@ export class LibraryView {
     const sets = this.result.sets;
     const lazer = sets.filter((r) => snap.sets[r.set].from !== "stable");
     const filtered = this.isFiltered();
-    const what = this.o.collection || this.o.restrict ? "sets in this collection" : filtered ? "sets shown here" : "sets in your library";
+    const what = this.o.collection || this.o.restrict ? t("sets in this collection") : filtered ? t("sets shown here") : t("sets in your library");
     openMenu(
       at,
       [
-        { group: `${num(sets.length)} ${sets.length === 1 ? "set" : "sets"} shown` },
+        { group: tn(sets.length, "{n} set shown", "{n} sets shown") },
         {
-          label: "Add all to a collection…",
+          label: t("Add all to a collection…"),
           icon: "collection",
           disabled: !sets.length,
           action: () => collectionPicker(at, sets.flatMap((r) => r.maps)),
         },
         "sep",
         {
-          label: "Delete in osu!lazer…",
+          label: t("Delete in osu!lazer…"),
           icon: "trash",
           danger: true,
-          hint: lazer.length === sets.length ? undefined : `${num(lazer.length)} of them`,
+          hint: lazer.length === sets.length ? undefined : t("{n} of them", { n: num(lazer.length) }),
           disabled: !lazer.length,
           action: () => openDeleteWindow({ what, sets: lazer.map((r) => r.set) }),
         },
@@ -841,11 +842,11 @@ export class LibraryView {
   private async saveSmart(): Promise<void> {
     const q = parseQuery(this.filter.text);
     const guess = [this.filter.mode === 3 && this.filter.keys.length ? this.filter.keys.map((k) => `${k}K`).join(" ") : "", this.filter.text.trim()].filter(Boolean).join(" ");
-    const name = await uiPrompt("It fills itself with whatever in your library matches these filters, now and after every import.", {
-      title: "Save as smart collection",
-      value: guess || (q.conds.length ? "Smart collection" : ""),
-      placeholder: "Name",
-      confirmLabel: "Save",
+    const name = await uiPrompt(t("It fills itself with whatever in your library matches these filters, now and after every import."), {
+      title: t("Save as smart collection"),
+      value: guess || (q.conds.length ? t("Smart collection") : ""),
+      placeholder: t("Name"),
+      confirmLabel: t("Save"),
     });
     if (!name) return;
     const id = await createSmartCollection(name, this.filter);
@@ -881,9 +882,9 @@ export class LibraryView {
 }
 
 /** What counts as a hold, per ruleset: sliders, drumrolls, long notes. */
-const HOLDS: Record<number, string> = { 0: "Sliders", 1: "Rolls", 3: "LN" };
+const HOLDS: Record<number, string> = { 0: t("Sliders"), 1: t("Rolls"), 3: "LN" };
 
-const fmt1 = (v: number): string => (Math.round(v * 10) / 10).toString();
+const fmt1 = (v: number): string => fixed(v, Number.isInteger(Math.round(v * 10) / 10) ? 0 : 1);
 
 /** "7K", "4K / 7K", or the ruleset when it isn't mania. */
 function keysText(maps: MapRow[]): string {
@@ -891,7 +892,7 @@ function keysText(maps: MapRow[]): string {
   const modes = new Set(maps.map((m) => m.mode));
   if (keys.length && modes.size === 1) return keys.length > 3 ? `${keys[0]}–${keys[keys.length - 1]}K` : keys.map((k) => `${k}K`).join(" / ");
   if (modes.size === 1) return modeLabel(maps[0].mode).replace("osu!", "") || "osu!";
-  return `${modes.size} modes`;
+  return t("{n} modes", { n: modes.size });
 }
 
 /** Orders best scores: grade first (silver ranks with gold), then accuracy. */

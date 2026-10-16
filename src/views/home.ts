@@ -2,12 +2,13 @@
  * panel of quick picks to jump into. Everything is derived from the local library.
  */
 import { thumbUrl } from "../lib/api";
-import { displayArtist, displayTitle, esc, num, relativeTime } from "../lib/format";
+import { displayArtist, displayTitle, esc, relativeTime } from "../lib/format";
 import { events, store } from "../lib/store";
 import type { SetRow } from "../lib/types";
 import { player } from "../player";
 import { type IconName, icon } from "../ui/icons";
 import { openSet, setMenu } from "./actions";
+import { t, tn } from "../lib/i18n";
 
 const SHELF_SIZE = 24;
 const PICK_PAGES = 3;
@@ -22,11 +23,11 @@ interface Shelf {
 }
 
 function greeting(hour: number): { icon: IconName; before: string; after: string } {
-  if (hour >= 5 && hour < 11) return { icon: "sunrise", before: "Good morning", after: "" };
-  if (hour >= 11 && hour < 14) return { icon: "sun", before: "Hello", after: "" };
-  if (hour >= 14 && hour < 18) return { icon: "cloud-sun", before: "Good afternoon", after: "" };
-  if (hour >= 18 && hour < 23) return { icon: "sunset", before: "Good evening", after: "" };
-  return { icon: "moon", before: "Still up", after: "?" };
+  if (hour >= 5 && hour < 11) return { icon: "sunrise", before: t("Good morning"), after: "" };
+  if (hour >= 11 && hour < 14) return { icon: "sun", before: t("Hello"), after: "" };
+  if (hour >= 14 && hour < 18) return { icon: "cloud-sun", before: t("Good afternoon"), after: "" };
+  if (hour >= 18 && hour < 23) return { icon: "sunset", before: t("Good evening"), after: "" };
+  return { icon: "moon", before: t("Still up"), after: "?" };
 }
 
 export class HomeView {
@@ -82,32 +83,32 @@ export class HomeView {
     const monthAgo = Date.now() - 30 * 86_400_000;
     const playsLabel = (si: number) => {
       const n = plays(si);
-      return `${num(n)} play${n === 1 ? "" : "s"}`;
+      return tn(n, "{n} play", "{n} plays");
     };
     const shelves: Shelf[] = [
       {
         key: "played",
-        title: "Recently played",
+        title: t("Recently played"),
         sets: top(lastPlayed, (si) => lastPlayed(si) > 0),
         meta: (si) => relativeTime(lastPlayed(si)),
       },
       {
         key: "added",
-        title: "Recently added",
+        title: t("Recently added"),
         sets: top((si) => snap.sets[si].added ?? 0),
         meta: (si) => (snap.sets[si].added ? relativeTime(snap.sets[si].added!) : ""),
       },
       {
         key: "most",
-        title: "Most played",
+        title: t("Most played"),
         sets: top(plays, (si) => plays(si) > 1),
         meta: playsLabel,
       },
       {
         key: "again",
-        title: "Haven't played in a while",
+        title: t("Haven't played in a while"),
         sets: top(plays, (si) => plays(si) > 1 && lastPlayed(si) > 0 && lastPlayed(si) < monthAgo),
-        meta: (si) => `Last played ${relativeTime(lastPlayed(si))}`,
+        meta: (si) => t("Last played {when}", { when: relativeTime(lastPlayed(si)) }),
       },
     ];
     return shelves.filter((s) => s.sets.length > 0);
@@ -151,7 +152,7 @@ export class HomeView {
       <header class="home-hero">
         <div class="hero-icon">${icon(g.icon)}</div>
         <h1 class="hero-title">${esc(g.before)}${name ? `, <span class="hero-name">${esc(name)}</span>` : ""}${esc(g.after)}</h1>
-        <p class="hero-sub num">${num(total)} beatmap sets · ${num(snap.maps.length)} difficulties${snap.scannedAt ? ` · updated ${relativeTime(snap.scannedAt)}` : ""}</p>
+        <p class="hero-sub num">${tn(total, "{n} beatmap set", "{n} beatmap sets")} · ${tn(snap.maps.length, "{n} difficulty", "{n} difficulties")}${snap.scannedAt ? ` · ${t("updated {when}", { when: relativeTime(snap.scannedAt) })}` : ""}</p>
       </header>
       ${
         pool.length
@@ -160,8 +161,8 @@ export class HomeView {
               ${this.picks.length ? this.dialHtml() : ""}
             </div>
             ${rest.slice(1).map((s) => this.shelfHtml(s)).join("")}`
-          : `<div class="empty-state">${icon("collection-duo")}<div class="empty-title">Nothing to show yet</div><div class="empty-sub">${
-              store.prefs.mode >= 0 ? "No sets for the ruleset picked in your library." : "Your library is empty."
+          : `<div class="empty-state">${icon("collection-duo")}<div class="empty-title">${t("Nothing to show yet")}</div><div class="empty-sub">${
+              store.prefs.mode >= 0 ? t("No sets for the ruleset picked in your library.") : t("Your library is empty.")
             }</div></div>`
       }`;
     this.shelfData = new Map(shelves.map((s) => [s.key, s.sets]));
@@ -178,8 +179,8 @@ export class HomeView {
         <div class="shelf-head">
           <h2 class="section-title">${esc(s.title)}</h2>
           <div class="pager">
-            <button class="pager-btn" type="button" data-dir="-1" aria-label="Scroll left">${icon("chevron-left")}</button>
-            <button class="pager-btn" type="button" data-dir="1" aria-label="Scroll right">${icon("chevron-right")}</button>
+            <button class="pager-btn" type="button" data-dir="-1" aria-label="${t("Scroll left")}">${icon("chevron-left")}</button>
+            <button class="pager-btn" type="button" data-dir="1" aria-label="${t("Scroll right")}">${icon("chevron-right")}</button>
           </div>
         </div>
         <div class="shelf-track">${s.sets.map((si) => this.cardHtml(si, s.meta(si))).join("")}</div>
@@ -193,7 +194,7 @@ export class HomeView {
       <div class="card hcard" data-set="${si}">
         <div class="card-art${set.bg ? "" : " img-missing"}">
           ${set.bg ? `<img src="${thumbUrl(set.bg, 360)}" alt="" loading="lazy" decoding="async" />` : ""}
-          <button class="card-play" type="button" aria-label="Play">${icon("play", "ic-play")}${icon("pause", "ic-pause")}</button>
+          <button class="card-play" type="button" aria-label="${t("Play")}">${icon("play", "ic-play")}${icon("pause", "ic-pause")}</button>
         </div>
         <div class="card-title">${esc(displayTitle(set, unicode))}</div>
         <div class="card-sub">${esc(displayArtist(set, unicode))}</div>
@@ -206,15 +207,15 @@ export class HomeView {
     return `
       <aside class="dial">
         <div class="dial-head">
-          <span class="label-caps">Quick picks</span>
-          <button class="icon-btn sm dial-reroll" type="button" data-tip="New picks" aria-label="New picks">${icon("shuffle")}</button>
+          <span class="label-caps">${t("Quick picks")}</span>
+          <button class="icon-btn sm dial-reroll" type="button" data-tip="${t("New picks")}" aria-label="${t("New picks")}">${icon("shuffle")}</button>
           <div class="pager">
-            <button class="pager-btn" type="button" data-page="-1" aria-label="Previous page">${icon("chevron-left")}</button>
-            <button class="pager-btn" type="button" data-page="1" aria-label="Next page">${icon("chevron-right")}</button>
+            <button class="pager-btn" type="button" data-page="-1" aria-label="${t("Previous page")}">${icon("chevron-left")}</button>
+            <button class="pager-btn" type="button" data-page="1" aria-label="${t("Next page")}">${icon("chevron-right")}</button>
           </div>
         </div>
         <div class="dial-grid"></div>
-        <div class="dial-dots">${Array.from({ length: pages }, (_, i) => `<button type="button" data-dot="${i}" aria-label="Page ${i + 1}"></button>`).join("")}</div>
+        <div class="dial-dots">${Array.from({ length: pages }, (_, i) => `<button type="button" data-dot="${i}" aria-label="${t("Page {n}", { n: i + 1 })}"></button>`).join("")}</div>
       </aside>`;
   }
 

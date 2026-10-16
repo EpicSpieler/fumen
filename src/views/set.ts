@@ -2,8 +2,8 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { osuSetUrl, thumbUrl } from "../lib/api";
 import {
-  bpm, date, displayArtist, displayTitle, duration, esc, holdRatio, keysOrMode, mapPatternText, modeLabel, nps, num,
-  rankInfo, relativeTime, srChip, statusLabel,
+  bpm, date, displayArtist, displayTitle, duration, esc, fixed, holdRatio, keysOrMode, mapPatternText, modeLabel, nps, num,
+  pct, rankInfo, relativeTime, srChip, statusLabel,
 } from "../lib/format";
 import { shortDan } from "../lib/dan";
 import { back, canGoBack, goSection } from "../lib/router";
@@ -13,6 +13,7 @@ import { claimContentArt, player } from "../player";
 import { icon } from "../ui/icons";
 import { setMenu } from "./actions";
 import { ChartPanel } from "./chart";
+import { t, tn } from "../lib/i18n";
 
 export class SetView {
   readonly el: HTMLElement;
@@ -48,7 +49,7 @@ export class SetView {
     this.setIdx = si;
     this.closeChart(false);
     if (!snap || si < 0) {
-      this.el.innerHTML = `<div class="empty-state set-missing">${icon("collection-duo")}<div class="empty-title">This set is no longer in your library</div><button class="btn btn-sm set-back-lib" type="button">Back to library</button></div>`;
+      this.el.innerHTML = `<div class="empty-state set-missing">${icon("collection-duo")}<div class="empty-title">${t("This set is no longer in your library")}</div><button class="btn btn-sm set-back-lib" type="button">${t("Back to library")}</button></div>`;
       claimContentArt(null);
       return;
     }
@@ -67,19 +68,19 @@ export class SetView {
     const lastPlayed = maps.reduce((t, m) => Math.max(t, m.played ?? 0, m.best?.last ?? 0), 0);
 
     const meta: string[] = [
-      `<span>mapped by <b>${esc(set.creator || "unknown")}</b></span>`,
+      `<span>${t("mapped by {mapper}", { mapper: `<b>${esc(set.creator || t("unknown"))}</b>` })}</span>`,
       `<span class="num">${lo === hi ? bpm(lo) : `${bpm(lo)}–${bpm(hi)}`} BPM</span>`,
       `<span class="num">${duration(length)}</span>`,
     ];
     if (set.ranked && [1, 2, 4].includes(set.status)) meta.push(`<span>${statusLabel(set.status)} ${date(set.ranked)}</span>`);
-    if (set.added) meta.push(`<span>added ${relativeTime(set.added)}</span>`);
-    if (set.from === "stable") meta.push(`<span>in osu!stable</span>`);
+    if (set.added) meta.push(`<span>${t("added {when}", { when: relativeTime(set.added) })}</span>`);
+    if (set.from === "stable") meta.push(`<span>${t("in osu!stable")}</span>`);
 
     this.el.innerHTML = `
       <div class="set-hero">
         <div class="set-hero-art${set.bg ? "" : " img-missing"}">${set.bg ? `<img src="${thumbUrl(set.bg, 1280)}" alt="" decoding="async" />` : ""}</div>
         <div class="set-hero-scrim"></div>
-        <button class="icon-btn set-back on-image" type="button" data-tip="Back" aria-label="Back">${icon("arrow-left")}</button>
+        <button class="icon-btn set-back on-image" type="button" data-tip="${t("Back")}" aria-label="${t("Back")}">${icon("arrow-left")}</button>
         <div class="set-hero-text">
           <div class="label-caps set-kicker">${esc(statusLabel(set.status))} · ${modes.map((m) => esc(modeLabel(m))).join(", ")}</div>
           <h1 class="set-title">${esc(title)}</h1>
@@ -87,15 +88,15 @@ export class SetView {
           <div class="set-artist">${esc(artist)}</div>
           <div class="meta-line set-meta">${meta.join("")}</div>
           <div class="set-actions">
-            <button class="btn btn-primary btn-lg set-play" type="button">${icon("play", "ic-play")}${icon("pause", "ic-pause")}<span>Play</span></button>
-            ${set.onlineId ? `<button class="btn btn-lg set-web" type="button">${icon("external")}<span>osu! website</span></button>` : ""}
-            <button class="icon-btn set-more" type="button" data-tip="More" aria-label="More actions">${icon("more")}</button>
+            <button class="btn btn-primary btn-lg set-play" type="button">${icon("play", "ic-play")}${icon("pause", "ic-pause")}<span>${t("Play")}</span></button>
+            ${set.onlineId ? `<button class="btn btn-lg set-web" type="button">${icon("external")}<span>${t("osu! website")}</span></button>` : ""}
+            <button class="icon-btn set-more" type="button" data-tip="${t("More")}" aria-label="${t("More actions")}">${icon("more")}</button>
           </div>
         </div>
       </div>
       <div class="set-body">
         <section class="section">
-          <h2 class="section-title">Difficulties <span class="section-count num">${maps.length}</span></h2>
+          <h2 class="section-title">${t("Difficulties")} <span class="section-count num">${maps.length}</span></h2>
           ${this.diffGroups(set, maps)}
         </section>
         <section class="section set-details">
@@ -196,33 +197,33 @@ export class SetView {
     const m = store.snap!.maps[mi];
     const best = m.best ? rankInfo(m.best.rank) : null;
     const facts = [
-      m.mode === 3 ? `${Math.round(m.cs)} keys` : keysOrMode(m),
+      m.mode === 3 ? t("{n} keys", { n: Math.round(m.cs) }) : keysOrMode(m),
       `OD ${fmt1(m.od)}`,
       `HP ${fmt1(m.hp)}`,
       ...(m.mode === 0 || m.mode === 2 ? [`CS ${fmt1(m.cs)}`, `AR ${fmt1(m.ar)}`] : []),
     ];
-    const holdLabel = m.mode === 3 ? "long notes" : "sliders";
+    const holdLabel = m.mode === 3 ? t("long notes") : t("sliders");
     const patterns = mapPatternText(m);
     const dan = m.dan
-      ? `<span class="diff-dan" data-tip="${esc(m.dan.includes("||") ? `Estimated dan: ${m.dan.replace(" || ", ", ")}` : "Estimated dan")}">${esc(shortDan(m.dan, holdRatio(m)))}</span>`
+      ? `<span class="diff-dan" data-tip="${esc(m.dan.includes("||") ? t("Estimated dan: {dan}", { dan: m.dan.replace(" || ", ", ") }) : t("Estimated dan"))}">${esc(shortDan(m.dan, holdRatio(m)))}</span>`
       : "";
     return `
       <div class="diff${m.hidden ? " is-hidden" : ""}" data-map="${mi}" data-id="${esc(m.id)}" role="button" tabindex="0" aria-expanded="false">
         ${srChip(m.sr, "lg", icon("star-fill"))}
         <div class="diff-main">
-          <div class="diff-name">${esc(m.version)}${m.hidden ? `<span class="diff-flag">hidden in osu!</span>` : ""}</div>
+          <div class="diff-name">${esc(m.version)}${m.hidden ? `<span class="diff-flag">${t("hidden in osu!")}</span>` : ""}</div>
           <div class="diff-facts">${facts.map((f) => `<span>${esc(f)}</span>`).join("")}${dan}${patterns ? `<span class="diff-pat">${esc(patterns)}</span>` : ""}</div>
         </div>
         <div class="diff-stats num">
-          <div><b>${num(m.objects)}</b><span>notes</span></div>
+          <div><b>${num(m.objects)}</b><span>${t("notes")}</span></div>
           <div><b>${Math.round(holdRatio(m) * 100)}%</b><span>${holdLabel}</span></div>
-          <div><b>${nps(m).toFixed(1)}</b><span>notes/s</span></div>
-          <div><b>${duration(m.length)}</b><span>length</span></div>
+          <div><b>${fixed(nps(m), 1)}</b><span>${t("notes/s")}</span></div>
+          <div><b>${duration(m.length)}</b><span>${t("length")}</span></div>
         </div>
         <div class="diff-best">
           ${best
-            ? `<span class="grade lg" style="--c:${best.color}">${best.label}</span><div><b class="num">${(m.best!.acc * 100).toFixed(2)}%</b><span>${m.best!.plays} ${m.best!.plays === 1 ? "play" : "plays"}</span></div>`
-            : `<span class="diff-unplayed">${m.played ? `played ${relativeTime(m.played)}` : "not played"}</span>`}
+            ? `<span class="grade lg" style="--c:${best.color}">${best.label}</span><div><b class="num">${pct(m.best!.acc)}</b><span>${tn(m.best!.plays, "{n} play", "{n} plays")}</span></div>`
+            : `<span class="diff-unplayed">${m.played ? t("played {when}", { when: relativeTime(m.played) }) : t("not played")}</span>`}
         </div>
         ${icon("chevron-down", "diff-chev")}
       </div>`;
@@ -230,18 +231,19 @@ export class SetView {
 
   private details(set: SetRow, plays: number, lastPlayed: number): string {
     const rows: [string, string][] = [];
-    if (set.source) rows.push(["Source", esc(set.source)]);
-    if (set.onlineId) rows.push(["Set ID", `<span class="num">${set.onlineId}</span>`]);
-    if (set.ranked) rows.push([[1, 2].includes(set.status) ? "Ranked" : statusLabel(set.status), date(set.ranked)]);
-    if (set.added) rows.push(["Added", date(set.added)]);
-    rows.push(["Your plays", plays ? `${num(plays)}${lastPlayed ? ` · last ${relativeTime(lastPlayed)}` : ""}` : lastPlayed ? `last ${relativeTime(lastPlayed)}` : "none yet"]);
+    if (set.source) rows.push([t("Source"), esc(set.source)]);
+    if (set.onlineId) rows.push([t("Set ID"), `<span class="num">${set.onlineId}</span>`]);
+    if (set.ranked) rows.push([[1, 2].includes(set.status) ? t("Ranked") : statusLabel(set.status), date(set.ranked)]);
+    if (set.added) rows.push([t("Added"), date(set.added)]);
+    const last = lastPlayed ? t("last {when}", { when: relativeTime(lastPlayed) }) : "";
+    rows.push([t("Your plays"), plays ? `${num(plays)}${last ? ` · ${last}` : ""}` : last || t("none yet")]);
     const tags = (set.tags ?? "").split(/\s+/).filter(Boolean);
     return `
       <div class="details-grid">
         <div class="panel details-facts">
           ${rows.map(([k, v]) => `<div class="fact"><span class="fact-k">${k}</span><span class="fact-v">${v}</span></div>`).join("")}
         </div>
-        ${tags.length ? `<div class="panel details-tags"><div class="label-caps">Tags</div><div class="tag-words">${tags.map((t) => `<button type="button" class="tag-word" data-tag="${esc(t)}">${esc(t)}</button>`).join("")}</div></div>` : ""}
+        ${tags.length ? `<div class="panel details-tags"><div class="label-caps">${t("Tags")}</div><div class="tag-words">${tags.map((t) => `<button type="button" class="tag-word" data-tag="${esc(t)}">${esc(t)}</button>`).join("")}</div></div>` : ""}
       </div>`;
   }
 
@@ -305,4 +307,4 @@ function search(q: string): void {
   events.emit("search", q);
 }
 
-const fmt1 = (v: number): string => (Math.round(v * 10) / 10).toString();
+const fmt1 = (v: number): string => fixed(v, Number.isInteger(Math.round(v * 10) / 10) ? 0 : 1);
