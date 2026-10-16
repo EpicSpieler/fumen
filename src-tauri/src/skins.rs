@@ -62,10 +62,9 @@ const BUILTIN: [&str; 5] = ["classic", "retro", "triangles", "argon", "argon-pro
 /// and banana sounds).
 const EXTRACT_VERSION: u32 = 4;
 
-/// The installed lazer's resources assembly (Velopack install, the default).
+/// The installed lazer's resources assembly.
 fn resources_dll() -> Option<PathBuf> {
-    let local = std::env::var_os("LOCALAPPDATA")?;
-    let dll = PathBuf::from(local).join("osulazer").join("current").join("osu.Game.Resources.dll");
+    let dll = crate::lazer_import::installed()?.dir.join("osu.Game.Resources.dll");
     dll.is_file().then_some(dll)
 }
 

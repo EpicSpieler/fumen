@@ -39,7 +39,12 @@ const BUNDLED_COMPAT: &str = include_str!("../../lazer-compat.json");
 pub const COMPAT_URL: &str = "https://raw.githubusercontent.com/EpicSpieler/fumen/main/lazer-compat.json";
 
 static IMPORTER_DLL: &[u8] = include_bytes!("../binaries/fumen-import/fumen-import.dll");
+/// the importer's launcher, built for the system (and processor) Fumen is built for
+#[cfg(windows)]
 static IMPORTER_EXE: &[u8] = include_bytes!("../binaries/fumen-import/fumen-import.exe");
+#[cfg(not(windows))]
+static IMPORTER_EXE: &[u8] = include_bytes!("../binaries/fumen-import/fumen-import");
+const IMPORTER_NAME: &str = if cfg!(windows) { "fumen-import.exe" } else { "fumen-import" };
 
 /// Lines of the importer meant for Fumen start with this.
 const MARK: &str = "@fumen ";
@@ -116,16 +121,58 @@ impl Compat {
 
 #[derive(Debug, Clone)]
 pub struct Installed {
-    /// `…\osulazer\current`: lazer's assemblies and runtime
+    /// lazer's assemblies and runtime: `…\osulazer\current` on Windows,
+    /// `osu!.app/Contents/MacOS` on macOS
     pub dir: PathBuf,
     pub version: String,
 }
 
+/// Where osu!lazer is looked for, for messages.
+pub const INSTALL_HINT: &str =
+    if cfg!(target_os = "macos") { "Applications as osu!.app" } else { "%LOCALAPPDATA%\\osulazer" };
+
 /// lazer as installed by its installer (Velopack: `%LOCALAPPDATA%\osulazer\current`).
+#[cfg(windows)]
 pub fn installed() -> Option<Installed> {
     let dir = PathBuf::from(std::env::var_os("LOCALAPPDATA")?).join("osulazer").join("current");
     let version = parse_sq_version(&std::fs::read_to_string(dir.join("sq.version")).ok()?)?;
     dir.join("osu.Game.dll").is_file().then_some(Installed { dir, version })
+}
+
+/// lazer's app in /Applications or ~/Applications. Its version: Velopack's `sq.version` (in the
+/// bundle's MacOS or Contents folder), else the bundle's own version.
+#[cfg(target_os = "macos")]
+pub fn installed() -> Option<Installed> {
+    let home = PathBuf::from(std::env::var_os("HOME")?);
+    [PathBuf::from("/Applications"), home.join("Applications")].into_iter().find_map(|apps| {
+        let contents = apps.join("osu!.app").join("Contents");
+        let dir = contents.join("MacOS");
+        if !dir.join("osu.Game.dll").is_file() {
+            return None;
+        }
+        let version = [dir.join("sq.version"), contents.join("sq.version")]
+            .iter()
+            .find_map(|p| parse_sq_version(&std::fs::read_to_string(p).ok()?))
+            .or_else(|| plist_version(&std::fs::read_to_string(contents.join("Info.plist")).ok()?))?;
+        Some(Installed { dir, version })
+    })
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
+pub fn installed() -> Option<Installed> {
+    None
+}
+
+/// CFBundleVersion from an Info.plist (XML), as lazer names its versions ("2026.1005.0-lazer").
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn plist_version(xml: &str) -> Option<String> {
+    let after = &xml[xml.find("<key>CFBundleVersion</key>")? + "<key>CFBundleVersion</key>".len()..];
+    let start = after.find("<string>")? + "<string>".len();
+    let v = after[start..start + after[start..].find("</string>")?].trim();
+    if v.is_empty() {
+        return None;
+    }
+    Some(if v.contains('-') { v.to_string() } else { format!("{v}-lazer") })
 }
 
 fn parse_sq_version(xml: &str) -> Option<String> {
@@ -182,7 +229,20 @@ pub fn lazer_running(install: &Path) -> bool {
     }
 }
 
-#[cfg(not(windows))]
+/// Whether lazer is running: a process from an osu!.app (a list that can't be read counts as
+/// running, and so does a bare "osu!" whose path `ps` didn't give).
+#[cfg(target_os = "macos")]
+pub fn lazer_running(_install: &Path) -> bool {
+    match Command::new("/bin/ps").args(["-axo", "comm="]).output() {
+        Ok(out) if out.status.success() => String::from_utf8_lossy(&out.stdout).lines().any(|l| {
+            let l = l.trim().to_lowercase();
+            l.contains("osu!.app/contents/macos/") || l == "osu!"
+        }),
+        _ => true,
+    }
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
 pub fn lazer_running(_install: &Path) -> bool {
     true
 }
@@ -215,7 +275,7 @@ pub fn status(storage: Option<&Path>, compat: &Compat) -> Status {
     let tested = version.as_deref().is_some_and(|v| compat.allows(v));
     let running = lazer.as_ref().is_some_and(|l| lazer_running(&l.dir));
     let (reason, message) = match &lazer {
-        None => (Some("not-installed"), Some("osu!lazer's installation wasn't found (it's looked for in %LOCALAPPDATA%\\osulazer).".to_string())),
+        None => (Some("not-installed"), Some(format!("osu!lazer's installation wasn't found (it's looked for in {INSTALL_HINT})."))),
         Some(_) if storage.map_or(true, |s| !s.join("client.realm").is_file()) => {
             (Some("no-library"), Some("lazer's data folder wasn't found. Pick it in Settings.".to_string()))
         }
@@ -259,7 +319,7 @@ pub fn host_dir(cache: &Path, lazer: &Installed) -> Result<PathBuf> {
     let dir = root.join(&lazer.version);
     let ready = dir.join(".fumen-ready");
     let fresh = std::fs::read(dir.join("fumen-import.dll")).is_ok_and(|b| b == IMPORTER_DLL)
-        && std::fs::read(dir.join("fumen-import.exe")).is_ok_and(|b| b == IMPORTER_EXE)
+        && std::fs::read(dir.join(IMPORTER_NAME)).is_ok_and(|b| b == IMPORTER_EXE)
         && dir.join("fumen-import.deps.json").is_file();
     if ready.is_file() && fresh {
         return Ok(dir);
@@ -271,7 +331,12 @@ pub fn host_dir(cache: &Path, lazer: &Installed) -> Result<PathBuf> {
     }
     link_tree(&lazer.dir, &dir)?;
     std::fs::write(dir.join("fumen-import.dll"), IMPORTER_DLL)?;
-    std::fs::write(dir.join("fumen-import.exe"), IMPORTER_EXE)?;
+    std::fs::write(dir.join(IMPORTER_NAME), IMPORTER_EXE)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(dir.join(IMPORTER_NAME), std::fs::Permissions::from_mode(0o755))?;
+    }
     // started like lazer itself: its runtime settings (its .NET, self-contained) and its list of
     // assemblies and native libraries — without the list, .NET doesn't see a self-contained app
     std::fs::copy(lazer.dir.join("osu!.runtimeconfig.json"), dir.join("fumen-import.runtimeconfig.json"))?;
@@ -295,7 +360,7 @@ fn link_tree(from: &Path, to: &Path) -> Result<()> {
 }
 
 fn importer_command(host: &Path) -> Command {
-    let mut cmd = Command::new(host.join("fumen-import.exe"));
+    let mut cmd = Command::new(host.join(IMPORTER_NAME));
     cmd.current_dir(host).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
     #[cfg(windows)]
     {
@@ -498,6 +563,14 @@ mod tests {
     use super::*;
 
     #[test]
+    fn plist_versions() {
+        let plist = "<dict><key>CFBundleName</key><string>osu!</string><key>CFBundleVersion</key>\n<string>2026.1005.0</string></dict>";
+        assert_eq!(plist_version(plist).as_deref(), Some("2026.1005.0-lazer"));
+        assert_eq!(plist_version(&plist.replace("2026.1005.0", "2026.1005.0-lazer")).as_deref(), Some("2026.1005.0-lazer"));
+        assert_eq!(plist_version("<dict></dict>"), None);
+    }
+
+    #[test]
     fn sq_version() {
         let xml = "<package><metadata><id>osulazer</id><version>2026.1005.0-lazer</version><channel>win</channel></metadata></package>";
         assert_eq!(parse_sq_version(xml).as_deref(), Some("2026.1005.0-lazer"));
@@ -596,6 +669,38 @@ mod tests {
     fn importer(host: &Path, args: &[&str]) -> (i32, Vec<serde_json::Value>) {
         let args: Vec<&std::ffi::OsStr> = args.iter().map(|a| a.as_ref()).collect();
         run(host, &args).unwrap()
+    }
+
+    /// The importer and the reader with the installed lazer on a fresh library only (nobody's
+    /// library needed): what the macOS build runs on GitHub's machines against lazer's release.
+    /// A test set is downloaded from a mirror.
+    #[test]
+    #[ignore = "needs an installed osu!lazer and the network; the macOS build runs it"]
+    fn importer_on_fresh_library() {
+        let lazer = installed().expect("osu!lazer isn't installed");
+        println!("lazer {} at {}", lazer.version, lazer.dir.display());
+        assert!(!lazer_running(&lazer.dir), "lazer counts as running");
+        let work = std::env::temp_dir().join("fumen-fresh-lazer");
+        let _ = std::fs::remove_dir_all(&work);
+        std::fs::create_dir_all(&work).unwrap();
+
+        let host = host_dir(&work.join("cache"), &lazer).unwrap();
+        let (code, info) = importer(&host, &["info"]);
+        assert_eq!(code, 0, "info: {info:?}");
+        println!("importer runs: osu.Game {}, .NET {}, database schema {}", info[0]["osuGame"], info[0]["runtime"], info[0]["schema"]);
+
+        let set = TEST_SETS[0];
+        let (archive, mirror) = crate::downloads::download_set(set, &work.join("dl"), &crate::downloads::Mirrors::default(), |_| true).unwrap();
+        let fresh = work.join("fresh");
+        let (code, out) = importer(&host, &["selftest", fresh.to_str().unwrap(), archive.to_str().unwrap()]);
+        assert_eq!(code, 0, "selftest: {out:?}");
+        assert_eq!(out[0]["sameSet"], true, "the second import made another set: {out:?}");
+        let sets = sets_by_id(&export(&fresh.join("client.realm"), &work.join("fresh.json")));
+        assert_eq!(sets.len(), 1, "sets in the fresh library");
+        let s = sets.values().next().unwrap();
+        assert_eq!(s["onlineId"].as_u64(), Some(u64::from(set)), "set id");
+        println!("set {set} from {mirror}: imported by lazer's code, read back by fumen-realm ({} charts)", s["maps"].as_array().unwrap().len());
+        let _ = std::fs::remove_dir_all(&work);
     }
 
     /// The import tested against the installed lazer, end to end; on success with
