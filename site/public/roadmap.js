@@ -96,14 +96,13 @@ const VERSIONS = [
     explain: [["care", "<b>Library care:</b> the same chart twice, a missing file, and what it all costs."]],
   },
   {
-    v: "1.0", name: "Release", state: "next",
+    v: "1.0", name: "Release", state: "done", when: "Oct 2026",
     summary: "Ready for everyone.",
     items: [
       [1, "Installer and auto-update"],
       [1, "English and German"],
       [1, "Dark, OLED, Light and High contrast"],
       [1, "A website with downloads"],
-      [0, "macOS"],
     ],
     explain: [["themes", "<b>Themes and languages,</b> the same app in four looks."]],
   },
@@ -162,7 +161,7 @@ const VERSIONS = [
     v: "1.6", name: "Everywhere", state: "later",
     summary: "Beyond one Windows PC.",
     items: [
-      [0, "Linux and macOS, with lazer's library on those systems"],
+      [0, "macOS (moved from 1.0: built, not tested yet) and Linux, with lazer's library on those systems"],
       [0, "Your goals, skills and pools on fumen.dertesti.dev, for your phone"],
     ],
   },
@@ -1198,7 +1197,12 @@ function stats() {
   $("[data-total]").textContent = String(pre.length);
   const meter = $("[data-meter]");
   requestAnimationFrame(() => requestAnimationFrame(() => (meter.style.transform = `scaleX(${shipped / pre.length})`)));
-  const next = VERSIONS.find((v) => v.state === "next");
+  if (shipped === pre.length) {
+    $("[data-shipped]").closest(".stat").querySelector(".label").textContent = "1.0 is out";
+    $('[data-filter="coming"]').hidden = true;
+  }
+  // with 1.0 out, the next is the first one after it
+  const next = VERSIONS.find((v) => v.state === "next") ?? VERSIONS.find((v) => v.state === "later");
   if (next) {
     $("[data-next]").textContent = `${next.v} ${next.name}`;
     $("[data-next-sub]").textContent = next.summary;
