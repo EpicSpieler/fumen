@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type { Comparison } from "./compare";
 import type { Goal } from "./goals";
+import { fromRust } from "./i18n";
 import type { ChartMods } from "./mods";
 import type {
   CareReport, ApiError,
@@ -74,9 +75,10 @@ export const api = {
     return raw;
   },
   /** whether sets can be imported into osu!lazer right now */
-  lazerImportStatus: () => invoke<LazerImportStatus>("lazer_import_status"),
+  lazerImportStatus: () => invoke<LazerImportStatus>("lazer_import_status").then((s) => ({ ...s, message: s.message && fromRust(s.message) })),
   /** downloads the sets behind osu! links and imports them into lazer (progress: onImportProgress) */
-  importBeatmaps: (links: string[]) => invoke<ImportSummary>("import_beatmaps", { links }),
+  importBeatmaps: (links: string[]) =>
+    invoke<ImportSummary>("import_beatmaps", { links }).then((s) => ({ ...s, stopped: s.stopped && fromRust(s.stopped) })),
   /** every collection into the cloud (fumen.dertesti.dev), under the osu! login */
   cloudPushCollections: () => invoke<{ collections: number; saved: number }>("cloud_push_collections"),
   /** the cloud's collections merged into this library; the sets they want that it doesn't have */
@@ -172,7 +174,7 @@ export function onAnalysis(progress: (p: ScanProgress) => void, done: () => void
 export function asApiError(e: unknown): ApiError {
   if (e && typeof e === "object" && "message" in e) {
     const o = e as { code?: unknown; message?: unknown };
-    return { code: String(o.code ?? "unknown"), message: String(o.message) };
+    return { code: String(o.code ?? "unknown"), message: fromRust(String(o.message)) };
   }
   return { code: "unknown", message: String(e) };
 }

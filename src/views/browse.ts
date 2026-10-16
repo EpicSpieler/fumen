@@ -19,7 +19,7 @@ import { icon } from "../ui/icons";
 import { starRange } from "../ui/star-range";
 import { openSet } from "./actions";
 import { importEvents, importSets, openImport, setImportState, type SetImport } from "./import";
-import { t, tn } from "../lib/i18n";
+import { fromRust, t, tn } from "../lib/i18n";
 
 const MODES = [
   { mode: -1, label: t("All") },
@@ -416,7 +416,7 @@ export class BrowseView {
     const st = setImportState(id);
     if (st && st.stage !== "error" && !(st.stage === "skipped" && st.message === "Cancelled")) return stateHtml(st);
     const ready = !!this.status?.ready;
-    const why = st?.stage === "error" ? t("Failed: {error}. Again?", { error: st.message ?? t("unknown") }) : ready ? t("Download it and put it into osu!lazer") : this.lazerReason();
+    const why = st?.stage === "error" ? t("Failed: {error}. Again?", { error: st.message ? fromRust(st.message) : t("unknown") }) : ready ? t("Download it and put it into osu!lazer") : this.lazerReason();
     return `<button class="btn btn-sm br-add${st?.stage === "error" ? " failed" : ""}" type="button"${ready ? "" : " disabled"} data-tip="${esc(why)}">${icon(st?.stage === "error" ? "refresh" : "download")}<span>${st?.stage === "error" ? t("Again") : t("Add")}</span></button>`;
   }
 
@@ -642,7 +642,7 @@ function stateHtml(st: SetImport): string {
     ready: t("Downloaded"),
     importing: t("Importing"),
     done: t("Imported"),
-    skipped: st.message === "Cancelled" ? t("Cancelled") : (st.message ?? t("Skipped")),
+    skipped: st.message ? fromRust(st.message) : t("Skipped"),
     error: t("Failed"),
   };
   const done = st.stage === "done" || st.stage === "skipped";

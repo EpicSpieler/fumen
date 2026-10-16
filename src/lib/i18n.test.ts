@@ -1,6 +1,7 @@
-// Every text the UI shows through t() / tn() has its German, and German has nothing left over.
+// Every text the UI shows through t() / tn() has its German, and German has nothing left over;
+// the same for what Fumen's Rust side says (src/locales/de/rust.ts, read by fromRust()).
 import { describe, expect, it } from "vitest";
-import { de } from "../locales/de";
+import { de, rust } from "../locales/de";
 
 /** the app's source, but not tests, translations or i18n.ts itself */
 const SOURCES = Object.entries(
@@ -59,5 +60,47 @@ describe("German", () => {
       if (!v.trim()) wrong.push(`${k}: empty`);
     }
     expect(wrong).toEqual([]);
+  });
+});
+
+/** src-tauri's source, without its tests */
+const RUST = Object.entries(import.meta.glob<string>("../../src-tauri/src/**/*.rs", { query: "?raw", import: "default", eager: true })).map(([path, text]) => {
+  const tests = text.search(/#\[cfg\(test\)\]\s*mod (tests|real) \{/);
+  return [path, tests >= 0 ? text.slice(0, tests) : text] as const;
+});
+
+const RS = STR;
+/** where Rust hands the UI a text: an error, an import row's or lazer's message, a fallback */
+const SAYS = [
+  new RegExp(String.raw`Error::known\(\s*"[a-z-]+",\s*(?:format!\(\s*)?` + RS, "g"),
+  new RegExp(String.raw`Some\(\s*(?:format!\(\s*)?` + RS, "g"),
+  new RegExp(String.raw`unwrap_or_else\(\|\|\s*(?:format!\(\s*)?` + RS, "g"),
+  new RegExp(String.raw`importer_error\([^,]+,[^,]+,\s*` + RS, "g"),
+];
+/** `{}`, `{e}`, `{name}`, `{x:?}` all stand for something filled in */
+const shape = (s: string): string => s.replace(/\{[^{}\n"]*\}/g, "{}");
+
+describe("German for Rust", () => {
+  // as plain text: a Rust char literal like '"' would throw a scan for strings off
+  const source = shape(RUST.map(([, text]) => text).join("\n"));
+  const said = new Map<string, string>();
+  for (const [path, text] of RUST) for (const re of SAYS) for (const m of text.matchAll(re)) if (/[A-Z]/.test(m[1]) && / /.test(m[1])) said.set(m[1], path.replace(/^.*src-tauri\/src\//, ""));
+
+  it("finds the source", () => {
+    expect(RUST.length).toBeGreaterThan(20);
+    expect(said.size).toBeGreaterThan(40);
+  });
+
+  it("has every text", () => {
+    const known = new Set([...Object.keys(rust), ...Object.keys(de)].map(shape));
+    expect([...said].filter(([s]) => !known.has(shape(s))).map(([s, f]) => `${f}: ${s}`)).toEqual([]);
+  });
+
+  it("has nothing Rust doesn't say", () => {
+    expect(Object.keys(rust).filter((k) => !source.includes(`"${shape(k)}`))).toEqual([]);
+  });
+
+  it("keeps the placeholders", () => {
+    expect(Object.entries(rust).filter(([k, v]) => placeholders(k) !== placeholders(v) || !v.trim())).toEqual([]);
   });
 });
