@@ -21,6 +21,7 @@ mod osu_auth;
 mod osu_scores;
 mod library;
 mod paths;
+mod ping;
 mod player;
 mod protocol;
 mod settings;
@@ -1374,6 +1375,9 @@ pub fn run() {
             };
             state.refresh_storage();
             state.reload_stable_files();
+            if state.settings.lock().unwrap_or_else(|e| e.into_inner()).start_ping {
+                ping::start(state.data_dir.clone(), osu_auth::Endpoints::default().site);
+            }
             app.manage(state);
             // difficulties imported by an older version (or before a crash) still need analysing
             start_analysis(app.handle());

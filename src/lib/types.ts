@@ -419,6 +419,8 @@ export interface Settings {
   autoRescan: boolean;
   stablePath: string | null;
   useStable: boolean;
+  /** the start ping, so fumen.dertesti.dev can count the people using Fumen */
+  startPing: boolean;
   ui: Partial<UiPrefs>;
 }
 
