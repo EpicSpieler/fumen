@@ -182,7 +182,7 @@ development builds never send it. The site keeps the counts in `stats/stats.json
 ## Releases and updates
 
 `npm run release -- patch` (or `minor`, or a version) builds the Windows installer, signs it for
-the updater, tags the release and puts it on GitHub (a release in the private repo) and on the site,
+the updater, tags the release and puts it on GitHub (a release in this repo) and on the site,
 at `https://fumen.dertesti.dev/updates/`. Installed copies look there when they start and every few
 hours; Settings › About checks on demand, and an update shows up above the profile in the sidebar.
 Installing restarts Fumen (Tauri's updater checks the signature first; not while beatmaps are

@@ -1,6 +1,6 @@
 name: Backend
 
-# Windows minutes are expensive on private repos: only run when the Rust side or the sidecar changes.
+# Only when the Rust side or the sidecar changes: the frontend's tests run on the PC before a release.
 on:
   push:
     branches: [main]

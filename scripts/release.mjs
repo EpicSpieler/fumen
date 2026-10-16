@@ -1,5 +1,5 @@
 // Releases Fumen: builds the signed Windows installer, tags it, puts it on GitHub (a release in the
-// private repo) and then on fumen.dertesti.dev/updates, where every installed Fumen finds it.
+// repo) and then on fumen.dertesti.dev/updates, where every installed Fumen finds it.
 //
 //   node scripts/release.mjs 0.4.1                  that version
 //   node scripts/release.mjs patch|minor            the next one
@@ -135,7 +135,7 @@ const scratch = mkdtempSync(join(tmpdir(), "fumen-release-"));
 const latestPath = join(scratch, "latest.json");
 writeFileSync(latestPath, JSON.stringify(latest, null, 2) + "\n");
 
-// ── GitHub: a release in the private repo ────────────────────────────────
+// ── GitHub: a release in the repo ────────────────────────────────────────
 console.log("→ GitHub release");
 run(gh, ["release", "create", `v${version}`, installerPath, sigPath, latestPath, "--title", `Fumen ${version}`, "--notes", notes, "--verify-tag"]);
 

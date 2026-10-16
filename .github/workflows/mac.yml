@@ -1,7 +1,7 @@
 name: macOS
 
 # The macOS app, built on GitHub's Macs (a Mac app can't be built on Windows). Started by hand
-# (scripts/mac-build.mjs): macOS minutes count ten times on a private repo.
+# (scripts/mac-build.mjs), with milestone releases.
 #
 # Apple Silicon is also tested for real: osu!lazer's macOS release (from GitHub, ppy/osu) goes
 # into ~/Applications, and Fumen's importer runs lazer's own import into a fresh library, read
