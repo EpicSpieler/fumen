@@ -453,7 +453,13 @@ sections below is the order of the work.
       searches. Built on GitHub's Macs (`npm run mac`, by hand: macOS minutes count ten times on a
       private repo), Apple Silicon tested against lazer's macOS release (from GitHub) first. Not
       signed by Apple, no self-update on macOS until the release
-- [ ] English and German
+- [ ] English and German — in parts. 0.7.4: the system (`src/lib/i18n.ts`: `t("English text")`
+      with `{name}` placeholders, `tn(n, one, other)` for counts; German in `src/locales/de/*.ts`, keyed
+      by the English; `i18n.test.ts` fails on any text without German or German without a text),
+      numbers, dates and relative times by language, the language in Settings › Appearance (kept in
+      localStorage as well, so it is known before anything renders; switching reloads the window).
+      Shell and Settings in German. English stays the default until every view is done, then
+      Fumen follows the system (`FOLLOW_SYSTEM`)
 - [ ] A website with downloads
 
 ## After 1.0
