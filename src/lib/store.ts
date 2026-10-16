@@ -97,9 +97,17 @@ export function setPrefs(patch: Partial<UiPrefs>): void {
   Object.assign(pending, patch);
   events.emit("prefs", patch);
   clearTimeout(saveTimer);
-  saveTimer = window.setTimeout(() => {
-    const ui = pending;
-    pending = {};
-    api.updateSettings({ ui }).then((s) => (store.settings = s)).catch((e) => console.warn("[prefs] save failed", e));
-  }, 400);
+  saveTimer = window.setTimeout(() => void flushPrefs(), 400);
+}
+
+/** Writes what's pending now (before the window reloads, say). */
+export async function flushPrefs(): Promise<void> {
+  clearTimeout(saveTimer);
+  const ui = pending;
+  pending = {};
+  if (!Object.keys(ui).length) return;
+  await api
+    .updateSettings({ ui })
+    .then((s) => (store.settings = s))
+    .catch((e) => console.warn("[prefs] save failed", e));
 }

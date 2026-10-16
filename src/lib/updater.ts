@@ -4,6 +4,7 @@
  * development build unless asked; installing is always the player's call. */
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { asApiError, isMac } from "./api";
+import { t } from "./i18n";
 import { Emitter, events } from "./store";
 
 /** the first look after start, and how often after that */
@@ -60,7 +61,7 @@ export async function installUpdate(): Promise<void> {
   const update = pending;
   if (!update || busy()) return;
   if (importing) {
-    set({ phase: "error", message: "Wait for the beatmaps being added to lazer, then update.", version: update.version });
+    set({ phase: "error", message: t("Wait for the beatmaps being added to lazer, then update."), version: update.version });
     return;
   }
   const version = update.version;
@@ -85,9 +86,9 @@ export async function installUpdate(): Promise<void> {
 
 function updateError(e: unknown): string {
   const raw = typeof e === "string" ? e : asApiError(e).message;
-  if (/signature/i.test(raw)) return "The update's signature didn't match, so it wasn't installed.";
-  if (/network|connect|dns|timed? ?out|request/i.test(raw)) return "Couldn't reach Fumen's update server. Check your connection.";
-  return raw || "The update didn't work.";
+  if (/signature/i.test(raw)) return t("The update's signature didn't match, so it wasn't installed.");
+  if (/network|connect|dns|timed? ?out|request/i.test(raw)) return t("Couldn't reach Fumen's update server. Check your connection.");
+  return raw || t("The update didn't work.");
 }
 
 /** "42%" of a download, or how much so far when the size isn't known. */

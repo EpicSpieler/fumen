@@ -1,27 +1,36 @@
 /* Formatting + osu! domain colours. Colours here are *content* (difficulty, grade), not decoration. */
+import { locale, t } from "./i18n";
 import type { MapRow, SetRow } from "./types";
 
 export const MODE_LABEL = ["osu!", "osu!taiko", "osu!catch", "osu!mania"] as const;
 export const MODE_SHORT = ["osu!", "taiko", "catch", "mania"] as const;
 
 export const modeLabel = (mode: number, ruleset?: string): string =>
-  MODE_LABEL[mode as 0 | 1 | 2 | 3] ?? ruleset ?? "Custom";
+  MODE_LABEL[mode as 0 | 1 | 2 | 3] ?? ruleset ?? t("Custom");
 
 export const STATUS_LABEL: Record<number, string> = {
-  [-4]: "Modified",
-  [-3]: "Local",
-  [-2]: "Graveyard",
-  [-1]: "WIP",
-  0: "Pending",
-  1: "Ranked",
-  2: "Approved",
-  3: "Qualified",
-  4: "Loved",
+  [-4]: t("Modified"),
+  [-3]: t("Local"),
+  [-2]: t("Graveyard"),
+  [-1]: t("WIP"),
+  0: t("Pending"),
+  1: t("Ranked"),
+  2: t("Approved"),
+  3: t("Qualified"),
+  4: t("Loved"),
 };
-export const statusLabel = (s: number): string => STATUS_LABEL[s] ?? "Local";
+export const statusLabel = (s: number): string => STATUS_LABEL[s] ?? t("Local");
 
-const nf = new Intl.NumberFormat("en-GB");
+const nf = new Intl.NumberFormat(locale);
 export const num = (n: number): string => nf.format(n);
+
+const fixedFormats = new Map<number, Intl.NumberFormat>();
+/** `v` with exactly `digits` decimals, as the language writes them (German: 5,23). */
+export function fixed(v: number, digits: number): string {
+  let f = fixedFormats.get(digits);
+  if (!f) fixedFormats.set(digits, (f = new Intl.NumberFormat(locale, { minimumFractionDigits: digits, maximumFractionDigits: digits, useGrouping: false })));
+  return f.format(v);
+}
 
 export function duration(ms: number): string {
   const total = Math.max(0, Math.round(ms / 1000));
@@ -31,8 +40,8 @@ export function duration(ms: number): string {
   return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}` : `${m}:${String(s).padStart(2, "0")}`;
 }
 
-export const bpm = (v: number): string => (Math.abs(v - Math.round(v)) < 0.05 ? String(Math.round(v)) : v.toFixed(1));
-export const stars = (sr: number): string => sr.toFixed(2);
+export const bpm = (v: number): string => (Math.abs(v - Math.round(v)) < 0.05 ? String(Math.round(v)) : fixed(v, 1));
+export const stars = (sr: number): string => fixed(sr, 2);
 /** A size in bytes: 812 KB, 4.6 MB, 39.1 GB (in thousands). */
 export function bytes(n: number): string {
   const units = ["B", "KB", "MB", "GB", "TB"];
@@ -42,9 +51,9 @@ export function bytes(n: number): string {
     v /= 1000;
     u++;
   }
-  return `${u === 0 || v >= 100 ? Math.round(v) : v.toFixed(1)} ${units[u]}`;
+  return `${u === 0 || v >= 100 ? Math.round(v) : fixed(v, 1)} ${units[u]}`;
 }
-export const pct = (v: number, digits = 2): string => `${(v * 100).toFixed(digits)}%`;
+export const pct = (v: number, digits = 2): string => `${fixed(v * 100, digits)}%`;
 
 /** "7K" for mania, the ruleset name otherwise. */
 export function keysOrMode(map: MapRow): string {
@@ -57,11 +66,11 @@ export const holdRatio = (map: MapRow): number => (map.objects > 0 ? map.holds /
 /** Average notes per second over the drain length. */
 export const nps = (map: MapRow): number => (map.length > 0 ? map.objects / (map.length / 1000) : 0);
 
-const rtf = new Intl.RelativeTimeFormat("en-GB", { numeric: "auto" });
+const rtf = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
 export function relativeTime(ms: number, now = Date.now()): string {
   const diff = (ms - now) / 1000;
   const abs = Math.abs(diff);
-  if (abs < 60) return "just now";
+  if (abs < 60) return t("just now");
   const units: [Intl.RelativeTimeFormatUnit, number][] = [
     ["minute", 60],
     ["hour", 3600],
@@ -76,14 +85,14 @@ export function relativeTime(ms: number, now = Date.now()): string {
   return rtf.format(Math.round(diff / size), unit);
 }
 
-const df = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" });
+const df = new Intl.DateTimeFormat(locale, { day: "numeric", month: "short", year: "numeric" });
 export const date = (ms: number): string => df.format(new Date(ms));
 
 export function displayTitle(set: SetRow, unicode: boolean): string {
-  return (unicode && set.titleUnicode) || set.title || set.titleUnicode || "Untitled";
+  return (unicode && set.titleUnicode) || set.title || set.titleUnicode || t("Untitled");
 }
 export function displayArtist(set: SetRow, unicode: boolean): string {
-  return (unicode && set.artistUnicode) || set.artist || set.artistUnicode || "Unknown artist";
+  return (unicode && set.artistUnicode) || set.artist || set.artistUnicode || t("Unknown artist");
 }
 
 // ── star rating colour (osu! difficulty spectrum, gamma-correct interpolation) ──

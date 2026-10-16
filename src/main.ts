@@ -19,6 +19,7 @@ import "./styles/browse.css";
 
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { api, asApiError, isMac, isTauri, onAnalysis, thumbUrl } from "./lib/api";
+import { adoptLang, t, tn } from "./lib/i18n";
 import { esc, num } from "./lib/format";
 import { current, goSection, initRouterInput, router, sectionRoot, type Route } from "./lib/router";
 import { describeScan, isScanning, runScan } from "./lib/scan";
@@ -65,32 +66,32 @@ app.innerHTML = `
     <div class="side-head" data-tauri-drag-region>
       <button class="icon-btn side-toggle" type="button">${icon("chevrons-left")}</button>
       <div class="side-brand" data-tauri-drag-region>${MARK}<span class="side-name" data-tauri-drag-region>Fumen</span></div>
-      <button class="icon-btn side-refresh" type="button" aria-label="Update library">${icon("refresh")}</button>
+      <button class="icon-btn side-refresh" type="button" aria-label="${t("Update library")}">${icon("refresh")}</button>
     </div>
     <div class="side-search">
       <label class="search">
         ${icon("search", "search-ic")}
-        <input type="text" spellcheck="false" autocomplete="off" placeholder="Search…" aria-label="Search the library" />
-        <button class="icon-btn sm search-clear" type="button" data-tip="Clear" aria-label="Clear search" hidden>${icon("x")}</button>
+        <input type="text" spellcheck="false" autocomplete="off" placeholder="${t("Search…")}" aria-label="${t("Search the library")}" />
+        <button class="icon-btn sm search-clear" type="button" data-tip="${t("Clear")}" aria-label="${t("Clear search")}" hidden>${icon("x")}</button>
       </label>
-      <button class="nav-item side-search-btn reveal" type="button" data-tip="Search" aria-label="Search">${icon("search")}</button>
+      <button class="nav-item side-search-btn reveal" type="button" data-tip="${t("Search")}" aria-label="${t("Search")}">${icon("search")}</button>
     </div>
     <div class="nav">
-      <button class="nav-item reveal" type="button" data-nav="home">${icon("home")}<span class="nav-label">Home</span></button>
-      <button class="nav-item reveal" type="button" data-nav="library">${icon("library")}<span class="nav-label">Library</span></button>
-      <button class="nav-item reveal" type="button" data-nav="history">${icon("clock")}<span class="nav-label">History</span></button>
-      <button class="nav-item reveal" type="button" data-nav="skills">${icon("radar")}<span class="nav-label">Skills</span></button>
-      <button class="nav-item reveal" type="button" data-nav="browse">${icon("compass")}<span class="nav-label">Browse</span></button>
-      <button class="nav-item reveal" type="button" data-nav="care">${icon("drive")}<span class="nav-label">Library care</span></button>
-      <button class="nav-item reveal" type="button" data-act="import">${icon("download")}<span class="nav-label">Add beatmaps</span></button>
+      <button class="nav-item reveal" type="button" data-nav="home">${icon("home")}<span class="nav-label">${t("Home")}</span></button>
+      <button class="nav-item reveal" type="button" data-nav="library">${icon("library")}<span class="nav-label">${t("Library")}</span></button>
+      <button class="nav-item reveal" type="button" data-nav="history">${icon("clock")}<span class="nav-label">${t("History")}</span></button>
+      <button class="nav-item reveal" type="button" data-nav="skills">${icon("radar")}<span class="nav-label">${t("Skills")}</span></button>
+      <button class="nav-item reveal" type="button" data-nav="browse">${icon("compass")}<span class="nav-label">${t("Browse")}</span></button>
+      <button class="nav-item reveal" type="button" data-nav="care">${icon("drive")}<span class="nav-label">${t("Library care")}</span></button>
+      <button class="nav-item reveal" type="button" data-act="import">${icon("download")}<span class="nav-label">${t("Add beatmaps")}</span></button>
     </div>
     <div class="side-sep"></div>
     <section class="side-box" data-group="collections" hidden>
       <div class="side-box-bar">
         <button class="side-box-head" type="button" aria-expanded="true">
-          ${icon("collection", "side-box-ic")}<span class="side-box-label">Collections</span>${icon("chevron-down", "side-box-chev")}
+          ${icon("collection", "side-box-ic")}<span class="side-box-label">${t("Collections")}</span>${icon("chevron-down", "side-box-chev")}
         </button>
-        <button class="icon-btn sm side-box-add" type="button" data-tip="New collection" aria-label="New collection">${icon("plus")}</button>
+        <button class="icon-btn sm side-box-add" type="button" data-tip="${t("New collection")}" aria-label="${t("New collection")}">${icon("plus")}</button>
       </div>
       <div class="side-list"></div>
     </section>
@@ -107,16 +108,16 @@ app.innerHTML = `
           <div class="profile-name"></div>
           <div class="profile-sub num"></div>
         </div>
-        <button class="icon-btn profile-settings" type="button" data-nav="settings" data-tip="Settings" aria-label="Settings">${icon("settings")}</button>
+        <button class="icon-btn profile-settings" type="button" data-nav="settings" data-tip="${t("Settings")}" aria-label="${t("Settings")}">${icon("settings")}</button>
       </div>
     </div>
   </nav>
   <div class="main">
     <div class="topbar" data-tauri-drag-region>
       ${isMac ? "" : `<div class="win-controls">
-        <button class="win-btn" id="win-min" type="button" aria-label="Minimise">${icon("win-min")}</button>
-        <button class="win-btn" id="win-max" type="button" aria-label="Maximise">${icon("win-max", "ic-max")}${icon("win-restore", "ic-restore")}</button>
-        <button class="win-btn win-close" id="win-close" type="button" aria-label="Close">${icon("win-close")}</button>
+        <button class="win-btn" id="win-min" type="button" aria-label="${t("Minimise")}">${icon("win-min")}</button>
+        <button class="win-btn" id="win-max" type="button" aria-label="${t("Maximise")}">${icon("win-max", "ic-max")}${icon("win-restore", "ic-restore")}</button>
+        <button class="win-btn win-close" id="win-close" type="button" aria-label="${t("Close")}">${icon("win-close")}</button>
       </div>`}
     </div>
     <main class="content"></main>
@@ -131,15 +132,15 @@ function renderSideUpdate(s: UpdateState): void {
   const show = s.phase === "available" || s.phase === "downloading" || s.phase === "installing" || (s.phase === "error" && !!s.version);
   sideUpdate.hidden = !show;
   if (!show) return;
-  const version = "version" in s ? s.version : "";
+  const version = ("version" in s ? s.version : "") ?? "";
   const [title, sub] =
     s.phase === "downloading"
-      ? [`Downloading ${version}`, downloadText(s)]
+      ? [t("Downloading {version}", { version }), downloadText(s)]
       : s.phase === "installing"
-        ? [`Installing ${version}`, "Fumen restarts"]
+        ? [t("Installing {version}", { version }), t("Fumen restarts")]
         : s.phase === "error"
-          ? [`Update to ${version}`, "Didn't work, try again"]
-          : [`Update to ${version}`, "Restarts Fumen"];
+          ? [t("Update to {version}", { version }), t("Didn't work, try again")]
+          : [t("Update to {version}", { version }), t("Restarts Fumen")];
   sideUpdate.querySelector(".side-update-title")!.textContent = title;
   sideUpdate.querySelector(".side-update-sub")!.textContent = sub;
   sideUpdate.disabled = s.phase === "downloading" || s.phase === "installing";
@@ -180,9 +181,9 @@ function ensureHome(): HomeView {
 function ensureLibrary(): LibraryView {
   if (!library) {
     library = new LibraryView({
-      title: "Library",
+      title: t("Library"),
       persistent: true,
-      emptyHint: "Import your osu!lazer library from Settings.",
+      emptyHint: t("Import your osu!lazer library from Settings."),
       onQuery: (q) => syncSearchFrom(library, q),
       onSmartSaved: (id) => goSection({ name: "collection", id }),
     });
@@ -243,9 +244,9 @@ function collectionView(id: string): LibraryView | null {
       },
       subtitle: () => {
         const c = store.snap?.collections.find((x) => x.id === id);
-        return c?.missing ? `${num(c.missing)} not in your library` : "";
+        return c?.missing ? t("{n} not in your library", { n: num(c.missing) }) : "";
       },
-      emptyHint: "Add maps to this collection in osu!lazer.",
+      emptyHint: t("Add maps to this collection in osu!lazer."),
       onQuery: (q) => syncSearchFrom(view, q),
       menu: (at) => collectionMenu(at, id, { copied: (copy) => goSection({ name: "collection", id: copy }) }),
     });
@@ -262,18 +263,18 @@ function fumenCollectionView(id: string): LibraryView {
   let v = collectionViews.get(id);
   if (!v) {
     const view: LibraryView = new LibraryView({
-      title: () => fumenCollection(id)?.name ?? "Collection",
+      title: () => fumenCollection(id)?.name ?? t("Collection"),
       restrict: () => {
         const c = fumenCollection(id);
         return c ? collectionMaps(c) : new Set();
       },
       subtitle: () => {
         const c = fumenCollection(id);
-        return c?.missing ? `${num(c.missing)} not in your library` : "";
+        return c?.missing ? t("{n} not in your library", { n: num(c.missing) }) : "";
       },
       emptyHint: isSmart(fumenCollection(id))
-        ? "Nothing in your library matches this search right now."
-        : "Drag sets here from the library, or right-click a beatmap › Add to collection.",
+        ? t("Nothing in your library matches this search right now.")
+        : t("Drag sets here from the library, or right-click a beatmap › Add to collection."),
       onQuery: (q) => syncSearchFrom(view, q),
       menu: (at) => collectionMenu(at, id, { deleted: () => goSection({ name: "library" }), editSearch }),
       collection: id,
@@ -395,10 +396,10 @@ function renderCollections(): void {
   };
   sideList.innerHTML = [
     ...mine.map((c) => item(c.id, c.name, [...collectionMaps(c)], true, isSmart(c))),
-    !mine.length ? `<div class="side-empty">Make one with + or drag a set here.</div>` : "",
-    lazer.length ? `<div class="side-sub">In osu!lazer</div>` : "",
+    !mine.length ? `<div class="side-empty">${t("Make one with + or drag a set here.")}</div>` : "",
+    lazer.length ? `<div class="side-sub">${t("In osu!lazer")}</div>` : "",
     ...lazer.map((c) => item(c.id, c.name, c.maps, false)),
-    stable.length ? `<div class="side-sub">In osu!stable</div>` : "",
+    stable.length ? `<div class="side-sub">${t("In osu!stable")}</div>` : "",
     ...stable.map((c) => item(c.id, c.name, c.maps, false)),
   ].join("");
   syncNav(current());
@@ -506,7 +507,7 @@ function applySidebar(): void {
   const collapsed = store.prefs.sidebarCollapsed;
   document.body.classList.toggle("sidebar-collapsed", collapsed);
   const btn = $<HTMLElement>(".side-toggle");
-  btn.dataset.tip = collapsed ? "Expand sidebar" : "Collapse sidebar";
+  btn.dataset.tip = collapsed ? t("Expand sidebar") : t("Collapse sidebar");
   btn.setAttribute("aria-label", btn.dataset.tip);
   app.querySelectorAll<HTMLElement>(".sidebar .nav-item[data-nav], .sidebar .nav-item[data-act], .sidebar .side-item").forEach((el) => {
     const label = el.querySelector(".nav-label, .side-label")?.textContent ?? "";
@@ -580,17 +581,17 @@ $(".side-search-btn").addEventListener("click", focusSearch);
 
 // filter syntax hints under the search field while it's empty
 const HINTS: { token: string; label: string }[] = [
-  { token: "keys=7", label: "Mania key count" },
-  { token: "sr>5", label: "Star rating" },
-  { token: "status=ranked", label: "ranked, loved, local…" },
-  { token: "bpm>=180", label: "Tempo" },
-  { token: "length<2:00", label: "Length" },
-  { token: "pattern=jumpstream", label: "stream, chordjack, ln, stamina…" },
-  { token: "peak>15", label: "Densest notes per second" },
-  { token: "played=no", label: "Never played" },
-  { token: "grade>=a", label: "Your best grade" },
-  { token: "creator=", label: "Mapper" },
-  { token: "-word", label: "Leave out a word" },
+  { token: "keys=7", label: t("Mania key count") },
+  { token: "sr>5", label: t("Star rating") },
+  { token: "status=ranked", label: t("ranked, loved, local…") },
+  { token: "bpm>=180", label: t("Tempo") },
+  { token: "length<2:00", label: t("Length") },
+  { token: "pattern=jumpstream", label: t("stream, chordjack, ln, stamina…") },
+  { token: "peak>15", label: t("Densest notes per second") },
+  { token: "played=no", label: t("Never played") },
+  { token: "grade>=a", label: t("Your best grade") },
+  { token: "creator=", label: t("Mapper") },
+  { token: "-word", label: t("Leave out a word") },
 ];
 let hintsEl: HTMLElement | null = null;
 let hintIdx = -1;
@@ -600,7 +601,7 @@ function showHints(): void {
   const el = document.createElement("div");
   el.className = "menu search-hints";
   el.setAttribute("role", "listbox");
-  el.innerHTML = `<div class="menu-group">Filter like this</div>${HINTS.map(
+  el.innerHTML = `<div class="menu-group">${t("Filter like this")}</div>${HINTS.map(
     (h, i) => `<div class="menu-item mi" role="option" data-i="${i}" style="--k:${i}"><span class="menu-label hint-token">${esc(h.token)}</span><span class="menu-hint">${esc(h.label)}</span></div>`,
   ).join("")}`;
   const r = searchInput.closest(".search")!.getBoundingClientRect();
@@ -678,7 +679,7 @@ searchInput.addEventListener("keydown", (e) => {
 function renderProfile(): void {
   const snap = store.snap;
   const user = snap?.user;
-  const name = user?.name ?? (snap ? "osu! player" : "Fumen");
+  const name = user?.name ?? (snap ? t("osu! player") : "Fumen");
   $(".profile-name").textContent = name;
   $(".avatar-initial").textContent = name.slice(0, 1).toUpperCase();
   const img = $<HTMLImageElement>(".avatar img");
@@ -705,30 +706,30 @@ function renderLibraryState(): void {
   const importing = importProgressText();
   sub.classList.toggle("is-link", !!importing);
   if (importing) {
-    sub.textContent = `Adding beatmaps · ${importing}`;
-    sub.dataset.tip = "Downloading and importing into osu!lazer · click to show";
+    sub.textContent = t("Adding beatmaps · {progress}", { progress: importing });
+    sub.dataset.tip = t("Downloading and importing into osu!lazer · click to show");
   } else if (p) {
     const { label, fraction } = describeScan(p);
-    sub.textContent = `Updating · ${Math.round(fraction * 100)}%`;
+    sub.textContent = t("Updating · {pct}%", { pct: Math.round(fraction * 100) });
     sub.dataset.tip = label;
   } else if (analysis && analysis.done < analysis.total) {
-    sub.textContent = `Analysing charts · ${Math.round((analysis.done / Math.max(1, analysis.total)) * 100)}%`;
-    sub.dataset.tip = "Reading every difficulty once, for pattern search";
+    sub.textContent = t("Analysing charts · {pct}%", { pct: Math.round((analysis.done / Math.max(1, analysis.total)) * 100) });
+    sub.dataset.tip = t("Reading every difficulty once, for pattern search");
   } else {
     const sets = store.snap?.sets.filter((s) => s.maps.length).length ?? 0;
-    sub.textContent = store.snap ? `${num(sets)} beatmap sets` : "No library yet";
+    sub.textContent = store.snap ? tn(sets, "{n} beatmap set", "{n} beatmap sets") : t("No library yet");
     delete sub.dataset.tip;
   }
   const busy = isScanning() || isImporting();
   refreshBtn.disabled = busy || !(store.status?.install || store.status?.stable?.install);
   refreshBtn.classList.toggle("busy", busy);
-  refreshBtn.dataset.tip = busy ? "Updating library…" : "Update library";
+  refreshBtn.dataset.tip = busy ? t("Updating library…") : t("Update library");
 }
 
 refreshBtn.addEventListener("click", async () => {
   const res = await runScan();
-  if (!res.ok) toast(`Couldn't update the library: ${res.error.message}`, { kind: "danger", timeout: 6000 });
-  else toast("Library updated", { kind: "success", timeout: 2200 });
+  if (!res.ok) toast(t("Couldn't update the library: {error}", { error: res.error.message }), { kind: "danger", timeout: 6000 });
+  else toast(t("Library updated"), { kind: "success", timeout: 2200 });
 });
 events.on("scan", renderLibraryState);
 events.on("status", renderLibraryState);
@@ -751,7 +752,7 @@ async function initWindow(): Promise<void> {
     const sync = async () => {
       const max = await win.isMaximized().catch(() => false);
       document.body.classList.toggle("win-maximized", max);
-      $<HTMLElement>("#win-max").dataset.tip = max ? "Restore" : "Maximise";
+      $<HTMLElement>("#win-max").dataset.tip = max ? t("Restore") : t("Maximise");
     };
     await win.onResized(() => void sync());
     void sync();
@@ -825,7 +826,7 @@ async function maybeAutoRescan(): Promise<void> {
   // an import into lazer rescans by itself when it's done
   if (!st?.changed || store.settings?.autoRescan === false || isImporting()) return;
   const res = await runScan();
-  if (!res.ok) toast(`Couldn't update the library: ${res.error.message}`, { kind: "danger", timeout: 6000 });
+  if (!res.ok) toast(t("Couldn't update the library: {error}", { error: res.error.message }), { kind: "danger", timeout: 6000 });
 }
 
 async function boot(): Promise<void> {
@@ -853,6 +854,8 @@ async function boot(): Promise<void> {
   } catch (e) {
     console.warn("[settings]", asApiError(e).message);
   }
+  // the language in Fumen's settings wins over the copy the window started with
+  if (adoptLang(store.prefs.lang)) return;
   applyAppearance();
   applySidebar();
   applyGroups();
