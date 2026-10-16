@@ -16,7 +16,7 @@
 // No dependencies (Node 20+): `node --env-file=.env server.mjs`, settings as in .env.example.
 import { createReadStream } from "node:fs";
 import { createServer } from "node:http";
-import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { extname, join, normalize, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -26,6 +26,7 @@ const TYPES = {
   ".js": "text/javascript; charset=utf-8",
   ".svg": "image/svg+xml",
   ".png": "image/png",
+  ".webp": "image/webp",
   ".ico": "image/x-icon",
   ".woff2": "font/woff2",
   ".txt": "text/plain; charset=utf-8",
@@ -172,6 +173,40 @@ export function createSite(config) {
     return true;
   }
 
+  /** What the download buttons offer: the Windows installer latest.json names, and the newest
+   * macOS disk image per chip (built with milestone releases only, so it can be older). */
+  async function releases() {
+    let names = [];
+    try {
+      names = await readdir(config.updatesDir);
+    } catch {
+      return null;
+    }
+    const latest = await readFile(join(config.updatesDir, "latest.json"), "utf8").then(JSON.parse, () => null);
+    const file = async (name) => {
+      if (!name || !UPDATE_FILE.test(name)) return null;
+      const info = await stat(join(config.updatesDir, name)).catch(() => null);
+      return info?.isFile() ? { file: name, size: info.size, at: info.mtimeMs } : null;
+    };
+    const mac = async (arch) => {
+      const found = await Promise.all(names.filter((n) => n.endsWith(`_${arch}.dmg`)).map(file));
+      const newest = found.filter(Boolean).sort((a, b) => b.at - a.at)[0];
+      return newest ? { file: newest.file, size: newest.size, version: newest.file.split("_")[1] } : null;
+    };
+    const winName = latest?.platforms?.["windows-x86_64"]?.url?.split("/").pop();
+    const win = await file(winName);
+    return {
+      version: latest?.version ?? null,
+      date: latest?.pub_date ?? null,
+      windows: win && latest ? { file: win.file, size: win.size, version: latest.version } : null,
+      macArm: await mac("aarch64"),
+      macIntel: await mac("x64"),
+    };
+  }
+
+  /** /download/<platform>: on to the file itself, so the link always means the newest */
+  const DOWNLOADS = { windows: "windows", "mac-arm": "macArm", "mac-intel": "macIntel" };
+
   /** osu! tokens already checked, to the player behind them (for a few minutes) */
   const players = new Map();
   /** The osu! player whose token comes with the request (asked of osu!), or null. */
@@ -257,6 +292,16 @@ export function createSite(config) {
         return json(res, 200, { saved, collections: input.collections.length });
       }
 
+      if (req.method === "GET" && pathname === "/download/info") {
+        const r = await releases();
+        return r ? json(res, 200, r) : json(res, 503, { error: "no_releases" });
+      }
+      if ((req.method === "GET" || req.method === "HEAD") && pathname.startsWith("/download/") && DOWNLOADS[pathname.slice(10)]) {
+        const r = await releases();
+        const pick = r?.[DOWNLOADS[pathname.slice(10)]];
+        if (!pick) return message(res, 404, "Not there yet", "This download isn't available right now. <a href=\"/\">Back to Fumen</a>");
+        return send(res, 302, "", { Location: `/updates/${pick.file}` });
+      }
       if ((req.method === "GET" || req.method === "HEAD") && pathname.startsWith("/updates/")) {
         if (await updateFile(res, pathname.slice("/updates/".length), req.method === "HEAD")) return;
         return send(res, 404, "No such update.", { "Content-Type": TYPES[".txt"] });

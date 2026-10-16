@@ -23,7 +23,8 @@ let site;
 const scratch = mkdtempSync(join(tmpdir(), "fumen-site-"));
 const updates = join(scratch, "updates");
 mkdirSync(updates);
-writeFileSync(join(updates, "latest.json"), JSON.stringify({ version: "0.4.0" }));
+const LATEST = { version: "0.4.0", platforms: { "windows-x86_64": { url: "https://fumen.dertesti.dev/updates/Fumen_0.4.0_x64-setup.exe" } } };
+writeFileSync(join(updates, "latest.json"), JSON.stringify(LATEST));
 writeFileSync(join(updates, "Fumen_0.4.0_x64-setup.exe"), "MZ installer");
 writeFileSync(join(updates, "Fumen_0.4.0_abc1234_aarch64.dmg"), "disk image");
 writeFileSync(join(scratch, "secret.json"), "{}");
@@ -48,7 +49,7 @@ describe("site", () => {
     const r = await fetch(base + "/");
     expect(r.status).toBe(200);
     expect(r.headers.get("content-security-policy")).toContain("default-src 'self'");
-    expect(await r.text()).toContain("Upcoming project");
+    expect(await r.text()).toContain("A beatmap library for");
   });
 
   it("serves pages without their extension, scripts as scripts", async () => {
@@ -70,7 +71,7 @@ describe("site", () => {
     const latest = await fetch(base + "/updates/latest.json");
     expect(latest.status).toBe(200);
     expect(latest.headers.get("cache-control")).toBe("no-store");
-    expect(await latest.json()).toEqual({ version: "0.4.0" });
+    expect(await latest.json()).toEqual(LATEST);
     const exe = await fetch(base + "/updates/Fumen_0.4.0_x64-setup.exe");
     expect(exe.status).toBe(200);
     expect(exe.headers.get("content-length")).toBe("12");
@@ -82,6 +83,20 @@ describe("site", () => {
     const head = await fetch(base + "/updates/latest.json", { method: "HEAD" });
     expect(head.status).toBe(200);
     expect(await head.text()).toBe("");
+  });
+
+  it("points the download buttons at the newest files", async () => {
+    const info = await (await fetch(base + "/download/info")).json();
+    expect(info.version).toBe("0.4.0");
+    expect(info.windows).toMatchObject({ file: "Fumen_0.4.0_x64-setup.exe", size: 12, version: "0.4.0" });
+    expect(info.macArm).toMatchObject({ file: "Fumen_0.4.0_abc1234_aarch64.dmg", version: "0.4.0" });
+    expect(info.macIntel).toBeNull();
+    const win = await fetch(base + "/download/windows", { redirect: "manual" });
+    expect(win.status).toBe(302);
+    expect(win.headers.get("location")).toBe("/updates/Fumen_0.4.0_x64-setup.exe");
+    expect((await fetch(base + "/download/mac-arm", { redirect: "manual" })).headers.get("location")).toBe("/updates/Fumen_0.4.0_abc1234_aarch64.dmg");
+    expect((await fetch(base + "/download/mac-intel", { redirect: "manual" })).status).toBe(404);
+    expect((await fetch(base + "/download/linux", { redirect: "manual" })).status).toBe(404);
   });
 
   it("keeps updates to their folder", async () => {
