@@ -481,7 +481,7 @@ sections below is the order of the work.
 - GitHub repo `fumen` (private until 0.1 is solid), `main` branch, small focused commits.
 - CI (GitHub Actions): frontend (typecheck, UI tests, build) and backend (windows-latest: helpers
   build, `cargo clippy`, Rust tests), each only when its side changes. macOS (`mac.yml`) only by
-  hand: `npm run mac`.
+  hand: `npm run mac`, with milestone releases (minor versions) only.
 - After a lazer update: `npm run verify-lazer -- --push` with lazer closed.
 - Site changes: `node scripts/deploy-site.mjs` (the VPS's `.env` holds the osu! secret, never git).
 - Releases: `npm run release -- patch` on the PC (signed NSIS installer → GitHub release in the
