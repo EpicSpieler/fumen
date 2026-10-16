@@ -1,0 +1,70 @@
+name: macOS
+
+# The macOS app, built on GitHub's Macs (a Mac app can't be built on Windows). Started by hand
+# (scripts/mac-build.mjs): macOS minutes count ten times on a private repo.
+#
+# Apple Silicon is also tested for real: osu!lazer's macOS release (from GitHub, ppy/osu) goes
+# into ~/Applications, and Fumen's importer runs lazer's own import into a fresh library, read
+# back by Fumen's reader (lazer_import::tests::importer_on_fresh_library).
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: mac-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: macos-15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Apple Silicon
+            target: aarch64-apple-darwin
+            lazer: osu.app.Apple.Silicon.zip
+          - name: Intel
+            target: x86_64-apple-darwin
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          key: ${{ matrix.target }}
+      - run: npm ci
+      - run: node scripts/build-sidecar.mjs --target ${{ matrix.target }}
+
+      - name: osu!lazer (its release on GitHub)
+        if: matrix.lazer
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download --repo ppy/osu --pattern '${{ matrix.lazer }}' --output lazer.zip
+          mkdir -p ~/Applications
+          ditto -x -k lazer.zip ~/Applications
+          rm lazer.zip
+          cat ~/Applications/osu\!.app/Contents/MacOS/sq.version
+      - name: Import into lazer, read back
+        if: matrix.lazer
+        run: |
+          npx vite build
+          cargo test --manifest-path src-tauri/Cargo.toml --config 'profile.dev.package."*".opt-level=0' --lib lazer_import::tests::importer_on_fresh_library -- --ignored --exact --nocapture
+
+      - run: npx tauri build --target ${{ matrix.target }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fumen-${{ matrix.target }}
+          path: src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
+          if-no-files-found: error
+          retention-days: 14
