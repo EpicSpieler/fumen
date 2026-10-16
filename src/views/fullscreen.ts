@@ -108,6 +108,9 @@ class Fullscreen {
     this.isOpen = true;
     el.hidden = false;
     document.body.classList.add("fs-open");
+    // the app behind is out of reach while this covers it: keys tapped along to a chart don't land
+    // in the search (or anything else that had focus)
+    setBehindInert(true);
     // the window's own controls move into the overlay while it's open (it covers the title bar)
     const wc = document.querySelector<HTMLElement>(".win-controls");
     if (wc) {
@@ -133,6 +136,7 @@ class Fullscreen {
     this.syncSounds();
     el.classList.remove("on");
     document.body.classList.remove("fs-open");
+    setBehindInert(false);
     const wc = el.querySelector<HTMLElement>(".win-controls");
     if (wc && this.wcHome) this.wcHome.append(wc);
     setTimeout(() => !this.isOpen && (el.hidden = true), reduceMotion() ? 0 : 240);
@@ -917,6 +921,11 @@ class Fullscreen {
 }
 
 const fmtSpeed = (s: number): string => (Number.isInteger(s) ? String(s) : fixed(s, 1));
+
+function setBehindInert(on: boolean): void {
+  const app = document.getElementById("app");
+  if (app) app.inert = on;
+}
 
 const fullscreen = new Fullscreen();
 
