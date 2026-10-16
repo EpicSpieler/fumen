@@ -173,6 +173,12 @@ service `fumen-web` on the VPS, reached through the Cloudflare tunnel. `node scr
 deploys it; `node scripts/deploy-site.mjs --secret` types the osu! client secret into the server's
 `.env` (hidden).
 
+The homepage shows two numbers: downloads (counted at `/download/<platform>`) and the people who
+used Fumen in the last 30 days. For that, a release build sends one ping when it starts
+(`src-tauri/src/ping.rs`): a random id made on that PC (`install-id` in the data folder) and the
+version, nothing else, and nothing is waited for. Settings › About › "Count me in" turns it off;
+development builds never send it. The site keeps the counts in `stats/stats.json`.
+
 ## Releases and updates
 
 `npm run release -- patch` (or `minor`, or a version) builds the Windows installer, signs it for

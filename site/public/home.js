@@ -990,5 +990,30 @@ async function downloads() {
   if (info.windows) document.querySelector("[data-main-sub]").textContent = `Version ${info.windows.version} · ${mb(info.windows.size)} · Free`;
 }
 
+/** The counts from the site: downloads here and the people whose Fumen started lately. */
+async function counts() {
+  let s;
+  try {
+    const res = await fetch("/api/stats");
+    if (!res.ok) return;
+    s = await res.json();
+  } catch {
+    return;
+  }
+  const n = (v) => Number(v).toLocaleString("en");
+  if (s.downloads > 0) {
+    const also = document.querySelector("[data-also-count]");
+    also.textContent = `${n(s.downloads)} downloads · `;
+    also.hidden = false;
+  }
+  if (s.downloads > 0 || s.users > 0) {
+    document.querySelector("[data-st-downloads]").textContent = n(s.downloads);
+    document.querySelector("[data-st-users]").textContent = n(s.users);
+    document.querySelector("[data-st-users] + span").textContent = s.users === 1 ? "person used it in the last 30 days" : "people used it in the last 30 days";
+    document.querySelector("[data-stats]").hidden = false;
+  }
+}
+
 document.fonts.ready.then(() => document.querySelectorAll("[data-scene]").forEach(mount));
 downloads();
+counts();

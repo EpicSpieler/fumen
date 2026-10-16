@@ -7,8 +7,8 @@
   <meta name="description" content="Fumen reads osu!lazer's beatmaps, scores and collections: search them like osu! does, play the songs, see what's in a chart and keep the library tidy. Free, for Windows.">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="preload" href="/fonts/instrument-sans-latin.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/home.css?v=3">
-  <script src="/home.js?v=3" defer></script>
+  <link rel="stylesheet" href="/home.css?v=4">
+  <script src="/home.js?v=4" defer></script>
 </head>
 <body>
   <svg width="0" height="0" style="position:absolute" aria-hidden="true">
@@ -49,7 +49,7 @@
         </a>
         <a class="cta-side" href="/roadmap" data-tip="Roadmap" aria-label="Roadmap"><svg class="ic"><use href="#i-map"/></svg></a>
       </div>
-      <p class="also">For Windows 10 and 11 · macOS comes later · <a href="/roadmap">See what's coming</a></p>
+      <p class="also"><span data-also-count hidden></span>For Windows 10 and 11 · macOS comes later · <a href="/roadmap">See what's coming</a></p>
       <figure class="shot">
         <img src="/img/home.webp" width="1440" height="900" alt="Fumen's home page: recently played and added beatmaps, quick picks, and collections in the sidebar." fetchpriority="high">
       </figure>
@@ -111,6 +111,10 @@
     <section class="get" id="download">
       <h2 class="section-title">Get Fumen</h2>
       <p class="get-lead">Free. You need osu!lazer on the same computer; Fumen finds its library by itself.</p>
+      <div class="get-stats num" data-stats hidden>
+        <div><b data-st-downloads>0</b><span>downloads</span></div>
+        <div><b data-st-users>0</b><span>people used it in the last 30 days</span></div>
+      </div>
       <div class="get-grid">
         <div class="get-card">
           <svg class="get-ic"><use href="#i-windows"/></svg>

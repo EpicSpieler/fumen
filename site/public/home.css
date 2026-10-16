@@ -488,6 +488,10 @@ code {
 .get { max-width: 880px; margin: 0 auto; padding: 128px 24px 0; text-align: center; scroll-margin-top: 24px; }
 .get .section-title { margin-bottom: 10px; }
 .get-lead { margin: 0 0 36px; color: var(--t2); font-size: 15px; }
+.get-stats { display: flex; justify-content: center; gap: 12px; margin: -16px 0 32px; }
+.get-stats div { display: flex; flex-direction: column; align-items: center; min-width: 190px; padding: 14px 20px; border-radius: var(--r-xl); background: var(--fill-subtle); }
+.get-stats b { font-size: 26px; font-weight: 700; letter-spacing: -.02em; }
+.get-stats span { color: var(--t3); font-size: 12.5px; }
 .get-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; text-align: left; }
 .get-card {
   display: flex;
@@ -547,6 +551,7 @@ code {
   .feature:nth-of-type(even) .feature-text { order: 0; }
   .more { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .get-grid { grid-template-columns: minmax(0, 1fr); }
+  .get-stats div { min-width: 0; flex: 1; }
   .features, .get { padding-top: 88px; }
 }
 @media (max-width: 520px) {
