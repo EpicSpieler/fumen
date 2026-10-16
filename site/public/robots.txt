@@ -1,0 +1,10 @@
+# fumen.dertesti.dev: search engines and AI crawlers are welcome to read and learn about Fumen.
+User-agent: *
+Content-Signal: search=yes, ai-input=yes, ai-train=yes
+Allow: /
+Disallow: /api/
+Disallow: /oauth/
+Disallow: /download/
+Disallow: /updates/
+
+Sitemap: https://fumen.dertesti.dev/sitemap.xml

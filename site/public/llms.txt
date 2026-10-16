@@ -1,0 +1,28 @@
+# Fumen
+
+> Fumen is a free desktop app for osu!lazer players: a beatmap library that reads what osu!lazer already has, searches it the way osu! does, analyses charts, plays replays and keeps the library tidy. It runs on Windows 10 and 11 next to osu!lazer. Made by DerTesti; not made by or affiliated with ppy or osu!.
+
+Fumen finds osu!lazer's library by itself and reads it from a private copy, so it never changes osu!lazer's files behind its back. Beatmaps and collections it puts into osu!lazer go in through osu!lazer's own code, only while osu!lazer is closed. Beatmaps are downloaded from community mirrors, never directly from osu!'s servers. It is in English and German and updates itself.
+
+## What it does
+
+- Search: osu!'s own search syntax (`keys=7`, `sr>4.5`, `status=loved`, `played=no`), filters and star ranges; stays smooth with tens of thousands of difficulties.
+- Charts: notes per second, the patterns in a chart, its hardest part and, for osu!mania, an estimated dan. Charts play on a playfield at any rate with the player's own skin.
+- Practice: loop the hardest part of a chart at any rate, with a metronome.
+- Replays: watch osu!, osu!taiko, osu!catch and osu!mania replays with every judgement and the hit error.
+- Browse: search osu!'s beatmaps through the mirrors, play previews, add one set or every new set a search finds.
+- Add beatmaps: paste many links at once, or add every map the player has played on osu! that osu!lazer doesn't have.
+- Collections: smart collections from a search, into osu!lazer or as a collection.db; synced between PCs under the player's osu! login.
+- History: a year of plays, top plays and most played maps, including osu!stable's scores.
+- Library care: duplicates, broken files and what takes the space; deleting goes through osu!lazer's own Delete, scores stay.
+- Looks: Dark, OLED, Light and High contrast themes.
+- Skills (a skill per osu!mania pattern) are being reworked and greyed out for now.
+
+## Getting it
+
+- [Homepage and download](https://fumen.dertesti.dev/): the Windows installer, free. macOS is built but not tested yet, so it comes later.
+- [Roadmap](https://fumen.dertesti.dev/roadmap): what shipped (versions 0.1 to 1.0) and what comes after 1.0: a tournament pool builder (1.1), tournament tools (1.2), sessions, skins, Discord presence, Linux and macOS.
+
+## Privacy
+
+When it starts, Fumen sends one ping to fumen.dertesti.dev with a random id made on the PC and its version, to count how many people use it. Settings can turn it off. The osu! login goes through the site because osu!'s OAuth needs a client secret that a desktop app can't keep; the tokens stay on the player's PC.

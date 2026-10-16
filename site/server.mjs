@@ -34,6 +34,8 @@ const TYPES = {
   ".ico": "image/x-icon",
   ".woff2": "font/woff2",
   ".txt": "text/plain; charset=utf-8",
+  ".xml": "application/xml; charset=utf-8",
+  ".jpg": "image/jpeg",
 };
 
 /** what /updates/ hands out: a plain file name, no folders */
