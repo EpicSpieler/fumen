@@ -18,6 +18,8 @@ ProtectSystem=strict
 ReadOnlyPaths=/home/dertesti/fumen-web
 # collections saved to the cloud (`/api/collections`)
 ReadWritePaths=/home/dertesti/fumen-web/cloud
+# download and start counts (`/api/stats`)
+ReadWritePaths=/home/dertesti/fumen-web/stats
 
 [Install]
 WantedBy=multi-user.target

@@ -36,6 +36,8 @@ remote(
   [
     "set -e",
     `cd ~/${dir}`,
+    // the folders the unit lets it write to have to be there
+    "mkdir -p cloud stats",
     "[ -f .env ] || { cp .env.example .env; chmod 600 .env; echo '  .env created (no osu! secret yet: --secret)'; }",
     // the unit as committed, with this server's node and home folder
     `sed -e "s|/usr/bin/node|$(command -v node)|" -e "s|/home/dertesti/${dir}|$HOME/${dir}|g" -e "s|^User=.*|User=$(whoami)|" fumen-web.service > fumen-web.service.local`,

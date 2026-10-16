@@ -13,6 +13,10 @@
 // signed installers next to it, from the updates folder that scripts/release.mjs fills. A site
 // deploy never touches that folder.
 //
+// And it counts, for the numbers on the homepage: downloads through /download/<platform>, and the
+// start ping Fumen sends (/api/ping: a random id made on the player's PC and the version, nothing
+// else), so people are counted once however often they start it. /api/stats has the totals.
+//
 // No dependencies (Node 20+): `node --env-file=.env server.mjs`, settings as in .env.example.
 import { createReadStream } from "node:fs";
 import { createServer } from "node:http";
@@ -58,6 +62,8 @@ export function configFromEnv(env = process.env) {
     updatesDir: env.UPDATES_DIR ?? fileURLToPath(new URL("./updates/", import.meta.url)),
     /** collections saved by players, one file per osu! user */
     cloudDir: env.CLOUD_DIR ?? fileURLToPath(new URL("./cloud/", import.meta.url)),
+    /** download and start counts (stats.json) */
+    statsDir: env.STATS_DIR ?? fileURLToPath(new URL("./stats/", import.meta.url)),
     osuApi: (env.OSU_API_URL ?? "https://osu.ppy.sh/api/v2").replace(/\/+$/, ""),
   };
 }
@@ -207,6 +213,36 @@ export function createSite(config) {
   /** /download/<platform>: on to the file itself, so the link always means the newest */
   const DOWNLOADS = { windows: "windows", "mac-arm": "macArm", "mac-intel": "macIntel" };
 
+  /** The counts, read once and written a few seconds after they change. installs: id → [first
+   * seen, last seen (ms), version]. */
+  let counts = null;
+  let saving = null;
+  const loadCounts = () =>
+    (counts ??= readFile(join(config.statsDir, "stats.json"), "utf8")
+      .then(JSON.parse)
+      .catch(() => null)
+      .then((c) => ({ version: 1, downloads: c?.downloads ?? {}, installs: c?.installs ?? {} })));
+  const saveCounts = () => {
+    saving ??= new Promise((done) =>
+      setTimeout(async () => {
+        saving = null;
+        try {
+          const c = await counts;
+          const file = join(config.statsDir, "stats.json");
+          await mkdir(config.statsDir, { recursive: true });
+          await writeFile(`${file}.tmp`, JSON.stringify(c));
+          await rename(`${file}.tmp`, file);
+        } catch (e) {
+          console.error("[site] stats:", e instanceof Error ? e.message : e);
+        }
+        done();
+      }, config.statsDelay ?? 5000),
+    );
+    return saving;
+  };
+  /** people whose Fumen started in the last 30 days */
+  const ACTIVE = 30 * 24 * 3600_000;
+
   /** osu! tokens already checked, to the player behind them (for a few minutes) */
   const players = new Map();
   /** The osu! player whose token comes with the request (asked of osu!), or null. */
@@ -292,6 +328,33 @@ export function createSite(config) {
         return json(res, 200, { saved, collections: input.collections.length });
       }
 
+      if (req.method === "POST" && pathname === "/api/ping") {
+        if (limited(req)) return json(res, 429, { error: "slow_down" });
+        let input;
+        try {
+          input = await body(req, 1024);
+        } catch {
+          return json(res, 400, { error: "bad_ping" });
+        }
+        const id = typeof input?.id === "string" && /^[0-9a-f]{32}$/.test(input.id) ? input.id : null;
+        const version = typeof input?.version === "string" && /^\d{1,3}\.\d{1,3}\.\d{1,4}$/.test(input.version) ? input.version : null;
+        if (!id || !version) return json(res, 400, { error: "bad_ping" });
+        const c = await loadCounts();
+        const now = Date.now();
+        c.installs[id] = [c.installs[id]?.[0] ?? now, now, version];
+        void saveCounts();
+        return send(res, 204, "");
+      }
+      if (req.method === "GET" && pathname === "/api/stats") {
+        const c = await loadCounts();
+        const now = Date.now();
+        const all = Object.values(c.installs);
+        return json(res, 200, {
+          downloads: Object.values(c.downloads).reduce((a, b) => a + b, 0),
+          users: all.filter(([, last]) => now - last < ACTIVE).length,
+          everyone: all.length,
+        });
+      }
       if (req.method === "GET" && pathname === "/download/info") {
         const r = await releases();
         return r ? json(res, 200, r) : json(res, 503, { error: "no_releases" });
@@ -300,6 +363,12 @@ export function createSite(config) {
         const r = await releases();
         const pick = r?.[DOWNLOADS[pathname.slice(10)]];
         if (!pick) return message(res, 404, "Not there yet", "This download isn't available right now. <a href=\"/\">Back to Fumen</a>");
+        if (req.method === "GET") {
+          const c = await loadCounts();
+          const key = pathname.slice(10);
+          c.downloads[key] = (c.downloads[key] ?? 0) + 1;
+          void saveCounts();
+        }
         return send(res, 302, "", { Location: `/updates/${pick.file}` });
       }
       if ((req.method === "GET" || req.method === "HEAD") && pathname.startsWith("/updates/")) {

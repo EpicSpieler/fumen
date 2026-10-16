@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { readFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -32,7 +32,7 @@ const listen = (server) => new Promise((r) => server.listen(0, "127.0.0.1", () =
 
 beforeAll(async () => {
   const osuPort = await listen(osu);
-  const config = { ...configFromEnv({}), clientId: "71003", clientSecret: "s3cret", tokenUrl: `http://127.0.0.1:${osuPort}/oauth/token`, updatesDir: updates };
+  const config = { ...configFromEnv({}), clientId: "71003", clientSecret: "s3cret", tokenUrl: `http://127.0.0.1:${osuPort}/oauth/token`, updatesDir: updates, statsDir: join(scratch, "stats"), statsDelay: 10 };
   site = createServer(createSite(config));
   base = `http://127.0.0.1:${await listen(site)}`;
 });
@@ -45,6 +45,23 @@ afterAll(() => {
 const post = (path, body) => fetch(base + path, { method: "POST", body: JSON.stringify(body) });
 
 describe("site", () => {
+  it("counts downloads and the people whose Fumen starts, once each", async () => {
+    const id = "0123456789abcdef0123456789abcdef";
+    expect((await post("/api/ping", { id, version: "1.0.1" })).status).toBe(204);
+    expect((await post("/api/ping", { id, version: "1.0.1" })).status).toBe(204);
+    expect((await post("/api/ping", { id: "a".repeat(32), version: "1.0.0" })).status).toBe(204);
+    expect((await post("/api/ping", { id: "not an id", version: "1.0.1" })).status).toBe(400);
+    expect((await post("/api/ping", { id, version: "<script>" })).status).toBe(400);
+    expect((await fetch(base + "/download/windows", { redirect: "manual" })).status).toBe(302);
+    expect((await fetch(base + "/download/windows", { method: "HEAD", redirect: "manual" })).status).toBe(302);
+    expect(await (await fetch(base + "/api/stats")).json()).toEqual({ downloads: 1, users: 2, everyone: 2 });
+    await new Promise((r) => setTimeout(r, 100));
+    const saved = JSON.parse(readFileSync(join(scratch, "stats", "stats.json"), "utf8"));
+    expect(saved.downloads).toEqual({ windows: 1 });
+    expect(saved.installs[id][2]).toBe("1.0.1");
+  });
+
+
   it("serves the page", async () => {
     const r = await fetch(base + "/");
     expect(r.status).toBe(200);
