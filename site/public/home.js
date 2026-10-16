@@ -990,7 +990,8 @@ async function downloads() {
   if (info.windows) document.querySelector("[data-main-sub]").textContent = `Version ${info.windows.version} · ${mb(info.windows.size)} · Free`;
 }
 
-/** The counts from the site: downloads here and the people whose Fumen started lately. */
+/** The counts from the site: downloads here and the people whose Fumen started lately. Not
+ * called for now: the numbers are too new to show. */
 async function counts() {
   let s;
   try {
@@ -1016,4 +1017,4 @@ async function counts() {
 
 document.fonts.ready.then(() => document.querySelectorAll("[data-scene]").forEach(mount));
 downloads();
-counts();
+// the counts stay off the page until they're worth showing (counts() fills them in)
