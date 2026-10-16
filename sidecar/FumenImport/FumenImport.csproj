@@ -10,7 +10,8 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net8.0</TargetFramework>
-    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <!-- the default; the macOS builds pass theirs (scripts/build-sidecar.mjs `-r`) -->
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">win-x64</RuntimeIdentifier>
     <SelfContained>false</SelfContained>
     <UseAppHost>true</UseAppHost>
     <ImplicitUsings>enable</ImplicitUsings>

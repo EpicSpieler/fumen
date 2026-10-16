@@ -8,6 +8,9 @@ use serde::Serialize;
 
 /// Where lazer keeps its data unless the user moved it.
 pub fn default_lazer_dir() -> Option<PathBuf> {
+    if cfg!(target_os = "macos") {
+        return std::env::var_os("HOME").map(|home| PathBuf::from(home).join("Library").join("Application Support").join("osu"));
+    }
     std::env::var_os("APPDATA").map(|appdata| PathBuf::from(appdata).join("osu"))
 }
 
@@ -74,8 +77,12 @@ pub fn lazer_file(storage: &Path, hash: &str) -> Option<PathBuf> {
 
 // ── osu!stable ──────────────────────────────────────────────────────────
 
-/// Where stable is installed unless the user put it elsewhere.
+/// Where stable is installed unless the user put it elsewhere. Windows only: stable has no build
+/// for other systems (a folder picked by hand still works).
 pub fn default_stable_dir() -> Option<PathBuf> {
+    if !cfg!(windows) {
+        return None;
+    }
     std::env::var_os("LOCALAPPDATA").map(|local| PathBuf::from(local).join("osu!"))
 }
 
