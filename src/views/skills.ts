@@ -60,7 +60,7 @@ export class SkillsView {
 
   constructor() {
     this.el = document.createElement("section");
-    this.el.className = "view skills-view";
+    this.el.className = "view skills-view is-rework";
     this.el.innerHTML = `
       <header class="view-head skills-head">
         <div>
@@ -72,8 +72,11 @@ export class SkillsView {
           <button class="btn btn-sm skills-compare" type="button">${icon("user")}<span>${t("Compare")}</span></button>
         </div>
       </header>
+      <div class="skills-rework" role="note">${icon("alert", "skills-rework-ic")}<div><b>${t("Skills are being reworked")}</b><span>${t("The numbers here can be off until then, and goals and comparisons may change. Everything else in Fumen works as usual.")}</span></div></div>
       <div class="compare-bar" hidden></div>
       <div class="skills-body"></div>`;
+    // under rework: greyed (skills.css) and out of reach for the keyboard too
+    for (const part of this.el.querySelectorAll<HTMLElement>(".skills-tools, .compare-bar, .skills-body")) part.inert = true;
     this.bind();
     this.offs.push(
       historyEvents.on("history", () => this.render()),

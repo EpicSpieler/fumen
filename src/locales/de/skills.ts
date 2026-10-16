@@ -7,6 +7,10 @@ export const skills: Record<string, string> = {
   Chordjack: "Chordjack",
   Jacks: "Jacks",
 
+  "Skills are being reworked": "Skills werden gerade überarbeitet",
+  "The numbers here can be off until then, and goals and comparisons may change. Everything else in Fumen works as usual.":
+    "Bis dahin können die Zahlen hier danebenliegen, und Ziele und Vergleiche können sich ändern. Alles andere in Fumen funktioniert wie gewohnt.",
+
   Compare: "Vergleichen",
   "Skills come from your osu!mania plays": "Skills kommen aus deinen osu!mania-Plays",
   "Fumen reads the patterns of osu!mania charts. Once you've passed some that are in your library, you'll see here what you're good at.":
