@@ -7,12 +7,13 @@
    lazer's own download notifications. The dialog can be closed while an import runs; reopening
    it shows where it is. */
 import { api, asApiError, onImportProgress, onPlayedProgress } from "../lib/api";
-import { esc, num } from "../lib/format";
+import { esc, fixed, num } from "../lib/format";
 import { readLinks } from "../lib/links";
 import { Emitter, events, refreshStatus, reloadLibrary } from "../lib/store";
 import type { ImportProgress, ImportStage, ImportSummary, LazerImportStatus, OsuAccount, PlayedFound } from "../lib/types";
 import { attachSegIndicator, closeAnimated, reduceMotion, toast } from "../ui/controls";
 import { icon } from "../ui/icons";
+import { t, tn } from "../lib/i18n";
 
 type Mode = "links" | "played";
 /** where an import's sets came from: a tab of the dialog, or Browse */
@@ -120,7 +121,7 @@ export const isImporting = (): boolean => !!job?.running;
 export function importProgressText(): string | null {
   if (!job?.running) return null;
   const finished = job.rows.filter((r) => FINISHED.has(r.stage)).length;
-  return `${num(finished)} of ${num(job.rows.length + queued.length)}`;
+  return t("{done} of {total}", { done: num(finished), total: num(job.rows.length + queued.length) });
 }
 
 /** Opens the dialog; `text` (pasted links) goes into the field and starts over a finished import. */
@@ -135,10 +136,9 @@ export function openImport(text?: string): void {
 }
 
 const short = (v: string) => v.replace(/-lazer$/, "");
-const mb = (bytes: number) => (bytes / 1_048_576).toFixed(bytes < 10_485_760 ? 1 : 0);
+const mb = (bytes: number) => fixed(bytes / 1_048_576, bytes < 10_485_760 ? 1 : 0);
 const showsRows = (j: Job | null): j is Job => !!j && j.rows.length > 0;
 const cover = (set: number) => `https://assets.ppy.sh/beatmaps/${set}/covers/list.jpg`;
-const plural = (n: number, one: string, many = `${one}s`) => `${num(n)} ${n === 1 ? one : many}`;
 const words = (list: [string, string?][]) =>
   `<span class="meta-line">${list.map(([w, cls]) => `<span${cls ? ` class="${cls}"` : ""}>${esc(w)}</span>`).join("")}</span>`;
 
@@ -182,18 +182,18 @@ class ImportDialog {
     el.className = "modal-backdrop imp-backdrop";
     el.innerHTML = `
       <div class="modal-panel imp" role="dialog" aria-modal="true" aria-labelledby="imp-title">
-        <button class="icon-btn modal-close" type="button" data-act="close" aria-label="Close">${icon("x")}</button>
+        <button class="icon-btn modal-close" type="button" data-act="close" aria-label="${t("Close")}">${icon("x")}</button>
         <div class="imp-head">
-          <div class="imp-title" id="imp-title">Add beatmaps</div>
+          <div class="imp-title" id="imp-title">${t("Add beatmaps")}</div>
           <div class="imp-sub"></div>
         </div>
-        <div class="seg-pill imp-tabs" role="tablist" aria-label="Where the beatmaps come from">
-          <button type="button" role="tab" data-mode="links">Links</button>
-          <button type="button" role="tab" data-mode="played">Maps you've played</button>
+        <div class="seg-pill imp-tabs" role="tablist" aria-label="${t("Where the beatmaps come from")}">
+          <button type="button" role="tab" data-mode="links">${t("Links")}</button>
+          <button type="button" role="tab" data-mode="played">${t("Maps you've played")}</button>
         </div>
         <div class="imp-lazer"></div>
         <div class="imp-repair" hidden></div>
-        <textarea class="imp-input" rows="6" spellcheck="false" autocomplete="off" aria-label="osu! links"
+        <textarea class="imp-input" rows="6" spellcheck="false" autocomplete="off" aria-label="${t("osu! links")}"
           placeholder="https://osu.ppy.sh/beatmapsets/…&#10;https://osu.ppy.sh/beatmaps/…"></textarea>
         <div class="imp-played" hidden></div>
         <div class="imp-overall" hidden></div>
@@ -201,9 +201,9 @@ class ImportDialog {
         <div class="imp-foot">
           <div class="imp-note"></div>
           <div class="imp-actions">
-            <button class="btn btn-ghost" type="button" data-act="close">Close</button>
-            <button class="btn" type="button" data-act="stop" hidden>Stop</button>
-            <button class="btn btn-primary" type="button" data-act="go">Import</button>
+            <button class="btn btn-ghost" type="button" data-act="close">${t("Close")}</button>
+            <button class="btn" type="button" data-act="stop" hidden>${t("Stop")}</button>
+            <button class="btn btn-primary" type="button" data-act="go">${t("Import")}</button>
           </div>
         </div>
       </div>`;
@@ -293,13 +293,13 @@ class ImportDialog {
     try {
       const r = await api.repairLazerSets();
       if (r.finished) {
-        toast(`${plural(r.finished, "set")} in osu!lazer got ${r.finished === 1 ? "its" : "their"} details`, { kind: "success", timeout: 4200 });
+        toast(tn(r.finished, "{n} set in osu!lazer got its details", "{n} sets in osu!lazer got their details"), { kind: "success", timeout: 4200 });
         await reloadLibrary().catch((e) => console.warn("[import] reload failed", e));
       }
-      if (r.failed) toast(`${plural(r.failed, "set")} couldn't be finished; osu!lazer does ${r.failed === 1 ? "it" : "them"} on its next start`, { timeout: 6000 });
-      if (!r.finished && !r.failed) toast("Nothing to finish: osu!lazer has every set's details");
+      if (r.failed) toast(tn(r.failed, "{n} set couldn't be finished; osu!lazer does it on its next start", "{n} sets couldn't be finished; osu!lazer does them on its next start"), { timeout: 6000 });
+      if (!r.finished && !r.failed) toast(t("Nothing to finish: osu!lazer has every set's details"));
     } catch (e) {
-      toast(`Couldn't finish the sets: ${asApiError(e).message}`, { kind: "danger", timeout: 6000 });
+      toast(t("Couldn't finish the sets: {error}", { error: asApiError(e).message }), { kind: "danger", timeout: 6000 });
     } finally {
       repairing = false;
       void this.refreshStatus();
@@ -320,10 +320,10 @@ class ImportDialog {
     });
     this.subEl.textContent =
       rows && job?.from === "search"
-        ? "Sets from Browse: Fumen downloads each one from the mirrors and imports it into osu!lazer, the way lazer itself does."
+        ? t("Sets from Browse: Fumen downloads each one from the mirrors and imports it into osu!lazer, the way lazer itself does.")
         : mode === "played" && !rows
-          ? "Every set you've played on osu! that osu!lazer doesn't have: Fumen downloads them and imports them into lazer, the way lazer itself does."
-          : "Paste links from osu.ppy.sh. Fumen downloads each set and imports it into osu!lazer, the way lazer itself does.";
+          ? t("Every set you've played on osu! that osu!lazer doesn't have: Fumen downloads them and imports them into lazer, the way lazer itself does.")
+          : t("Paste links from osu.ppy.sh. Fumen downloads each set and imports it into osu!lazer, the way lazer itself does.");
     this.input.hidden = rows || mode !== "links";
     this.playedEl.hidden = rows || mode !== "played";
     this.overallEl.hidden = !rows;
@@ -345,7 +345,7 @@ class ImportDialog {
     const el = this.lazerEl;
     if (!st) {
       el.className = "imp-lazer";
-      el.innerHTML = `<span class="imp-lazer-text">Checking osu!lazer…</span>`;
+      el.innerHTML = `<span class="imp-lazer-text">${t("Checking osu!lazer…")}</span>`;
       delete el.dataset.tip;
       return;
     }
@@ -353,13 +353,13 @@ class ImportDialog {
     const ic = icon(st.ready ? "check" : "alert", "imp-lazer-ic");
     el.innerHTML =
       st.ready && st.version
-        ? `${ic}<span class="meta-line imp-lazer-text"><span>osu!lazer ${esc(short(st.version))}</span><span>Tested with Fumen</span><span>Closed</span></span>`
-        : `${ic}<span class="imp-lazer-text">${esc(st.message ?? "Importing isn't possible right now.")}</span>`;
+        ? `${ic}<span class="meta-line imp-lazer-text"><span>osu!lazer ${esc(short(st.version))}</span><span>${t("Tested with Fumen")}</span><span>${t("Closed")}</span></span>`
+        : `${ic}<span class="imp-lazer-text">${esc(st.message ?? t("Importing isn't possible right now."))}</span>`;
     this.renderRepair();
     if (st.reason === "untested") {
       el.dataset.tip = st.testedVersions.length
-        ? `Tested: ${st.testedVersions.map(short).join(", ")}\nImporting comes back once this version is checked.`
-        : "No osu!lazer version is tested yet.";
+        ? `${t("Tested: {versions}", { versions: st.testedVersions.map(short).join(", ") })}\n${t("Importing comes back once this version is checked.")}`
+        : t("No osu!lazer version is tested yet.");
     } else delete el.dataset.tip;
   }
 
@@ -378,12 +378,12 @@ class ImportDialog {
       ${icon("alert", "imp-lazer-ic")}
       <span class="imp-repair-text">${
         repairing
-          ? "Working out star ratings, BPM, length and ranked status…"
-          : `${plural(n, "set")} imported by an older Fumen ${n === 1 ? "is" : "are"} missing ${n === 1 ? "its" : "their"} details in osu!lazer: unknown status, 0 BPM, no length.`
+          ? t("Working out star ratings, BPM, length and ranked status…")
+          : tn(n, "{n} set imported by an older Fumen is missing its details in osu!lazer: unknown status, 0 BPM, no length.", "{n} sets imported by an older Fumen are missing their details in osu!lazer: unknown status, 0 BPM, no length.")
       }</span>
-      <button class="btn btn-sm" type="button" data-act="repair" ${off || repairing ? "disabled" : ""}>${repairing ? "Finishing…" : "Finish them"}</button>`;
+      <button class="btn btn-sm" type="button" data-act="repair" ${off || repairing ? "disabled" : ""}>${repairing ? t("Finishing…") : t("Finish them")}</button>`;
     const b = el.querySelector<HTMLElement>("button")!;
-    if (off && !repairing) b.dataset.tip = st.reason === "running" ? "Close osu!lazer first" : (st.message ?? "Not possible right now");
+    if (off && !repairing) b.dataset.tip = st.reason === "running" ? t("Close osu!lazer first") : (st.message ?? t("Not possible right now"));
   }
 
   /** the "Maps you've played" panel before an import */
@@ -397,25 +397,25 @@ class ImportDialog {
       this.shownFound = null;
     }
     if (this.account === undefined) {
-      p.innerHTML = `<div class="imp-pl-msg">Checking your osu! login…</div>`;
+      p.innerHTML = `<div class="imp-pl-msg">${t("Checking your osu! login…")}</div>`;
       return;
     }
     switch (state) {
       case "login":
-        p.innerHTML = `<div class="imp-pl-msg">${icon("user", "imp-pl-ic")}<span>Log in to osu! in Settings first. Fumen then finds every set you've played: your play counts, top plays and the scores in Performance.</span></div>`;
+        p.innerHTML = `<div class="imp-pl-msg">${icon("user", "imp-pl-ic")}<span>${t("Log in to osu! in Settings first. Fumen then finds every set you've played: your play counts, top plays and the scores in Performance.")}</span></div>`;
         return;
       case "idle":
-        p.innerHTML = `<div class="imp-pl-msg">${icon("download", "imp-pl-ic")}<span>Fumen reads your play counts and top plays (every ruleset) from osu!, adds the scores in Performance, and lists the sets osu!lazer doesn't have yet.</span></div>`;
+        p.innerHTML = `<div class="imp-pl-msg">${icon("download", "imp-pl-ic")}<span>${t("Fumen reads your play counts and top plays (every ruleset) from osu!, adds the scores in Performance, and lists the sets osu!lazer doesn't have yet.")}</span></div>`;
         return;
       case "finding": {
         if (!p.querySelector(".imp-pl-finding")) {
-          p.innerHTML = `<div class="imp-pl-finding"><div class="imp-pl-msg"><span>Reading your plays from osu!</span><span class="imp-pl-read"></span></div><div class="imp-bar imp-bar-sweep"><i></i></div></div>`;
+          p.innerHTML = `<div class="imp-pl-finding"><div class="imp-pl-msg"><span>${t("Reading your plays from osu!")}</span><span class="imp-pl-read"></span></div><div class="imp-bar imp-bar-sweep"><i></i></div></div>`;
         }
-        p.querySelector(".imp-pl-read")!.textContent = played.read ? `${num(played.read)} read` : "";
+        p.querySelector(".imp-pl-read")!.textContent = played.read ? t("{n} read", { n: num(played.read) }) : "";
         return;
       }
       case "error":
-        p.innerHTML = `<div class="imp-pl-msg bad">${icon("alert", "imp-pl-ic")}<span>${esc(played.error ?? "Couldn't read your plays.")}</span></div>`;
+        p.innerHTML = `<div class="imp-pl-msg bad">${icon("alert", "imp-pl-ic")}<span>${esc(played.error ?? t("Couldn't read your plays."))}</span></div>`;
         return;
       case "found": {
         const f = played.found!;
@@ -424,13 +424,13 @@ class ImportDialog {
         const missing = f.missing;
         const inStable = missing.filter((s) => s.inStable).length;
         const top = missing.filter((s) => s.top).length;
-        const meta: [string, string?][] = [[`${plural(f.played, "set")} played in all`]];
-        if (top) meta.push([`${num(top)} with top plays`]);
-        if (inStable) meta.push([`${num(inStable)} in osu!stable`]);
+        const meta: [string, string?][] = [[tn(f.played, "{n} set played in all", "{n} sets played in all")]];
+        if (top) meta.push([t("{n} with top plays", { n: num(top) })]);
+        if (inStable) meta.push([t("{n} in osu!stable", { n: num(inStable) })]);
         p.innerHTML = `
           <div class="imp-pl-sum">
-            <div class="imp-pl-big"><b>${num(missing.length)}</b><span>${missing.length === 1 ? "set you've played isn't" : "sets you've played aren't"} in osu!lazer${missing.length ? " yet" : ""}</span></div>
-            <button class="btn btn-ghost btn-sm" type="button" data-act="find">${icon("refresh")}Check again</button>
+            <div class="imp-pl-big"><b>${num(missing.length)}</b><span>${missing.length === 1 ? t("set you've played isn't in osu!lazer yet") : missing.length ? t("sets you've played aren't in osu!lazer yet") : t("sets you've played aren't in osu!lazer")}</span></div>
+            <button class="btn btn-ghost btn-sm" type="button" data-act="find">${icon("refresh")}${t("Check again")}</button>
           </div>
           <div class="imp-pl-meta">${words(meta)}</div>
           ${
@@ -441,10 +441,10 @@ class ImportDialog {
               <div class="imp-pl-set" style="--i:${Math.min(i, 14)}">
                 <div class="imp-cover"><img alt="" loading="lazy" decoding="async" src="${cover(s.id)}"></div>
                 <div class="imp-pl-text">
-                  <div class="imp-pl-title">${esc(s.title || `Beatmap set ${s.id}`)}</div>
+                  <div class="imp-pl-title">${esc(s.title || t("Beatmap set {id}", { id: s.id }))}</div>
                   <div class="imp-pl-by">${esc(s.artist)}${s.creator ? ` <span>· ${esc(s.creator)}</span>` : ""}</div>
                 </div>
-                <div class="imp-pl-plays">${s.plays ? plural(s.plays, "play") : s.top ? "Top play" : "Played"}</div>
+                <div class="imp-pl-plays">${s.plays ? tn(s.plays, "{n} play", "{n} plays") : s.top ? t("Top play") : t("Played")}</div>
               </div>`,
                   )
                   .join("")}</div>`
@@ -460,27 +460,27 @@ class ImportDialog {
     const n = this.noteEl;
     n.className = "imp-note";
     if (job?.running) {
-      n.textContent = job.stopping ? "Stopping after the sets going into osu!lazer right now…" : "You can close this; the import carries on.";
+      n.textContent = job.stopping ? t("Stopping after the sets going into osu!lazer right now…") : t("You can close this; the import carries on.");
     } else if (job?.summary) {
       // the counts are at the top; here only why it ended early
       const s = job.summary;
       if (s.stopped) {
         n.classList.add("bad");
         n.textContent = s.stopped;
-      } else if (s.cancelled) n.textContent = job.from === "played" ? "Stopped. What's left stays in the list of played maps." : "Stopped.";
-      else if (!s.imported && !s.failed) n.textContent = "Nothing to import";
+      } else if (s.cancelled) n.textContent = job.from === "played" ? t("Stopped. What's left stays in the list of played maps.") : t("Stopped.");
+      else if (!s.imported && !s.failed) n.textContent = t("Nothing to import");
       else n.textContent = "";
     } else if (job?.error) {
       n.classList.add("bad");
       n.textContent = job.error;
     } else if (mode === "played") {
-      n.textContent = played.state === "found" && played.found?.missing.length ? "The sets come from osu! download mirrors." : "";
+      n.textContent = played.state === "found" && played.found?.missing.length ? t("The sets come from osu! download mirrors.") : "";
     } else {
       const { links, unknown } = readLinks(this.input.value);
-      if (!links.length && !unknown.length) n.textContent = "Set or beatmap links, osu:// links or set IDs";
+      if (!links.length && !unknown.length) n.textContent = t("Set or beatmap links, osu:// links or set IDs");
       else {
-        const list: [string, string?][] = [[links.length ? plural(links.length, "link") : "No links"]];
-        if (unknown.length) list.push([`${num(unknown.length)} ${unknown.length === 1 ? "line isn't" : "lines aren't"} an osu! link`, "warn"]);
+        const list: [string, string?][] = [[links.length ? tn(links.length, "{n} link", "{n} links") : t("No links")]];
+        if (unknown.length) list.push([tn(unknown.length, "{n} line isn't an osu! link", "{n} lines aren't an osu! link"), "warn"]);
         n.innerHTML = words(list);
       }
     }
@@ -491,31 +491,31 @@ class ImportDialog {
     const running = !!job?.running;
     // a running import goes on with the window closed; the sidebar shows how far (and opens it again)
     const close = this.el.querySelector<HTMLElement>('.imp-actions [data-act="close"]')!;
-    close.textContent = running ? "Minimize" : "Close";
-    if (running) close.dataset.tip = "It keeps going; the sidebar shows how far";
+    close.textContent = running ? t("Minimize") : t("Close");
+    if (running) close.dataset.tip = t("It keeps going; the sidebar shows how far");
     else delete close.dataset.tip;
     this.stopBtn.hidden = !running;
     this.stopBtn.disabled = !!job?.stopping;
-    this.stopBtn.textContent = job?.stopping ? "Stopping…" : "Stop";
+    this.stopBtn.textContent = job?.stopping ? t("Stopping…") : t("Stop");
     if (running) {
       b.disabled = true;
-      b.textContent = "Importing…";
+      b.textContent = t("Importing…");
     } else if (repairing) {
       b.disabled = true;
     } else if (showsRows(job)) {
       b.disabled = false;
-      b.textContent = job.from === "played" ? "Back to played maps" : job.summary?.failed ? "Try failed again" : "Add more";
+      b.textContent = job.from === "played" ? t("Back to played maps") : job.summary?.failed ? t("Try failed again") : t("Add more");
     } else if (mode === "played") {
       const missing = played.found?.missing.length ?? 0;
       if (played.state === "found" && missing) {
-        b.textContent = `Download and import ${plural(missing, "set")}`;
+        b.textContent = tn(missing, "Download and import {n} set", "Download and import {n} sets");
         b.disabled = !this.status?.ready;
       } else {
-        b.textContent = played.state === "finding" ? "Finding…" : played.state === "found" ? "Check again" : "Find played maps";
+        b.textContent = played.state === "finding" ? t("Finding…") : played.state === "found" ? t("Check again") : t("Find played maps");
         b.disabled = played.state === "finding" || !this.account;
       }
     } else {
-      b.textContent = "Import";
+      b.textContent = t("Import");
       b.disabled = !this.status?.ready || readLinks(this.input.value).links.length === 0;
     }
   }
@@ -536,26 +536,26 @@ class ImportDialog {
     }
     const total = rows.length || 1;
     el.querySelector(".imp-ov-count")!.innerHTML = job.running
-      ? `<b>${num(finished)}</b> of ${num(rows.length)}`
-      : `<b>${num(done)}</b> ${done === 1 ? "set" : "sets"} imported`;
+      ? t("{done} of {total}", { done: `<b>${num(finished)}</b>`, total: num(rows.length) })
+      : tn(done, "<b>{n}</b> set imported", "<b>{n}</b> sets imported");
     const meta: [string, string?][] = [];
     if (job.running) {
       const dl = count(["downloading", "resolving"]);
       const held = count(["held"]);
       const ready = count(["ready"]);
       const importing = count(["importing"]);
-      if (queued.length) meta.push([`${num(queued.length)} queued after these`]);
-      if (dl) meta.push([`${num(dl)} downloading`]);
-      if (held) meta.push([`${num(held)} waiting for a mirror`]);
-      if (ready) meta.push([`${num(ready)} ready`]);
-      if (importing) meta.push([`${num(importing)} going into osu!lazer`]);
-      if (failed) meta.push([`${num(failed)} failed`, "bad"]);
+      if (queued.length) meta.push([t("{n} queued after these", { n: num(queued.length) })]);
+      if (dl) meta.push([t("{n} downloading", { n: num(dl) })]);
+      if (held) meta.push([t("{n} waiting for a mirror", { n: num(held) })]);
+      if (ready) meta.push([t("{n} ready", { n: num(ready) })]);
+      if (importing) meta.push([t("{n} going into osu!lazer", { n: num(importing) })]);
+      if (failed) meta.push([t("{n} failed", { n: num(failed) }), "bad"]);
     } else {
-      if (failed) meta.push([`${num(failed)} failed`, "bad"]);
+      if (failed) meta.push([t("{n} failed", { n: num(failed) }), "bad"]);
       const left = rows.filter((r) => r.stage === "skipped" && r.message === "Cancelled").length;
       const skipped = count(["skipped"]) - left;
-      if (skipped) meta.push([`${num(skipped)} skipped`]);
-      if (left) meta.push([`${num(left)} left out`]);
+      if (skipped) meta.push([t("{n} skipped", { n: num(skipped) })]);
+      if (left) meta.push([t("{n} left out", { n: num(left) })]);
     }
     el.querySelector(".imp-ov-meta")!.innerHTML = words(meta);
     const bar = el.querySelector<HTMLElement>(".imp-ov-bar")!;
@@ -594,7 +594,7 @@ class ImportDialog {
     const changed = el.dataset.stage !== r.stage;
     el.dataset.stage = r.stage;
     if (live && changed) el.classList.add("live");
-    el.querySelector(".imp-row-title")!.textContent = r.title ?? (r.set ? `Beatmap set ${r.set}` : r.link.replace(/^https?:\/\/(www\.)?osu\.ppy\.sh/i, ""));
+    el.querySelector(".imp-row-title")!.textContent = r.title ?? (r.set ? t("Beatmap set {id}", { id: r.set }) : r.link.replace(/^https?:\/\/(www\.)?osu\.ppy\.sh/i, ""));
     const state = el.querySelector<HTMLElement>(".imp-row-state")!;
     state.textContent = stateText(r);
     // long reasons don't fit the card
@@ -685,23 +685,27 @@ function wireCovers(root: HTMLElement): void {
 function stateText(r: Row): string {
   switch (r.stage) {
     case "waiting":
-      return "Waiting";
+      return t("Waiting");
     case "resolving":
-      return "Finding its set";
+      return t("Finding its set");
     case "downloading":
-      return r.total ? `Downloading · ${mb(r.done)} of ${mb(r.total)} MB` : r.done ? `Downloading · ${mb(r.done)} MB` : "Downloading";
+      return r.total
+        ? t("Downloading · {done} of {total} MB", { done: mb(r.done), total: mb(r.total) })
+        : r.done
+          ? t("Downloading · {done} MB", { done: mb(r.done) })
+          : t("Downloading");
     case "held":
-      return r.total > 2 ? `Mirrors are busy · trying again in ${clock(r.total)}` : "Waiting for a free mirror";
+      return r.total > 2 ? t("Mirrors are busy · trying again in {time}", { time: clock(r.total) }) : t("Waiting for a free mirror");
     case "ready":
-      return "Downloaded · waiting for osu!lazer";
+      return t("Downloaded · waiting for osu!lazer");
     case "importing":
-      return "Importing into osu!lazer";
+      return t("Importing into osu!lazer");
     case "done":
-      return "Imported";
+      return t("Imported");
     case "skipped":
-      return r.message ?? "Skipped";
+      return r.message === "Cancelled" ? t("Cancelled") : (r.message ?? t("Skipped"));
     case "error":
-      return r.message ?? "Failed";
+      return r.message ?? t("Failed");
   }
 }
 
@@ -780,9 +784,9 @@ async function runImport(lines: Line[], from: From): Promise<void> {
       const imported = new Set(current.rows.filter((r) => r.stage === "done" || (r.stage === "skipped" && r.message !== "Cancelled")).map((r) => r.set));
       played.found = { ...played.found, missing: played.found.missing.filter((m) => !imported.has(m.id)) };
     }
-    if (s.stopped) toast(`Import stopped: ${s.stopped}`, { kind: "danger", timeout: 6000 });
+    if (s.stopped) toast(t("Import stopped: {error}", { error: s.stopped }), { kind: "danger", timeout: 6000 });
     else if (s.imported || s.failed) {
-      const parts = [s.imported && `${plural(s.imported, "set")} imported into osu!lazer`, s.failed && `${num(s.failed)} failed`];
+      const parts = [s.imported && tn(s.imported, "{n} set imported into osu!lazer", "{n} sets imported into osu!lazer"), s.failed && t("{n} failed", { n: num(s.failed) })];
       toast(parts.filter(Boolean).join(", "), { kind: s.imported ? "success" : "danger", timeout: 4200 });
     }
     if (s.imported) {
@@ -793,7 +797,7 @@ async function runImport(lines: Line[], from: From): Promise<void> {
     current.error = asApiError(e).message;
     // nothing happened yet (lazer was opened meanwhile, …): back to where the sets came from
     if (current.rows.every((r) => r.stage === "waiting")) current.rows = [];
-    else toast(`Import stopped: ${current.error}`, { kind: "danger", timeout: 6000 });
+    else toast(t("Import stopped: {error}", { error: current.error }), { kind: "danger", timeout: 6000 });
   } finally {
     stop();
     current.running = false;

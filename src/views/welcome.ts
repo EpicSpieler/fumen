@@ -1,13 +1,14 @@
 /* welcome.ts — first run: find osu!lazer, import the library. */
 import { open } from "@tauri-apps/plugin-dialog";
 import { api } from "../lib/api";
-import { esc, num, relativeTime } from "../lib/format";
+import { esc, num, pct, relativeTime } from "../lib/format";
 import { goSection } from "../lib/router";
 import { describeScan, isScanning, runScan } from "../lib/scan";
 import { events, refreshStatus, store } from "../lib/store";
 import type { ApiError } from "../lib/types";
 import { toast } from "../ui/controls";
 import { icon } from "../ui/icons";
+import { t, tn } from "../lib/i18n";
 
 export class WelcomeView {
   readonly el: HTMLElement;
@@ -34,36 +35,36 @@ export class WelcomeView {
       ? `<div class="welcome-found">
           <div class="label-caps">osu!stable</div>
           <div class="welcome-path">${esc(stable.path)}</div>
-          <div class="welcome-meta">Its beatmaps come in too (Settings can switch that off). Ones lazer has as well show once.</div>
+          <div class="welcome-meta">${t("Its beatmaps come in too (Settings can switch that off). Ones lazer has as well show once.")}</div>
         </div>`
       : "";
     this.el.innerHTML = `
       <div class="welcome">
         <div class="welcome-mark">${icon("lanes-duo")}</div>
-        <h1 class="welcome-title">Welcome to Fumen</h1>
-        <p class="welcome-sub">Your osu! library, all in one place: search it, filter it, listen to it.</p>
+        <h1 class="welcome-title">${t("Welcome to Fumen")}</h1>
+        <p class="welcome-sub">${t("Your osu! library, all in one place: search it, filter it, listen to it.")}</p>
         <div class="panel welcome-panel">
           ${
             inst
               ? `<div class="welcome-found">
                   <div class="label-caps">osu!lazer</div>
                   <div class="welcome-path">${esc(inst.storage)}</div>
-                  <div class="welcome-meta">Database ${(inst.realmSize / 1048576).toFixed(0)} MB, last changed ${relativeTime(inst.realmModified)}</div>
+                  <div class="welcome-meta">${t("Database {size} MB, last changed {when}", { size: num(Math.round(inst.realmSize / 1048576)), when: relativeTime(inst.realmModified) })}</div>
                 </div>
                 ${stableBlock}
                 <div class="welcome-actions">
-                  <button class="btn btn-primary btn-lg w-import" type="button"${busy ? " disabled" : ""}>Import library</button>
-                  <button class="btn btn-ghost w-pick" type="button"${busy ? " disabled" : ""}>Use another folder</button>
+                  <button class="btn btn-primary btn-lg w-import" type="button"${busy ? " disabled" : ""}>${t("Import library")}</button>
+                  <button class="btn btn-ghost w-pick" type="button"${busy ? " disabled" : ""}>${t("Use another folder")}</button>
                 </div>`
               : `<div class="welcome-found">
                   <div class="label-caps">osu!lazer</div>
-                  <div class="welcome-path is-missing">Not found${st?.defaultPath ? ` in ${esc(st.defaultPath)}` : ""}</div>
-                  <div class="welcome-meta">Pick the folder osu!lazer stores its files in. In lazer: Settings, Maintenance, "Open osu! folder".</div>
+                  <div class="welcome-path is-missing">${st?.defaultPath ? t("Not found in {path}", { path: esc(st.defaultPath) }) : t("Not found")}</div>
+                  <div class="welcome-meta">${t("Pick the folder osu!lazer stores its files in. In lazer: Settings, Maintenance, “Open osu! folder”.")}</div>
                 </div>
                 ${stableBlock}
                 <div class="welcome-actions">
-                  ${stable ? `<button class="btn btn-primary btn-lg w-import" type="button"${busy ? " disabled" : ""}>Import osu!stable</button>` : ""}
-                  <button class="btn ${stable ? "btn-ghost" : "btn-primary btn-lg"} w-pick" type="button">Choose lazer's folder</button>
+                  ${stable ? `<button class="btn btn-primary btn-lg w-import" type="button"${busy ? " disabled" : ""}>${t("Import osu!stable")}</button>` : ""}
+                  <button class="btn ${stable ? "btn-ghost" : "btn-primary btn-lg"} w-pick" type="button">${t("Choose lazer's folder")}</button>
                 </div>`
           }
           <div class="welcome-progress" hidden>
@@ -72,7 +73,7 @@ export class WelcomeView {
           </div>
           <div class="welcome-error" hidden></div>
         </div>
-        <p class="welcome-foot">${icon("info")}Fumen only reads osu!'s data. It never changes anything in osu!.</p>
+        <p class="welcome-foot">${icon("info")}${t("Fumen only reads osu!'s data. It never changes anything in osu!.")}</p>
       </div>`;
     this.renderProgress();
     this.renderError();
@@ -87,7 +88,7 @@ export class WelcomeView {
     if (!busy) return;
     const { label, fraction } = describeScan(store.scan);
     box.querySelector(".wp-label")!.textContent = label;
-    box.querySelector(".wp-pct")!.textContent = `${Math.round(fraction * 100)}%`;
+    box.querySelector(".wp-pct")!.textContent = pct(fraction, 0);
     const fill = box.querySelector<HTMLElement>(".wp-fill")!;
     fill.style.animation = "none";
     fill.style.transform = `scaleX(${fraction})`;
@@ -101,26 +102,26 @@ export class WelcomeView {
   }
 
   private async onClick(e: Event): Promise<void> {
-    const t = e.target as Element;
-    if (t.closest(".w-import")) {
+    const target = e.target as Element;
+    if (target.closest(".w-import")) {
       this.error = null;
       this.renderError();
       const res = await runScan();
       if (res.ok) {
         const c = store.status?.counts;
-        if (c) toast(`Imported ${num(c.sets)} sets and ${num(c.maps)} difficulties`, { kind: "success" });
+        if (c) toast(t("Imported {sets} and {maps}", { sets: tn(c.sets, "{n} set", "{n} sets"), maps: tn(c.maps, "{n} difficulty", "{n} difficulties") }), { kind: "success" });
         goSection({ name: "home" });
       } else {
         this.error = res.error;
         this.renderError();
         this.renderProgress();
       }
-    } else if (t.closest(".w-pick")) {
-      const dir = await open({ directory: true, title: "osu!lazer data folder", defaultPath: store.status?.defaultPath ?? undefined });
+    } else if (target.closest(".w-pick")) {
+      const dir = await open({ directory: true, title: t("osu!lazer data folder"), defaultPath: store.status?.defaultPath ?? undefined });
       if (typeof dir !== "string") return;
       const inst = await api.inspectLazerPath(dir);
       if (!inst) {
-        this.error = { code: "lazer-not-found", message: "That folder doesn't contain an osu!lazer database (client.realm and a files folder)." };
+        this.error = { code: "lazer-not-found", message: t("That folder doesn't contain an osu!lazer database (client.realm and a files folder).") };
         this.renderError();
         return;
       }

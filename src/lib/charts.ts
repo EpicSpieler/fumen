@@ -4,6 +4,7 @@ import { api } from "./api";
 import { chartModsKey, type ChartMods } from "./mods";
 import { store } from "./store";
 import type { ChartData, DanRating, PatternName } from "./types";
+import { t } from "./i18n";
 
 const cache = new Map<string, Promise<ChartData>>();
 
@@ -38,12 +39,12 @@ export function danAt(mapId: string, d: ChartData, rate: number): Promise<DanRat
 }
 
 export const PATTERNS: Record<PatternName, { label: string; hint: string }> = {
-  stream: { label: "Stream", hint: "Single notes in quick succession" },
-  jumpstream: { label: "Jumpstream", hint: "Streams with two-note chords mixed in" },
-  handstream: { label: "Handstream", hint: "Streams with chords of three or more notes" },
-  chordjack: { label: "Chordjack", hint: "Chords that keep hitting the same columns" },
-  jacks: { label: "Jacks", hint: "The same column hit repeatedly" },
-  ln: { label: "Long notes", hint: "Long notes held for most of the time" },
+  stream: { label: "Stream", hint: t("Single notes in quick succession") },
+  jumpstream: { label: "Jumpstream", hint: t("Streams with two-note chords mixed in") },
+  handstream: { label: "Handstream", hint: t("Streams with chords of three or more notes") },
+  chordjack: { label: "Chordjack", hint: t("Chords that keep hitting the same columns") },
+  jacks: { label: "Jacks", hint: t("The same column hit repeatedly") },
+  ln: { label: t("Long notes"), hint: t("Long notes held for most of the time") },
 };
 
 /** First index (multiple of 3) whose time is ≥ t in a flat [time, lane, length] array. */

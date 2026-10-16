@@ -52,6 +52,9 @@ export function t(s: string, vars?: Record<string, string | number>): string {
   return fill(dict?.[s] ?? s, vars);
 }
 
+/** A label inside a sentence: lowercase in English ("long notes"), German nouns keep their capital. */
+export const lower = (s: string): string => (lang === "de" ? s : s.toLowerCase());
+
 const nf = new Intl.NumberFormat(locale);
 
 /** `one` or `other` by `n`, in the current language; `{n}` is `n` formatted (German: 1.234). */

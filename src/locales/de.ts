@@ -15,5 +15,6 @@ import { set } from "./de/set";
 import { chart } from "./de/chart";
 import { history } from "./de/history";
 import { skills } from "./de/skills";
+import { manage } from "./de/manage";
 
-export const de: Record<string, string> = { ...common, ...shell, ...settings, ...player, ...menus, ...home, ...library, ...set, ...chart, ...history, ...skills };
+export const de: Record<string, string> = { ...common, ...shell, ...settings, ...player, ...menus, ...home, ...library, ...set, ...chart, ...history, ...skills, ...manage };

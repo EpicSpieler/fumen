@@ -2,6 +2,7 @@
  * has, which don't go together, what they do to a difficulty's numbers, and which of them change
  * the chart itself (Easy, Hard Rock, Mirror: built in Rust, src-tauri/src/mods.rs; the playfield
  * draws Hidden, Fade In and Flashlight). Rate mods are the player's rate. */
+import { t } from "./i18n";
 
 export type Mod = "EZ" | "HR" | "HD" | "FI" | "FL" | "MR";
 
@@ -31,26 +32,26 @@ export const MOD_NAMES: Record<Mod, string> = {
 export function modEffect(m: Mod, mode: number): string {
   switch (m) {
     case "EZ":
-      return mode === 1 ? "Slower scroll, OD and HP halved" : mode === 3 ? "Wider hit windows, HP halved" : "CS, AR, OD and HP halved";
+      return mode === 1 ? t("Slower scroll, OD and HP halved") : mode === 3 ? t("Wider hit windows, HP halved") : t("CS, AR, OD and HP halved");
     case "HR":
-      if (mode === 0) return "CS ×1.3, AR, OD and HP ×1.4, flipped top to bottom";
-      if (mode === 1) return "Faster scroll, OD and HP ×1.4";
-      if (mode === 2) return "CS ×1.3, AR, OD and HP ×1.4, fruits pushed further apart";
-      return "Tighter hit windows, HP ×1.4";
+      if (mode === 0) return t("CS ×1.3, AR, OD and HP ×1.4, flipped top to bottom");
+      if (mode === 1) return t("Faster scroll, OD and HP ×1.4");
+      if (mode === 2) return t("CS ×1.3, AR, OD and HP ×1.4, fruits pushed further apart");
+      return t("Tighter hit windows, HP ×1.4");
     case "HD":
-      if (mode === 0) return "No approach circles, objects fade out";
-      if (mode === 1) return "Notes fade out on their way";
-      if (mode === 2) return "Fruits fade out as they fall";
-      return "Notes fade out before the hit line, more as the combo grows";
+      if (mode === 0) return t("No approach circles, objects fade out");
+      if (mode === 1) return t("Notes fade out on their way");
+      if (mode === 2) return t("Fruits fade out as they fall");
+      return t("Notes fade out before the hit line, more as the combo grows");
     case "FI":
-      return "Notes appear out of nowhere, later as the combo grows";
+      return t("Notes appear out of nowhere, later as the combo grows");
     case "FL":
-      if (mode === 0) return "Only around the cursor, smaller as the combo grows";
-      if (mode === 1) return "Only around the hit target, smaller as the combo grows";
-      if (mode === 2) return "Only around the catcher, smaller as the combo grows";
-      return "Only a band across the middle";
+      if (mode === 0) return t("Only around the cursor, smaller as the combo grows");
+      if (mode === 1) return t("Only around the hit target, smaller as the combo grows");
+      if (mode === 2) return t("Only around the catcher, smaller as the combo grows");
+      return t("Only a band across the middle");
     case "MR":
-      return mode === 3 ? "Columns flipped" : mode === 2 ? "Fruits flipped left to right" : "Flipped left to right";
+      return mode === 3 ? t("Columns flipped") : mode === 2 ? t("Fruits flipped left to right") : t("Flipped left to right");
   }
 }
 
