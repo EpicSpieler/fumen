@@ -13,7 +13,7 @@ import { Emitter, events, refreshStatus, reloadLibrary } from "../lib/store";
 import type { ImportProgress, ImportStage, ImportSummary, LazerImportStatus, OsuAccount, PlayedFound } from "../lib/types";
 import { attachSegIndicator, closeAnimated, reduceMotion, toast } from "../ui/controls";
 import { icon } from "../ui/icons";
-import { t, tn } from "../lib/i18n";
+import { fromRust, t, tn } from "../lib/i18n";
 
 type Mode = "links" | "played";
 /** where an import's sets came from: a tab of the dialog, or Browse */
@@ -598,7 +598,7 @@ class ImportDialog {
     const state = el.querySelector<HTMLElement>(".imp-row-state")!;
     state.textContent = stateText(r);
     // long reasons don't fit the card
-    if (r.stage === "error" && r.message) state.dataset.tip = r.message;
+    if (r.stage === "error" && r.message) state.dataset.tip = fromRust(r.message);
     else delete state.dataset.tip;
     const art = el.querySelector<HTMLElement>(".imp-cover")!;
     if (r.set && art.dataset.set !== String(r.set)) {
@@ -703,9 +703,9 @@ function stateText(r: Row): string {
     case "done":
       return t("Imported");
     case "skipped":
-      return r.message === "Cancelled" ? t("Cancelled") : (r.message ?? t("Skipped"));
+      return r.message ? fromRust(r.message) : t("Skipped");
     case "error":
-      return r.message ?? t("Failed");
+      return r.message ? fromRust(r.message) : t("Failed");
   }
 }
 

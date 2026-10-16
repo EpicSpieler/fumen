@@ -117,7 +117,6 @@ export const manage: Record<string, string> = {
   "Downloaded · waiting for osu!lazer": "Geladen · wartet auf osu!lazer",
   "Importing into osu!lazer": "Importiere in osu!lazer",
   Imported: "Importiert",
-  Cancelled: "Abgebrochen",
   Skipped: "Übersprungen",
   Failed: "Fehlgeschlagen",
   "Import stopped: {error}": "Import gestoppt: {error}",
