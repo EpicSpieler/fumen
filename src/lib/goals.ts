@@ -5,9 +5,10 @@
  * Everything here is worked out from the play history; Fumen stores the goals as they are
  * (src-tauri/src/goals.rs) and lib/goals-store.ts keeps them and marks the ones reached.
  */
-import { num, pct } from "./format";
+import { fixed, num, pct } from "./format";
 import { bestPerChart, changesChart, PATTERN_LABEL, rateOf, skills, type Skill, type SkillPattern, PATTERNS } from "./skills";
 import type { History, MapRow, Play } from "./types";
+import { t } from "./i18n";
 
 export type Ruleset = "osu" | "taiko" | "fruits" | "mania";
 export const RULESETS: Ruleset[] = ["osu", "taiko", "fruits", "mania"];
@@ -138,18 +139,18 @@ const roundSig = (v: number) => {
 export function goalTitle(goal: GoalSpec): string {
   if (goal.kind === "skill") return `${PATTERN_LABEL[goal.pattern]} ${goal.keys}K`;
   if (goal.kind === "chart") return `${goal.title} [${goal.version}]`;
-  return `${RULESET_LABEL[goal.ruleset]} ${goal.metric === "pp" ? "pp" : "rank"}`;
+  return goal.metric === "pp" ? `${RULESET_LABEL[goal.ruleset]} pp` : t("{ruleset} rank", { ruleset: RULESET_LABEL[goal.ruleset] });
 }
 
 /** A value of the goal's kind: "4.00★", "96.00%", "1,500pp", "#10,000". */
 export function goalValue(goal: GoalSpec, v: number): string {
-  if (goal.kind === "skill") return `${v.toFixed(2)}★`;
+  if (goal.kind === "skill") return `${fixed(v, 2)}★`;
   if (goal.kind === "chart") return pct(v);
   return goal.metric === "pp" ? `${num(Math.round(v))}pp` : `#${num(Math.round(v))}`;
 }
 
 /** The target in words: "4.00★", "96.00% at 1.10× or faster". */
 export function goalTarget(goal: GoalSpec): string {
-  if (goal.kind === "chart") return goal.rate !== 1 ? `${pct(goal.acc)} at ${goal.rate.toFixed(2)}× or faster` : pct(goal.acc);
+  if (goal.kind === "chart") return goal.rate !== 1 ? t("{acc} at {rate}× or faster", { acc: pct(goal.acc), rate: fixed(goal.rate, 2) }) : pct(goal.acc);
   return goalValue(goal, goal.target);
 }

@@ -1,0 +1,68 @@
+/** The history: tiles, activity, recent, top and most played. */
+export const history: Record<string, string> = {
+  "Couldn't read your plays": "Deine Plays ließen sich nicht lesen",
+  "since {date}": "seit {date}",
+  "No plays yet": "Noch keine Plays",
+  "Your plays in osu!lazer show up here after the next library update.":
+    "Deine Plays in osu!lazer erscheinen hier nach dem nächsten Bibliotheks-Update.",
+  "Log in with osu! to bring in your scores from other computers too.":
+    "Melde dich mit osu! an, um auch deine Scores von anderen Computern zu holen.",
+  Recent: "Neueste",
+  "Top plays": "Top-Plays",
+  "Reading your scores from osu!…": "Lese deine Scores von osu!…",
+  "Synced with osu! {when}": "Mit osu! synchronisiert, {when}",
+  "Not synced with osu! yet": "Noch nicht mit osu! synchronisiert",
+  "Sync with osu!": "Mit osu! synchronisieren",
+  "Show {n} more": "{n} weitere zeigen",
+  "No top plays in {mode} yet": "Noch keine Top-Plays in {mode}",
+  "No top plays yet": "Noch keine Top-Plays",
+  "osu! lists your best plays on ranked and approved beatmaps here, by pp.":
+    "osu! listet hier deine besten Plays auf Ranked- und Approved-Beatmaps, nach pp.",
+  "Your top plays come from osu!": "Deine Top-Plays kommen von osu!",
+  "Log in with osu! to see them with their pp, from every computer you play on.":
+    "Melde dich mit osu! an, um sie mit ihren pp zu sehen, von jedem Computer, auf dem du spielst.",
+  "Nothing played here yet": "Hier noch nichts gespielt",
+  "Counts are the scores osu!lazer kept on this computer.": "Gezählt werden die Scores, die osu!lazer auf diesem Computer behalten hat.",
+  "Logged in, osu!'s play counts (every try, every computer) come in too.":
+    "Angemeldet kommen auch die Play-Zahlen von osu! dazu (jeder Versuch, jeder Computer).",
+  "Not in your library": "Nicht in deiner Bibliothek",
+  "osu! difficulty {id}": "osu!-Schwierigkeitsgrad {id}",
+  "a difficulty that's gone": "ein Schwierigkeitsgrad, den es nicht mehr gibt",
+  "Add to your library": "Zu deiner Bibliothek hinzufügen",
+  "View beatmap on osu! website": "Beatmap auf der osu!-Website ansehen",
+  "{n} new score from osu!|{n} new scores from osu!": "{n} neuer Score von osu!|{n} neue Scores von osu!",
+  "Up to date with osu!": "Auf dem Stand von osu!",
+  "Couldn't sync with osu!: {error}": "Synchronisieren mit osu! ging nicht: {error}",
+
+  // tiles
+  "#{rank} in {country}": "#{rank} in {country}",
+  Performance: "Performance",
+  "No rank yet": "Noch kein Rang",
+  Accuracy: "Accuracy",
+  "on your top plays": "auf deinen Top-Plays",
+  "Time played": "Spielzeit",
+  "{n} play on osu!|{n} plays on osu!": "{n} Play auf osu!|{n} Plays auf osu!",
+  "no history yet": "noch kein Verlauf",
+  "up {n} in 90 days": "{n} hoch in 90 Tagen",
+  "down {n} in 90 days": "{n} runter in 90 Tagen",
+  "unchanged in 90 days": "unverändert in 90 Tagen",
+  "Rank, 90 days": "Rang, 90 Tage",
+  "{n} in your library": "{n} in deiner Bibliothek",
+  "Days played": "Tage gespielt",
+  "longest streak {n} day|longest streak {n} days": "längste Serie {n} Tag|längste Serie {n} Tage",
+  "average of the last {n} pass|average of the last {n} passes": "Schnitt aus {n} letzten Pass|Schnitt der letzten {n} Passes",
+  "no passes yet": "noch keine Passes",
+
+  // activity
+  "<b>{n}</b> play|<b>{n}</b> plays": "<b>{n}</b> Play|<b>{n}</b> Plays",
+  "No plays": "Keine Plays",
+  "in the last year": "im letzten Jahr",
+  "in {n} weeks": "in {n} Wochen",
+  "{n} day|{n} days": "{n} Tag|{n} Tage",
+  Activity: "Aktivität",
+  Mon: "Mo",
+  Wed: "Mi",
+  Fri: "Fr",
+  Today: "Heute",
+  Yesterday: "Gestern",
+};

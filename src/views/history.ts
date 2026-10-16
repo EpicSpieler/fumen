@@ -19,13 +19,14 @@ import { icon } from "../ui/icons";
 import { openSet } from "./actions";
 import { openImport } from "./import";
 import { loginWithOsu } from "./settings";
+import { locale, t, tn } from "../lib/i18n";
 
 /** rows per "Show more" */
 const PAGE = 50;
 const MOST_PLAYED = 100;
 const RULESET_NAMES = ["osu", "taiko", "fruits", "mania"] as const;
 const MODES = [
-  { mode: -1, label: "All" },
+  { mode: -1, label: t("All") },
   { mode: 0, label: "osu!" },
   { mode: 1, label: "taiko" },
   { mode: 2, label: "catch" },
@@ -66,13 +67,13 @@ export class HistoryView {
     this.el.innerHTML = `
       <header class="view-head hist-head">
         <div class="hist-head-text">
-          <h1 class="view-title">History</h1>
+          <h1 class="view-title">${t("History")}</h1>
           <div class="view-sub hist-sub meta-line num"></div>
         </div>
         <div class="hist-sync"></div>
       </header>
       <div class="hist-toolbar">
-        <div class="seg-pill hist-modes" role="tablist" aria-label="Ruleset">
+        <div class="seg-pill hist-modes" role="tablist" aria-label="${t("Ruleset")}">
           ${MODES.map((m) => `<button type="button" data-mode="${m.mode}">${m.label}</button>`).join("")}
         </div>
       </div>
@@ -124,21 +125,21 @@ export class HistoryView {
     if (!h) {
       sub.textContent = "";
       body.innerHTML = this.failed
-        ? `<div class="empty-state">${icon("alert")}<div class="empty-title">Couldn't read your plays</div><div class="empty-sub">${esc(this.failed)}</div></div>`
+        ? `<div class="empty-state">${icon("alert")}<div class="empty-title">${t("Couldn't read your plays")}</div><div class="empty-sub">${esc(this.failed)}</div></div>`
         : `<div class="hist-loading"><div class="skeleton" style="height:92px"></div><div class="skeleton" style="height:150px"></div><div class="skeleton" style="height:280px"></div></div>`;
       return;
     }
     const plays = this.plays(h);
     const first = plays.length ? plays[plays.length - 1].date : 0;
-    sub.innerHTML = [h.player?.name ? esc(h.player.name) : "", `${num(plays.length)} ${plays.length === 1 ? "play" : "plays"}`, first ? `since ${monthYear(first)}` : ""]
+    sub.innerHTML = [h.player?.name ? esc(h.player.name) : "", tn(plays.length, "{n} play", "{n} plays"), first ? t("since {date}", { date: monthYear(first) }) : ""]
       .filter(Boolean)
       .map((w) => `<span>${w}</span>`)
       .join("");
     if (!h.plays.length) {
       body.innerHTML = `
         <div class="empty-state hist-empty">${icon("clock")}
-          <div class="empty-title">No plays yet</div>
-          <div class="empty-sub">Your plays in osu!lazer show up here after the next library update.${this.account ? "" : " Log in with osu! to bring in your scores from other computers too."}</div>
+          <div class="empty-title">${t("No plays yet")}</div>
+          <div class="empty-sub">${t("Your plays in osu!lazer show up here after the next library update.")}${this.account ? "" : ` ${t("Log in with osu! to bring in your scores from other computers too.")}`}</div>
         </div>`;
       return;
     }
@@ -146,10 +147,10 @@ export class HistoryView {
       <div class="hist-tiles">${this.tiles(h, plays)}</div>
       ${activity(plays, this.weeks)}
       <section class="section hist-lists">
-        <div class="seg-tabs hist-tabs" role="tablist" aria-label="Plays">
-          <button type="button" data-tab="recent">Recent</button>
-          <button type="button" data-tab="top">Top plays</button>
-          <button type="button" data-tab="most">Most played</button>
+        <div class="seg-tabs hist-tabs" role="tablist" aria-label="${t("Plays")}">
+          <button type="button" data-tab="recent">${t("Recent")}</button>
+          <button type="button" data-tab="top">${t("Top plays")}</button>
+          <button type="button" data-tab="most">${t("Most played")}</button>
         </div>
         <div class="hist-list"></div>
       </section>`;
@@ -173,15 +174,15 @@ export class HistoryView {
   private renderSync(): void {
     const host = this.el.querySelector<HTMLElement>(".hist-sync")!;
     if (!this.account) {
-      host.innerHTML = `<button class="btn btn-sm hist-login" type="button">${icon("user")}<span>Log in with osu!</span></button>`;
+      host.innerHTML = `<button class="btn btn-sm hist-login" type="button">${icon("user")}<span>${t("Log in with osu!")}</span></button>`;
       return;
     }
     const busy = isSyncing();
     const at = historyNow()?.syncedAt;
-    const state = busy ? "Reading your scores from osu!…" : at ? `Synced with osu! ${relativeTime(at)}` : "Not synced with osu! yet";
+    const state = busy ? t("Reading your scores from osu!…") : at ? t("Synced with osu! {when}", { when: relativeTime(at) }) : t("Not synced with osu! yet");
     host.innerHTML = `
       <span class="hist-synced">${state}</span>
-      <button class="icon-btn hist-sync-btn${busy ? " busy" : ""}" type="button" data-tip="${busy ? state : `Sync with osu! (${state.toLowerCase()})`}" aria-label="Sync with osu!"${busy ? " disabled" : ""}>${icon("refresh")}</button>`;
+      <button class="icon-btn hist-sync-btn${busy ? " busy" : ""}" type="button" data-tip="${busy ? state : `${t("Sync with osu!")} · ${state}`}" aria-label="${t("Sync with osu!")}"${busy ? " disabled" : ""}>${icon("refresh")}</button>`;
   }
 
   /** osu!'s numbers for the ruleset when it has them, else totals from the plays. */
@@ -214,7 +215,7 @@ export class HistoryView {
       out += this.playRow(p, i, false, true);
     });
     const left = plays.length - shown.length;
-    if (left > 0) out += `<button class="btn btn-ghost btn-sm hist-more" type="button">Show ${num(Math.min(PAGE, left))} more</button>`;
+    if (left > 0) out += `<button class="btn btn-ghost btn-sm hist-more" type="button">${t("Show {n} more", { n: num(Math.min(PAGE, left)) })}</button>`;
     return out;
   }
 
@@ -224,13 +225,13 @@ export class HistoryView {
     const top = plays.filter((p) => p.top !== undefined).sort((a, b) => (mode < 0 ? (b.pp ?? 0) - (a.pp ?? 0) : a.top! - b.top!));
     if (!top.length) {
       return this.account
-        ? `<div class="empty-state">${icon("star")}<div class="empty-title">No top plays${mode >= 0 ? ` in ${MODE_LABEL[mode as 0]}` : ""} yet</div><div class="empty-sub">osu! lists your best plays on ranked and approved beatmaps here, by pp.</div></div>`
-        : `<div class="empty-state">${icon("star")}<div class="empty-title">Your top plays come from osu!</div><div class="empty-sub">Log in with osu! to see them with their pp, from every computer you play on.</div><button class="btn btn-primary btn-sm hist-login" type="button">Log in with osu!</button></div>`;
+        ? `<div class="empty-state">${icon("star")}<div class="empty-title">${mode >= 0 ? t("No top plays in {mode} yet", { mode: MODE_LABEL[mode as 0] }) : t("No top plays yet")}</div><div class="empty-sub">${t("osu! lists your best plays on ranked and approved beatmaps here, by pp.")}</div></div>`
+        : `<div class="empty-state">${icon("star")}<div class="empty-title">${t("Your top plays come from osu!")}</div><div class="empty-sub">${t("Log in with osu! to see them with their pp, from every computer you play on.")}</div><button class="btn btn-primary btn-sm hist-login" type="button">${t("Log in with osu!")}</button></div>`;
     }
     const shown = top.slice(0, this.shownRows);
     this.rows = shown.map((p) => ({ map: p.map, beatmap: p.beatmap, beatmapId: p.beatmapId, mode: p.mode, play: p }));
     const left = top.length - shown.length;
-    return shown.map((p, i) => this.playRow(p, i, true)).join("") + (left > 0 ? `<button class="btn btn-ghost btn-sm hist-more" type="button">Show ${num(Math.min(PAGE, left))} more</button>` : "");
+    return shown.map((p, i) => this.playRow(p, i, true)).join("") + (left > 0 ? `<button class="btn btn-ghost btn-sm hist-more" type="button">${t("Show {n} more", { n: num(Math.min(PAGE, left)) })}</button>` : "");
   }
 
   private most(h: History, plays: Play[]): string {
@@ -262,9 +263,9 @@ export class HistoryView {
       entries.set(key, { map: m.map, beatmap: m.beatmap, beatmapId: m.beatmapId, mode: mapMode, count: m.count });
     }
     const list = [...entries.values()].sort((a, b) => b.count - a.count || (b.last ?? 0) - (a.last ?? 0)).slice(0, MOST_PLAYED);
-    if (!list.length) return `<div class="empty-state">${icon("music")}<div class="empty-title">Nothing played here yet</div></div>`;
+    if (!list.length) return `<div class="empty-state">${icon("music")}<div class="empty-title">${t("Nothing played here yet")}</div></div>`;
     this.rows = list;
-    const note = h.mostPlayed.length ? "" : `<p class="hist-note">Counts are the scores osu!lazer kept on this computer.${this.account ? "" : " Logged in, osu!'s play counts (every try, every computer) come in too."}</p>`;
+    const note = h.mostPlayed.length ? "" : `<p class="hist-note">${t("Counts are the scores osu!lazer kept on this computer.")}${this.account ? "" : ` ${t("Logged in, osu!'s play counts (every try, every computer) come in too.")}`}</p>`;
     return note + list.map((e, i) => this.mostRow(e, i)).join("");
   }
 
@@ -273,9 +274,9 @@ export class HistoryView {
     const { map, online } = playTarget(r);
     const unicode = store.prefs.unicode;
     const set = map ? store.snap!.sets[map.set] : undefined;
-    const title = set ? displayTitle(set, unicode) : online ? (unicode && online.titleUnicode) || online.title : "Not in your library";
+    const title = set ? displayTitle(set, unicode) : online ? (unicode && online.titleUnicode) || online.title : t("Not in your library");
     const artist = set ? displayArtist(set, unicode) : online ? (unicode && online.artistUnicode) || online.artist : "";
-    const version = map?.version ?? online?.version ?? (r.beatmapId ? `osu! difficulty ${r.beatmapId}` : "a difficulty that's gone");
+    const version = map?.version ?? online?.version ?? (r.beatmapId ? t("osu! difficulty {id}", { id: r.beatmapId }) : t("a difficulty that's gone"));
     const ruleset = store.prefs.mode < 0 ? (MODE_SHORT[r.mode as 0] ?? r.play?.ruleset ?? "") : "";
     const bg = map ? (map.bg ?? set!.bg) : undefined;
     return {
@@ -298,7 +299,7 @@ export class HistoryView {
   }
 
   private rowEnd(r: Row, inLib: boolean): string {
-    return `<span class="prow-act">${!inLib && r.beatmapId ? `<button class="icon-btn prow-add" type="button" data-tip="Add to your library" aria-label="Add to your library">${icon("download")}</button>` : ""}</span>
+    return `<span class="prow-act">${!inLib && r.beatmapId ? `<button class="icon-btn prow-add" type="button" data-tip="${t("Add to your library")}" aria-label="${t("Add to your library")}">${icon("download")}</button>` : ""}</span>
       </div>`;
   }
 
@@ -320,7 +321,7 @@ export class HistoryView {
     const b = e.best;
     const g = b ? rankInfo(b.rank) : null;
     return `${this.rowStart(e, i, "", "prow mrow")}
-        <span class="prow-count num"><b>${num(e.count)}</b> ${e.count === 1 ? "play" : "plays"}</span>
+        <span class="prow-count num">${tn(e.count, "<b>{n}</b> play", "<b>{n}</b> plays")}</span>
         <span class="grade" ${g ? `style="--c:${g.color}" data-tip="${playScoreTip(b!)}"` : ""}>${g ? g.label : ""}</span>
         <span class="prow-acc num">${b ? pct(b.acc) : ""}</span>
         <span class="prow-when">${e.last ? playWhen(e.last) : ""}</span>
@@ -343,13 +344,13 @@ export class HistoryView {
     if (!r) return;
     const { map, online } = playTarget(r);
     const entries: MenuEntry[] = [];
-    if (map) entries.push({ label: "Open beatmap set", icon: "library", action: () => this.open(i) });
-    else if (r.beatmapId) entries.push({ label: "Add to your library", icon: "download", action: () => this.add(r) });
+    if (map) entries.push({ label: t("Open beatmap set"), icon: "library", action: () => this.open(i) });
+    else if (r.beatmapId) entries.push({ label: t("Add to your library"), icon: "download", action: () => this.add(r) });
     const setId = map ? store.snap!.sets[map.set].onlineId : online?.setId;
     const mapId = map?.onlineId ?? r.beatmapId;
-    if (setId && mapId) entries.push({ label: "View beatmap on osu! website", icon: "external", action: () => void openUrl(osuMapUrl(setId, mapId, Math.max(0, r.mode))) });
+    if (setId && mapId) entries.push({ label: t("View beatmap on osu! website"), icon: "external", action: () => void openUrl(osuMapUrl(setId, mapId, Math.max(0, r.mode))) });
     const id = r.play?.id;
-    if (id) entries.push({ label: "View score on osu! website", icon: "external", action: () => void openUrl(osuScoreUrl(id)) });
+    if (id) entries.push({ label: t("View score on osu! website"), icon: "external", action: () => void openUrl(osuScoreUrl(id)) });
     if (entries.length) openMenu(at, entries, { minWidth: 230 });
   }
 
@@ -357,10 +358,10 @@ export class HistoryView {
     const res = await syncHistory();
     if (res.ok) {
       const n = res.summary.added;
-      toast(n ? `${num(n)} new ${n === 1 ? "score" : "scores"} from osu!` : "Up to date with osu!", { kind: "success", timeout: 2400 });
+      toast(n ? tn(n, "{n} new score from osu!", "{n} new scores from osu!") : t("Up to date with osu!"), { kind: "success", timeout: 2400 });
       return;
     }
-    toast(`Couldn't sync with osu!: ${res.error.message}`, { kind: "danger", timeout: 6000 });
+    toast(t("Couldn't sync with osu!: {error}", { error: res.error.message }), { kind: "danger", timeout: 6000 });
     if (res.error.code === "osu-logged-out") void this.refresh();
   }
 
@@ -436,28 +437,28 @@ function tile(k: string, v: string, sub: string, extra = ""): string {
 }
 
 function osuTiles(st: OsuModeStats, account: OsuAccount | null): string {
-  const ranks = [st.rank ? `#${num(st.rank)}` : "", st.countryRank ? `#${num(st.countryRank)}${account?.country ? ` in ${esc(account.country)}` : ""}` : ""].filter(Boolean);
+  const ranks = [st.rank ? `#${num(st.rank)}` : "", st.countryRank ? (account?.country ? t("#{rank} in {country}", { rank: num(st.countryRank), country: esc(account.country) }) : `#${num(st.countryRank)}`) : ""].filter(Boolean);
   const hours = (st.playTime ?? 0) / 3600;
   return [
-    tile("Performance", `${num(Math.round(st.pp ?? 0))}pp`, ranks.length ? ranks.join(" · ") : "No rank yet"),
+    tile(t("Performance"), `${num(Math.round(st.pp ?? 0))}pp`, ranks.length ? ranks.join(" · ") : t("No rank yet")),
     rankTile(st.rankHistory ?? []),
-    tile("Accuracy", st.accuracy ? pct(st.accuracy) : "–", "on your top plays"),
-    tile("Time played", hours >= 1 ? `${num(Math.round(hours))} h` : `${Math.round(hours * 60)} min`, `${num(st.playCount ?? 0)} plays on osu!`),
+    tile(t("Accuracy"), st.accuracy ? pct(st.accuracy) : "–", t("on your top plays")),
+    tile(t("Time played"), hours >= 1 ? `${num(Math.round(hours))} h` : `${Math.round(hours * 60)} min`, tn(st.playCount ?? 0, "{n} play on osu!", "{n} plays on osu!")),
   ].join("");
 }
 
 /** Global rank over the last 90 days: a line (up is better) and the change. */
 function rankTile(history: number[]): string {
   const ranked = history.map((r, i) => [i, r] as const).filter(([, r]) => r > 0);
-  if (ranked.length < 2) return tile("Rank", "–", "no history yet");
+  if (ranked.length < 2) return tile(t("Rank"), "–", t("no history yet"));
   const [lo, hi] = [Math.min(...ranked.map(([, r]) => r)), Math.max(...ranked.map(([, r]) => r))];
   const span = Math.max(1, hi - lo);
   const last = history.length - 1;
   const pts = ranked.map(([i, r]) => `${((i / last) * 100).toFixed(2)},${(((r - lo) / span) * 100).toFixed(2)}`).join(" ");
   const change = ranked[0][1] - ranked[ranked.length - 1][1];
-  const words = change > 0 ? `up ${num(change)} in 90 days` : change < 0 ? `down ${num(-change)} in 90 days` : "unchanged in 90 days";
+  const words = change > 0 ? t("up {n} in 90 days", { n: num(change) }) : change < 0 ? t("down {n} in 90 days", { n: num(-change) }) : t("unchanged in 90 days");
   const line = `<svg class="tile-line" viewBox="0 -4 100 108" preserveAspectRatio="none" aria-hidden="true"><polyline points="${pts}" /></svg>`;
-  return tile("Rank, 90 days", `#${num(ranked[ranked.length - 1][1])}`, words, line);
+  return tile(t("Rank, 90 days"), `#${num(ranked[ranked.length - 1][1])}`, words, line);
 }
 
 function playTiles(plays: Play[]): string {
@@ -474,10 +475,10 @@ function playTiles(plays: Play[]): string {
   const acc = passes.length ? passes.reduce((s, p) => s + p.acc, 0) / passes.length : 0;
   const first = plays.length ? plays[plays.length - 1].date : 0;
   return [
-    tile("Plays", num(plays.length), first ? `since ${monthYear(first)}` : "none yet"),
-    tile("Difficulties", num(maps.size), `${num(inLib)} in your library`),
-    tile("Days played", num(days.length), `longest streak ${num(longestStreak(days))} ${longestStreak(days) === 1 ? "day" : "days"}`),
-    tile("Accuracy", passes.length ? pct(acc) : "–", passes.length ? `average of the last ${passes.length} passes` : "no passes yet"),
+    tile(t("Plays"), num(plays.length), first ? t("since {date}", { date: monthYear(first) }) : t("none yet")),
+    tile(t("Difficulties"), num(maps.size), t("{n} in your library", { n: num(inLib) })),
+    tile(t("Days played"), num(days.length), tn(longestStreak(days), "longest streak {n} day", "longest streak {n} days")),
+    tile(t("Accuracy"), passes.length ? pct(acc) : "–", passes.length ? tn(passes.length, "average of the last {n} pass", "average of the last {n} passes") : t("no passes yet")),
   ].join("");
 }
 
@@ -506,8 +507,8 @@ function longestStreak(days: number[]): number {
 
 const WEEKS = 53;
 // day numbers are UTC midnights of local dates
-const monthFmt = new Intl.DateTimeFormat("en-GB", { month: "short", timeZone: "UTC" });
-const cellFmt = new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+const monthFmt = new Intl.DateTimeFormat(locale, { month: "short", timeZone: "UTC" });
+const cellFmt = new Intl.DateTimeFormat(locale, { weekday: "short", day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 
 /** The last `weeks` weeks (from Monday), a cell per day, shaded by plays. */
 function activity(plays: Play[], weeks: number): string {
@@ -546,22 +547,22 @@ function activity(plays: Play[], weeks: number): string {
       }
       const c = counts.get(d) ?? 0;
       const level = c ? Math.min(4, Math.ceil(Math.sqrt(c / max) * 4)) : 0;
-      const label = `${c ? `${num(c)} ${c === 1 ? "play" : "plays"}` : "No plays"} · ${cellFmt.format(new Date(d * 86_400_000))}`;
+      const label = `${c ? tn(c, "{n} play", "{n} plays") : t("No plays")} · ${cellFmt.format(new Date(d * 86_400_000))}`;
       cells.push(`<i class="l${level}" data-tip="${esc(label)}"></i>`);
     }
   }
   const streak = longestStreak(playDays(plays));
   const sum = [
-    `${num(total)} ${total === 1 ? "play" : "plays"} ${weeks === WEEKS ? "in the last year" : `in ${weeks} weeks`}`,
-    `${num(days)} ${days === 1 ? "day" : "days"}`,
-    streak > 1 ? `longest streak ${num(streak)} days` : "",
+    `${tn(total, "{n} play", "{n} plays")} ${weeks === WEEKS ? t("in the last year") : t("in {n} weeks", { n: weeks })}`,
+    tn(days, "{n} day", "{n} days"),
+    streak > 1 ? tn(streak, "longest streak {n} day", "longest streak {n} days") : "",
   ].filter(Boolean);
   return `
     <section class="panel hist-activity">
-      <div class="panel-head"><div class="label-caps">Activity</div><div class="meta-line num">${sum.map((s) => `<span>${s}</span>`).join("")}</div></div>
+      <div class="panel-head"><div class="label-caps">${t("Activity")}</div><div class="meta-line num">${sum.map((s) => `<span>${s}</span>`).join("")}</div></div>
       <div class="heat" style="--weeks:${weeks}">
         <div class="heat-months">${months.join("")}</div>
-        <div class="heat-days"><span>Mon</span><span></span><span>Wed</span><span></span><span>Fri</span><span></span><span></span></div>
+        <div class="heat-days"><span>${t("Mon")}</span><span></span><span>${t("Wed")}</span><span></span><span>${t("Fri")}</span><span></span><span></span></div>
         <div class="heat-grid">${cells.join("")}</div>
       </div>
     </section>`;
@@ -569,14 +570,14 @@ function activity(plays: Play[], weeks: number): string {
 
 // ── dates ─────────────────────────────────────────────────────────────────
 
-const monthYearFmt = new Intl.DateTimeFormat("en-GB", { month: "short", year: "numeric" });
+const monthYearFmt = new Intl.DateTimeFormat(locale, { month: "short", year: "numeric" });
 const monthYear = (ms: number): string => monthYearFmt.format(new Date(ms));
-const dayFmt = new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "short" });
+const dayFmt = new Intl.DateTimeFormat(locale, { weekday: "long", day: "numeric", month: "short" });
 
 /** "Today", "Yesterday", "Saturday 4 Oct", "4 Oct 2025" */
 function dayLabel(ms: number): string {
   const diff = dayNumber(Date.now()) - dayNumber(ms);
-  if (diff === 0) return "Today";
-  if (diff === 1) return "Yesterday";
+  if (diff === 0) return t("Today");
+  if (diff === 1) return t("Yesterday");
   return new Date(ms).getFullYear() === new Date().getFullYear() ? dayFmt.format(new Date(ms)) : date(ms);
 }
