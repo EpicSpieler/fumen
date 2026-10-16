@@ -87,13 +87,13 @@ nothing), and Fumen trades the code (later the refresh token) for tokens at the 
 | 0.5 | Discover | **Mods in the playfield**; **similar maps**; **beatmap search on the mirrors** |
 | 0.6 | Practice | **Replays in the playfield** (lazer's, else your score on osu!); **practice mode** (A–B loop, rate ramp, metronome); **chart numbers for osu! / taiko / catch** |
 | 0.7 | Library care | **Duplicates, broken files, unplayed space hogs**; osu!stable's `scores.db` |
-| 1.0 | Release | Installer, auto-update (GitHub Releases), de/en, OLED/Light/High-contrast themes, website |
+| 1.0 | Release | Installer, auto-update (GitHub Releases), de/en, OLED/Light/High-contrast themes, website (macOS moved to 1.6) |
 | 1.1 | Pools | Pool builder: NM/HD/HR/DT/FM/TB slots, mod-adjusted SR/BPM/length, look up maps you don't own via API, export to JSON/CSV/sheet + RPRO bot, pool showcase image (moved from 0.5) |
 | 1.2 | Tournament | Schedule, mp-link parsing + match results, OBS overlay served locally (moved from 0.6) |
 | 1.3 | Sessions | Plays grouped into sittings; a weekly report (time, skills that moved, goals closer), shareable as an image |
 | 1.4 | Skins | Skin browser on the same moment of a chart; two skins side by side; pieces of several skins mixed into one `.osk` |
 | 1.5 | Presence | Discord Rich Presence; share cards for pools, skills and goals |
-| 1.6 | Everywhere | Linux and macOS (lazer's library there too); goals, skills and pools on fumen.dertesti.dev for the phone |
+| 1.6 | Everywhere | Linux and macOS (moved from 1.0; lazer's library there too); goals, skills and pools on fumen.dertesti.dev for the phone |
 | 1.7 | Mapping lens | Difficulty spikes along a chart, a pattern heatmap per section, spread check across a set; the analyser's leftovers |
 
 The public roadmap at https://fumen.dertesti.dev/roadmap (`site/public/roadmap.js`) shows this
@@ -444,15 +444,6 @@ sections below is the order of the work.
       dark on Light (`deriveAccent(color, light)`). The fullscreen player stays a dark stage and
       gets the dark tokens back (`:root[data-theme="light"] .fs`); the set hero gets a light scrim
       and dark text; the delete smoke is dark on Light. High contrast works on top of Light too
-- [ ] macOS — the code side in 0.7.3, waiting for the tester. lazer's app in /Applications or
-      ~/Applications (`osu!.app/Contents/MacOS`: its assemblies, runtime and `sq.version`), its data
-      in ~/Library/Application Support/osu, running = a process from an osu!.app (`ps`); the importer
-      works as on Windows (lazer's folder hard-linked into Fumen's cache, nothing written into the
-      signed app), with its launcher built for macOS. osu!stable has no macOS build: not looked for.
-      The window keeps macOS's own buttons over the sidebar's head (`tauri.macos.conf.json`), ⌘F
-      searches. Built on GitHub's Macs (`npm run mac`, by hand: macOS minutes count ten times on a
-      private repo), Apple Silicon tested against lazer's macOS release (from GitHub) first. Not
-      signed by Apple, no self-update on macOS until the release
 - [x] English and German — 0.7.4 to 0.7.9. The system (`src/lib/i18n.ts`: `t("English text")`
       with `{name}` placeholders, `tn(n, one, other)` for counts; German in `src/locales/de/*.ts`, keyed
       by the English; `i18n.test.ts` fails on any text without German or German without a text),
@@ -471,6 +462,18 @@ sections below is the order of the work.
 
 ## After 1.0
 
+- Skills rework: since 1.0.0 the Skills page is greyed out under a note (`skills-rework` in
+  views/skills.ts) until the numbers are reworked
+- macOS, moved from 1.0 to 1.6 (nobody can test it yet: the tester's Mac doesn't open unsigned apps).
+  The code side is in 0.7.3. lazer's app in /Applications or ~/Applications
+  (`osu!.app/Contents/MacOS`: its assemblies, runtime and `sq.version`), its data in
+  ~/Library/Application Support/osu, running = a process from an osu!.app (`ps`); the importer works
+  as on Windows (lazer's folder hard-linked into Fumen's cache, nothing written into the signed
+  app), with its launcher built for macOS. osu!stable has no macOS build: not looked for. The window
+  keeps macOS's own buttons over the sidebar's head (`tauri.macos.conf.json`), ⌘F searches. Built on
+  GitHub's Macs (`npm run mac`, by hand: macOS minutes count ten times on a private repo), Apple
+  Silicon tested against lazer's macOS release (from GitHub) first. Not signed by Apple, no
+  self-update on macOS until the release
 - 1.1 Pools (moved from 0.5): the pool builder as in the roadmap table; similar maps fill or replace
   a slot
 - 1.2 Tournament (moved from 0.6): schedule, mp-link parsing and match results, picks / bans and
