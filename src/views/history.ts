@@ -257,8 +257,8 @@ export class HistoryView {
         e.count = Math.max(e.count, m.count);
         continue;
       }
-      const t = playTarget(m);
-      const mapMode = t.map?.mode ?? t.online?.mode ?? -1;
+      const target = playTarget(m);
+      const mapMode = target.map?.mode ?? target.online?.mode ?? -1;
       if (mode >= 0 && mapMode !== mode) continue;
       entries.set(key, { map: m.map, beatmap: m.beatmap, beatmapId: m.beatmapId, mode: mapMode, count: m.count });
     }
@@ -367,28 +367,28 @@ export class HistoryView {
 
   private bind(): void {
     this.el.addEventListener("click", (e) => {
-      const t = e.target as Element;
-      const mode = t.closest<HTMLElement>(".hist-modes [data-mode]");
+      const target = e.target as Element;
+      const mode = target.closest<HTMLElement>(".hist-modes [data-mode]");
       if (mode) return setPrefs({ mode: +mode.dataset.mode! });
-      const tab = t.closest<HTMLElement>(".hist-tabs [data-tab]");
+      const tab = target.closest<HTMLElement>(".hist-tabs [data-tab]");
       if (tab) {
         if (this.tab === tab.dataset.tab) return;
         this.tab = tab.dataset.tab as Tab;
         this.shownRows = PAGE;
         return this.renderList();
       }
-      if (t.closest(".hist-more")) {
+      if (target.closest(".hist-more")) {
         this.shownRows += PAGE;
         return this.renderList();
       }
-      if (t.closest(".hist-sync-btn")) return void this.sync();
-      if (t.closest(".hist-login")) {
+      if (target.closest(".hist-sync-btn")) return void this.sync();
+      if (target.closest(".hist-login")) {
         goSection({ name: "settings" });
         return void loginWithOsu();
       }
-      const row = t.closest<HTMLElement>("[data-i]");
+      const row = target.closest<HTMLElement>("[data-i]");
       if (!row) return;
-      if (t.closest(".prow-add")) return this.add(this.rows[+row.dataset.i!]);
+      if (target.closest(".prow-add")) return this.add(this.rows[+row.dataset.i!]);
       this.open(+row.dataset.i!);
     });
     this.el.addEventListener("contextmenu", (e) => {

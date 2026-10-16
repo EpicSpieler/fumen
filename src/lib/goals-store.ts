@@ -6,6 +6,7 @@ import { goalContext, goalNow, goalTarget, goalTitle, isReached, type Goal, type
 import { historyEvents, historyNow, loadHistory, mapIndexOf } from "./history";
 import { Emitter, events, store } from "./store";
 import { toast } from "../ui/controls";
+import { t } from "./i18n";
 
 export const goalEvents = new Emitter<{ goals: Goal[] }>();
 
@@ -68,7 +69,7 @@ function check(): void {
   goals = goals.map((g) => (reached.includes(g) ? { ...g, done: now } : g));
   changed();
   for (const g of goals.filter((g) => g.done === now)) {
-    toast(`Goal reached: ${goalTitle(g)}, ${goalTarget(g)}`, { kind: "success", timeout: 8000 });
+    toast(t("Goal reached: {goal}, {target}", { goal: goalTitle(g), target: goalTarget(g) }), { kind: "success", timeout: 8000 });
     api.putGoal(g).catch((e) => console.warn("[goals] save", asApiError(e).message));
   }
 }

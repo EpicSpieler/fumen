@@ -22,7 +22,7 @@ import { icon } from "../ui/icons";
 import { openSet, setMenu } from "./actions";
 import { openGoalDialog } from "./goal-dialog";
 import { openImport } from "./import";
-import { lang, t, tn } from "../lib/i18n";
+import { lower, t, tn } from "../lib/i18n";
 
 /** the comparison polygon: skills as they were this long ago */
 const THEN_MS = 90 * 86_400_000;
@@ -181,7 +181,7 @@ export class SkillsView {
       const th = vs.skill;
       const tip =
         th.value === null
-          ? t("{name} has no {pattern} charts", { name: vs.name, pattern: lc(label) })
+          ? t("{name} has no {pattern} charts", { name: vs.name, pattern: lower(label) })
           : `${t("{name}: {sr}★ from {charts}", { name: vs.name, sr: fixed(th.value, 2), charts: tn(th.charts, "{n} chart", "{n} charts") })}${th.charts < MIN_CHARTS ? `, ${t("a guess")}` : ""}`;
       delta = `<span class="skill-them num" data-tip="${esc(tip)}">${th.value !== null ? `${fixed(th.value, 2)}★` : "–"}</span>`;
     }
@@ -189,7 +189,7 @@ export class SkillsView {
     const any = s.value !== null || (vs !== null && vs.skill.value !== null);
     const theirList =
       vs && vs.skill.top.length
-        ? `<div class="skill-them-head">${t("{name}'s best with {pattern}", { name: esc(vs.name), pattern: lc(label) })}</div>${vs.skill.top.map((c) => theirRow(c, s, vs.charts)).join("")}`
+        ? `<div class="skill-them-head">${t("{name}'s best with {pattern}", { name: esc(vs.name), pattern: lower(label) })}</div>${vs.skill.top.map((c) => theirRow(c, s, vs.charts)).join("")}`
         : "";
     return `
       <div class="skill${open ? " open" : ""}${s.value === null ? " empty" : ""}" data-pattern="${s.pattern}"${s.value !== null ? ` data-value="${s.value}"` : ""}>
@@ -202,7 +202,7 @@ export class SkillsView {
         </button>
         ${
           open
-            ? `<div class="skill-charts-list">${vs && s.top.length ? `<div class="skill-them-head">${t("Yours")}</div>` : ""}${s.top.map((c) => chartRow(c, s)).join("")}${theirList}<button class="btn btn-ghost btn-sm skill-goal" type="button">${icon("flag")}<span>${t("Set a goal for {pattern}", { pattern: lc(label) })}</span></button></div>`
+            ? `<div class="skill-charts-list">${vs && s.top.length ? `<div class="skill-them-head">${t("Yours")}</div>` : ""}${s.top.map((c) => chartRow(c, s)).join("")}${theirList}<button class="btn btn-ghost btn-sm skill-goal" type="button">${icon("flag")}<span>${t("Set a goal for {pattern}", { pattern: lower(label) })}</span></button></div>`
             : ""
         }
       </div>`;
@@ -434,7 +434,7 @@ export class SkillsView {
         ${
           shown.length
             ? `<div class="practice-list">${shown.map((s) => suggestionRow(s, skill.pattern, aim, state(s))).join("")}</div>`
-            : `<div class="practice-none">${t("Nothing in your library with at least {share}% {pattern} reaches {band}, not even at 0.75× to 1.5×.", { share: MIN_SHARE, pattern: lc(name), band })}</div>`
+            : `<div class="practice-none">${t("Nothing in your library with at least {share}% {pattern} reaches {band}, not even at 0.75× to 1.5×.", { share: MIN_SHARE, pattern: lower(name), band })}</div>`
         }
         ${picks.length > SUGGESTIONS ? `<button class="btn btn-ghost btn-sm practice-more" type="button">${more ? t("Show fewer") : t("Show more")}</button>` : ""}
         ${this.theirGroup(skill.pattern, aim, theirs)}
@@ -638,7 +638,7 @@ function chartRow(c: Skill["top"][number], s: Skill): string {
       <span class="t-art${bg ? "" : " img-missing"}">${bg ? `<img src="${thumbUrl(bg, 160)}" alt="" loading="lazy" decoding="async" />` : ""}</span>
       <div class="prow-text">
         <div class="t-title">${esc(displayTitle(set, store.prefs.unicode))}</div>
-        <div class="t-sub">${esc(c.map.version)} · ${t("{pct}% {pattern}", { pct: c.share, pattern: lc(PATTERN_LABEL[s.pattern]) })}</div>
+        <div class="t-sub">${esc(c.map.version)} · ${t("{pct}% {pattern}", { pct: c.share, pattern: lower(PATTERN_LABEL[s.pattern]) })}</div>
       </div>
       <span class="skill-chart-sr" data-tip="${rate !== 1 ? t("Star rating at {rate}×", { rate: fixed(rate, 2) }) : t("Star rating")}">${srChip(chartStars(c.play, c.map))}</span>
       <span class="skill-chart-mods">${esc(mods)}</span>
@@ -662,7 +662,7 @@ function theirRow(c: Skill["top"][number], s: Skill, charts: ComparedChart[]): s
       <span class="t-art${cover ? "" : " img-missing"}">${cover ? `<img src="${cover}" alt="" loading="lazy" decoding="async" />` : ""}</span>
       <div class="prow-text">
         <div class="t-title">${esc(title)}</div>
-        <div class="t-sub">${esc(c.map.version)} · ${t("{pct}% {pattern}", { pct: c.share, pattern: lc(PATTERN_LABEL[s.pattern]) })}${lib === undefined ? ` · ${t("not in your library")}` : ""}</div>
+        <div class="t-sub">${esc(c.map.version)} · ${t("{pct}% {pattern}", { pct: c.share, pattern: lower(PATTERN_LABEL[s.pattern]) })}${lib === undefined ? ` · ${t("not in your library")}` : ""}</div>
       </div>
       <span class="skill-chart-sr" data-tip="${rate !== 1 ? t("Star rating at {rate}×", { rate: fixed(rate, 2) }) : t("Star rating")}">${srChip(chartStars(c.play, c.map))}</span>
       <span class="skill-chart-mods">${esc(modsText(c.play as Play))}</span>
@@ -670,9 +670,6 @@ function theirRow(c: Skill["top"][number], s: Skill, charts: ComparedChart[]): s
       <b class="num skill-chart-worth" data-tip="${t("What this play is worth at {acc} accuracy", { acc: pct(REF_ACC, 0) })}">${fixed(c.stars, 2)}★</b>
     </div>`;
 }
-
-/** a pattern's name inside a sentence (German nouns keep their capital) */
-const lc = (s: string): string => (lang === "de" ? s : s.toLowerCase());
 
 /** How lazer plays a chart at a rate: Half Time or Double Time, with the speed adjusted off 0.75×
  * and 1.5× (shown like a play's mods). */
@@ -691,7 +688,7 @@ function theirSuggestionRow(s: Suggestion, chart: ComparedChart, pattern: SkillP
   const title = `${(unicode && chart.artistUnicode) || chart.artist} - ${(unicode && chart.titleUnicode) || chart.title}`;
   const lib = chart.library !== undefined ? mapIndexOf(chart.library) : undefined;
   const cover = chart.setId ? `https://assets.ppy.sh/beatmaps/${chart.setId}/covers/list.jpg` : "";
-  const name = lc(PATTERN_LABEL[pattern]);
+  const name = lower(PATTERN_LABEL[pattern]);
   const gain = aim.from !== null ? s.after - aim.from : null;
   const where = lib !== undefined ? ` data-map="${lib}" data-rate="${s.rate}"` : chart.setId ? ` data-add="${chart.setId}" data-tip="${t("Not in your library: add it")}"` : "";
   const state = s.best ? t("your best {acc}", { acc: pct(s.best.play.acc) }) : lib !== undefined ? t("in your library") : t("not in your library");
@@ -715,7 +712,7 @@ function suggestionRow(s: Suggestion, pattern: SkillPattern, aim: Aim, state: st
   const snap = store.snap!;
   const set = snap.sets[s.map.set];
   const bg = s.map.bg ?? set.bg;
-  const name = lc(PATTERN_LABEL[pattern]);
+  const name = lower(PATTERN_LABEL[pattern]);
   const gain = aim.from !== null ? s.after - aim.from : null;
   return `
     <div class="skill-chart practice-chart" data-map="${s.mapIdx}" data-rate="${s.rate}" role="button" tabindex="0">

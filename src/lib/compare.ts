@@ -7,8 +7,10 @@
  */
 import { listen } from "@tauri-apps/api/event";
 import { api } from "./api";
+import { num } from "./format";
 import { Emitter } from "./store";
 import type { MapRow, Play } from "./types";
+import { t } from "./i18n";
 
 export interface ComparedPlayer {
   id: number;
@@ -164,9 +166,9 @@ export function endCompare(): void {
 
 /** "Reading their plays · 12 of 70" */
 export function progressText(p: CompareProgress | null): string {
-  if (!p || p.stage === "player") return "Finding the player on osu!";
-  if (p.stage === "scores") return `Reading their plays from osu! · ${p.done} of ${p.total}`;
-  return `Reading the charts · ${p.done} of ${p.total}`;
+  if (!p || p.stage === "player") return t("Finding the player on osu!");
+  if (p.stage === "scores") return t("Reading their plays from osu! · {done} of {total}", { done: num(p.done), total: num(p.total) });
+  return t("Reading the charts · {done} of {total}", { done: num(p.done), total: num(p.total) });
 }
 
 /** 0–1 along the whole comparison: osu! first, then the charts. */

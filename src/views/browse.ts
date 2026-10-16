@@ -9,7 +9,7 @@
  * its difficulties fits everything asked. Pages load as the list scrolls. */
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { api, asApiError } from "../lib/api";
-import { bpm, date, duration, esc, num, srChip, statusLabel } from "../lib/format";
+import { bpm, date, duration, esc, num, pct, srChip, statusLabel } from "../lib/format";
 import { router } from "../lib/router";
 import { events, store } from "../lib/store";
 import type { FoundMap, FoundSet, LazerImportStatus, MirrorQuery, MirrorSort } from "../lib/types";
@@ -19,9 +19,10 @@ import { icon } from "../ui/icons";
 import { starRange } from "../ui/star-range";
 import { openSet } from "./actions";
 import { importEvents, importSets, openImport, setImportState, type SetImport } from "./import";
+import { t, tn } from "../lib/i18n";
 
 const MODES = [
-  { mode: -1, label: "All" },
+  { mode: -1, label: t("All") },
   { mode: 0, label: "osu!" },
   { mode: 1, label: "taiko" },
   { mode: 2, label: "catch" },
@@ -30,20 +31,20 @@ const MODES = [
 const KEY_COUNTS = [4, 5, 6, 7, 8, 9, 10];
 
 const SORTS: SelectOption<MirrorSort>[] = [
-  { value: "relevance", label: "Best match" },
-  { value: "ranked", label: "Newest ranked" },
-  { value: "newest", label: "Recently updated" },
-  { value: "plays", label: "Most played" },
-  { value: "favourites", label: "Most favourited" },
-  { value: "stars", label: "Easiest first" },
+  { value: "relevance", label: t("Best match") },
+  { value: "ranked", label: t("Newest ranked") },
+  { value: "newest", label: t("Recently updated") },
+  { value: "plays", label: t("Most played") },
+  { value: "favourites", label: t("Most favourited") },
+  { value: "stars", label: t("Easiest first") },
 ];
 
 const STATUS_FILTERS = [
-  { label: "Ranked", values: [1, 2] },
-  { label: "Loved", values: [4] },
-  { label: "Qualified", values: [3] },
-  { label: "Pending / WIP", values: [0, -1] },
-  { label: "Graveyard", values: [-2] },
+  { label: t("Ranked"), values: [1, 2] },
+  { label: t("Loved"), values: [4] },
+  { label: t("Qualified"), values: [3] },
+  { label: t("Pending / WIP"), values: [0, -1] },
+  { label: t("Graveyard"), values: [-2] },
 ];
 
 /** difficulty chips in a row before "+n" */
@@ -53,7 +54,6 @@ const ASK_FROM = 10;
 
 const cover = (set: number) => `https://assets.ppy.sh/beatmaps/${set}/covers/list.jpg`;
 const setUrl = (set: number) => `https://osu.ppy.sh/beatmapsets/${set}`;
-const plural = (n: number, one: string, many = `${one}s`) => `${num(n)} ${n === 1 ? one : many}`;
 
 // ── previews (from the mirrors; one at a time, and never over the player) ──
 
@@ -89,7 +89,7 @@ function playPreview(s: FoundSet): void {
     if (preview?.audio !== audio) return;
     if (at >= sources.length) {
       stopPreview();
-      toast("No mirror has a preview of this set", { kind: "danger", timeout: 3000 });
+      toast(t("No mirror has a preview of this set"), { kind: "danger", timeout: 3000 });
       return;
     }
     audio.src = sources[at++];
@@ -144,21 +144,21 @@ export class BrowseView {
     this.el.innerHTML = `
       <header class="view-head br-head">
         <div>
-          <h1 class="view-title">Browse</h1>
-          <div class="view-sub">osu!'s beatmaps, found through the mirrors. What you add goes into osu!lazer.</div>
+          <h1 class="view-title">${t("Browse")}</h1>
+          <div class="view-sub">${t("osu!'s beatmaps, found through the mirrors. What you add goes into osu!lazer.")}</div>
         </div>
         <div class="br-head-tools"></div>
       </header>
       <div class="lib-toolbar br-toolbar">
-        <label class="br-search">${icon("search")}<input type="search" spellcheck="false" placeholder="Title, artist, mapper or tags" aria-label="Search the mirrors" /></label>
-        <div class="seg-pill lib-modes" role="tablist" aria-label="Ruleset">
+        <label class="br-search">${icon("search")}<input type="search" spellcheck="false" placeholder="${t("Title, artist, mapper or tags")}" aria-label="${t("Search the mirrors")}" /></label>
+        <div class="seg-pill lib-modes" role="tablist" aria-label="${t("Ruleset")}">
           ${MODES.map((m) => `<button type="button" data-mode="${m.mode}">${m.label}</button>`).join("")}
         </div>
-        <div class="lib-keys" role="group" aria-label="Keys">
+        <div class="lib-keys" role="group" aria-label="${t("Keys")}">
           ${KEY_COUNTS.map((k) => `<button type="button" data-keys="${k}">${k}K</button>`).join("")}
         </div>
         <span class="lib-toolbar-gap"></span>
-        <button class="btn btn-ghost lib-filters-btn br-filters-btn" type="button">${icon("sliders")}<span>Filters</span></button>
+        <button class="btn btn-ghost lib-filters-btn br-filters-btn" type="button">${icon("sliders")}<span>${t("Filters")}</span></button>
       </div>
       <div class="br-lazer" hidden></div>
       <div class="br-summary"></div>
@@ -167,7 +167,7 @@ export class BrowseView {
     const sort = createSelect(SORTS, this.q.sort, (v) => {
       this.q.sort = v;
       this.search();
-    }, { prefix: "Sort", tip: "Sort the sets by" });
+    }, { prefix: t("Sort"), tip: t("Sort the sets by") });
     this.el.querySelector(".br-head-tools")!.appendChild(sort.el);
     attachSegIndicator(this.el.querySelector(".lib-modes")!);
     this.syncControls();
@@ -204,8 +204,8 @@ export class BrowseView {
     for (const b of this.el.querySelectorAll<HTMLElement>(".br-play")) {
       const on = preview?.set === +b.closest<HTMLElement>("[data-set]")!.dataset.set!;
       b.classList.toggle("playing", on);
-      b.setAttribute("aria-label", on ? "Stop the preview" : "Play the preview");
-      b.dataset.tip = on ? "Stop the preview" : "Play the preview";
+      b.setAttribute("aria-label", on ? t("Stop the preview") : t("Play the preview"));
+      b.dataset.tip = on ? t("Stop the preview") : t("Play the preview");
     }
   };
 
@@ -284,7 +284,7 @@ export class BrowseView {
     const filters = (this.q.srMin !== null || this.q.srMax !== null ? 1 : 0) + (sameStatus(this.q.status, [1, 2, 4]) ? 0 : 1);
     const fb = this.el.querySelector<HTMLElement>(".br-filters-btn")!;
     fb.classList.toggle("active", filters > 0);
-    fb.querySelector("span")!.textContent = filters ? `Filters · ${filters}` : "Filters";
+    fb.querySelector("span")!.textContent = filters ? `${t("Filters")} · ${filters}` : t("Filters");
   }
 
   /** Where the sets come from, how many, and adding all of them. */
@@ -296,14 +296,14 @@ export class BrowseView {
     }
     const fresh = this.addable();
     const order = this.plain
-      ? `<span data-tip="osu.direct couldn't answer, so catboy.best did: its order, filtered here">from ${esc(this.mirror)}, in its own order</span>`
-      : `<span>from ${esc(this.mirror)}</span>`;
+      ? `<span data-tip="${t("osu.direct couldn't answer, so catboy.best did: its order, filtered here")}">${t("from {mirror}, in its own order", { mirror: esc(this.mirror) })}</span>`
+      : `<span>${t("from {mirror}", { mirror: esc(this.mirror) })}</span>`;
     const ready = !!this.status?.ready;
     el.innerHTML = `
-      <span class="meta-line num"><span>${plural(this.sets.length, "set")}${this.more ? " so far" : ""}</span>${order}</span>
+      <span class="meta-line num"><span>${this.more ? tn(this.sets.length, "{n} set so far", "{n} sets so far") : tn(this.sets.length, "{n} set", "{n} sets")}</span>${order}</span>
       ${
         fresh.length
-          ? `<button class="btn btn-sm br-add-all" type="button"${ready ? "" : ` disabled data-tip="${esc(this.lazerReason())}"`}>${icon("download")}<span>Add ${fresh.length === 1 ? "the new set" : `all ${num(fresh.length)} new`}</span></button>`
+          ? `<button class="btn btn-sm br-add-all" type="button"${ready ? "" : ` disabled data-tip="${esc(this.lazerReason())}"`}>${icon("download")}<span>${fresh.length === 1 ? t("Add the new set") : t("Add all {n} new", { n: num(fresh.length) })}</span></button>`
           : ""
       }`;
   }
@@ -311,9 +311,9 @@ export class BrowseView {
   /** Why sets can't go into osu!lazer right now (the bar under the toolbar says it too). */
   private lazerReason(): string {
     const s = this.status;
-    if (!s) return "Fumen couldn't check osu!lazer";
-    if (s.reason === "running") return "Close osu!lazer to add sets";
-    return s.message ?? "osu!lazer can't take sets right now";
+    if (!s) return t("Fumen couldn't check osu!lazer");
+    if (s.reason === "running") return t("Close osu!lazer to add sets");
+    return s.message ?? t("osu!lazer can't take sets right now");
   }
 
   private renderLazer(): void {
@@ -326,9 +326,9 @@ export class BrowseView {
     el.hidden = false;
     const text =
       s.reason === "running"
-        ? "osu!lazer is open. Fumen adds sets with lazer's own code while it's closed, so close it to add these."
-        : s.message ?? "osu!lazer can't take sets right now.";
-    el.innerHTML = `${icon("info")}<span>${esc(text)}</span>${s.reason === "running" ? `<button class="btn btn-ghost btn-sm br-recheck" type="button">Check again</button>` : ""}`;
+        ? t("osu!lazer is open. Fumen adds sets with lazer's own code while it's closed, so close it to add these.")
+        : s.message ?? t("osu!lazer can't take sets right now.");
+    el.innerHTML = `${icon("info")}<span>${esc(text)}</span>${s.reason === "running" ? `<button class="btn btn-ghost btn-sm br-recheck" type="button">${t("Check again")}</button>` : ""}`;
   }
 
   private renderList(): void {
@@ -336,8 +336,8 @@ export class BrowseView {
     this.renderSummary();
     if (!this.sets.length) {
       if (this.loading === "first") list.innerHTML = Array.from({ length: 6 }, () => `<div class="skeleton br-skel"></div>`).join("");
-      else if (this.error) list.innerHTML = `<div class="empty-state br-empty">${icon("alert")}<div class="empty-title">The mirrors couldn't search</div><div class="empty-sub">${esc(this.error)}</div><button class="btn btn-sm br-retry" type="button">Try again</button></div>`;
-      else list.innerHTML = `<div class="empty-state br-empty">${icon("search-duo")}<div class="empty-title">Nothing on the mirrors matches</div><div class="empty-sub">Fewer filters, or other words, find more.</div></div>`;
+      else if (this.error) list.innerHTML = `<div class="empty-state br-empty">${icon("alert")}<div class="empty-title">${t("The mirrors couldn't search")}</div><div class="empty-sub">${esc(this.error)}</div><button class="btn btn-sm br-retry" type="button">${t("Try again")}</button></div>`;
+      else list.innerHTML = `<div class="empty-state br-empty">${icon("search-duo")}<div class="empty-title">${t("Nothing on the mirrors matches")}</div><div class="empty-sub">${t("Fewer filters, or other words, find more.")}</div></div>`;
       return;
     }
     const lib = libraryIndex();
@@ -354,9 +354,9 @@ export class BrowseView {
   private renderFoot(): void {
     const foot = this.el.querySelector<HTMLElement>(".br-foot")!;
     if (this.loading === "more") foot.innerHTML = `<div class="skeleton br-skel"></div><div class="skeleton br-skel"></div>`;
-    else if (this.error && this.sets.length) foot.innerHTML = `<div class="br-foot-note">${icon("alert")}<span>${esc(this.error)}</span><button class="btn btn-ghost btn-sm br-retry" type="button">Try again</button></div>`;
-    else if (this.more) foot.innerHTML = `<button class="btn btn-ghost btn-sm br-more" type="button">More</button>`;
-    else foot.innerHTML = this.sets.length ? `<div class="br-foot-note">That's every set the mirror found.</div>` : "";
+    else if (this.error && this.sets.length) foot.innerHTML = `<div class="br-foot-note">${icon("alert")}<span>${esc(this.error)}</span><button class="btn btn-ghost btn-sm br-retry" type="button">${t("Try again")}</button></div>`;
+    else if (this.more) foot.innerHTML = `<button class="btn btn-ghost btn-sm br-more" type="button">${t("More")}</button>`;
+    else foot.innerHTML = this.sets.length ? `<div class="br-foot-note">${t("That's every set the mirror found.")}</div>` : "";
   }
 
   private setHtml(s: FoundSet, lib: LibraryIndex): string {
@@ -370,9 +370,9 @@ export class BrowseView {
       .join("");
     const meta = [
       s.ranked ? `${statusLabel(s.status)} ${date(s.ranked)}` : statusLabel(s.status),
-      s.plays ? `${num(s.plays)} plays` : "",
+      s.plays ? tn(s.plays, "{n} play", "{n} plays") : "",
       matched[0]?.bpm ? `${bpm(matched[0].bpm)} BPM` : "",
-      lib.stable.has(s.id) && !lib.lazer.has(s.id) ? "in osu!stable" : "",
+      lib.stable.has(s.id) && !lib.lazer.has(s.id) ? t("in osu!stable") : "",
     ].filter(Boolean);
     const open = this.open.has(s.id);
     return `
@@ -384,7 +384,7 @@ export class BrowseView {
           </span>
           <div class="br-text">
             <div class="t-title">${esc(title)}</div>
-            <div class="t-sub">${esc(artist)} · mapped by ${esc(s.creator)}</div>
+            <div class="t-sub">${esc(artist)} · ${t("mapped by {mapper}", { mapper: esc(s.creator) })}</div>
             <div class="meta-line num br-meta">${meta.map((m) => `<span>${esc(m)}</span>`).join("")}</div>
           </div>
           <div class="br-chips">${chips}${matched.length > CHIPS ? `<span class="br-chips-more num">+${matched.length - CHIPS}</span>` : ""}</div>
@@ -412,12 +412,12 @@ export class BrowseView {
 
   /** What can be done with a set: open it, add it, or how its import goes. */
   private actionHtml(id: number, lib: LibraryIndex): string {
-    if (lib.lazer.has(id)) return `<button class="btn btn-ghost btn-sm br-open" type="button">${icon("library")}<span>In library</span></button>`;
+    if (lib.lazer.has(id)) return `<button class="btn btn-ghost btn-sm br-open" type="button">${icon("library")}<span>${t("In library")}</span></button>`;
     const st = setImportState(id);
     if (st && st.stage !== "error" && !(st.stage === "skipped" && st.message === "Cancelled")) return stateHtml(st);
     const ready = !!this.status?.ready;
-    const why = st?.stage === "error" ? `Failed: ${st.message ?? "unknown"}. Again?` : ready ? "Download it and put it into osu!lazer" : this.lazerReason();
-    return `<button class="btn btn-sm br-add${st?.stage === "error" ? " failed" : ""}" type="button"${ready ? "" : " disabled"} data-tip="${esc(why)}">${icon(st?.stage === "error" ? "refresh" : "download")}<span>${st?.stage === "error" ? "Again" : "Add"}</span></button>`;
+    const why = st?.stage === "error" ? t("Failed: {error}. Again?", { error: st.message ?? t("unknown") }) : ready ? t("Download it and put it into osu!lazer") : this.lazerReason();
+    return `<button class="btn btn-sm br-add${st?.stage === "error" ? " failed" : ""}" type="button"${ready ? "" : " disabled"} data-tip="${esc(why)}">${icon(st?.stage === "error" ? "refresh" : "download")}<span>${st?.stage === "error" ? t("Again") : t("Add")}</span></button>`;
   }
 
   private renderAction(id: number): void {
@@ -444,16 +444,16 @@ export class BrowseView {
     for (const s of sets) this.renderAction(s.id);
     if (how === "none") return;
     if (window) openImport();
-    else if (how === "queued") toast("Added after the import that's running", { timeout: 2600 });
+    else if (how === "queued") toast(t("Added after the import that's running"), { timeout: 2600 });
   }
 
   private async addAll(): Promise<void> {
     const sets = this.addable();
     if (!sets.length) return;
     if (sets.length >= ASK_FROM) {
-      const ok = await uiConfirm(`They download from the mirrors a few at a time and go into osu!lazer, which stays closed until they're in.`, {
-        title: `Add ${plural(sets.length, "set")}?`,
-        confirmLabel: "Add them",
+      const ok = await uiConfirm(t("They download from the mirrors a few at a time and go into osu!lazer, which stays closed until they're in."), {
+        title: tn(sets.length, "Add {n} set?", "Add {n} sets?"),
+        confirmLabel: t("Add them"),
       });
       if (!ok) return;
     }
@@ -476,20 +476,20 @@ export class BrowseView {
   private menu(at: { x: number; y: number }, s: FoundSet): void {
     const lib = libraryIndex();
     const entries: MenuEntry[] = [];
-    if (lib.lazer.has(s.id)) entries.push({ label: "Open in library", icon: "library", action: () => openLibrarySet(s.id) });
-    else entries.push({ label: "Add to osu!lazer", icon: "download", disabled: !this.status?.ready, action: () => this.add([s]) });
+    if (lib.lazer.has(s.id)) entries.push({ label: t("Open in library"), icon: "library", action: () => openLibrarySet(s.id) });
+    else entries.push({ label: t("Add to osu!lazer"), icon: "download", disabled: !this.status?.ready, action: () => this.add([s]) });
     entries.push(
-      { label: preview?.set === s.id ? "Stop the preview" : "Play the preview", icon: preview?.set === s.id ? "pause" : "play", action: () => playPreview(s) },
+      { label: preview?.set === s.id ? t("Stop the preview") : t("Play the preview"), icon: preview?.set === s.id ? "pause" : "play", action: () => playPreview(s) },
       "sep",
-      { label: "View on osu! website", icon: "external", action: () => void openUrl(setUrl(s.id)) },
-      { label: "Copy link", icon: "link", action: () => void navigator.clipboard.writeText(setUrl(s.id)).then(() => toast("Link copied", { kind: "success", timeout: 2000 })) },
+      { label: t("View on osu! website"), icon: "external", action: () => void openUrl(setUrl(s.id)) },
+      { label: t("Copy link"), icon: "link", action: () => void navigator.clipboard.writeText(setUrl(s.id)).then(() => toast(t("Link copied"), { kind: "success", timeout: 2000 })) },
     );
     openMenu(at, entries, { minWidth: 220 });
   }
 
   private openFilters(anchor: HTMLElement): void {
     const q = this.q;
-    const entries: MenuEntry[] = [{ group: "Status" }];
+    const entries: MenuEntry[] = [{ group: t("Status") }];
     for (const s of STATUS_FILTERS) {
       entries.push({
         label: s.label,
@@ -535,8 +535,8 @@ export class BrowseView {
     });
 
     this.el.addEventListener("click", (e) => {
-      const t = e.target as Element;
-      const mode = t.closest<HTMLElement>(".lib-modes [data-mode]");
+      const target = e.target as Element;
+      const mode = target.closest<HTMLElement>(".lib-modes [data-mode]");
       if (mode) {
         const m = +mode.dataset.mode!;
         this.q.mode = m < 0 ? null : m;
@@ -544,27 +544,27 @@ export class BrowseView {
         this.syncControls();
         return this.search();
       }
-      const k = t.closest<HTMLElement>(".lib-keys [data-keys]");
+      const k = target.closest<HTMLElement>(".lib-keys [data-keys]");
       if (k) {
         const n = +k.dataset.keys!;
         this.q.keys = this.q.keys.includes(n) ? this.q.keys.filter((x) => x !== n) : [...this.q.keys, n].sort((a, b) => a - b);
         this.syncControls();
         return this.search();
       }
-      if (t.closest(".br-filters-btn")) return this.openFilters(t.closest<HTMLElement>(".br-filters-btn")!);
-      if (t.closest(".br-recheck")) return void this.refreshStatus();
-      if (t.closest(".br-retry")) return this.load(this.sets.length > 0);
-      if (t.closest(".br-more")) return this.load(true);
-      if (t.closest(".br-add-all")) return void this.addAll();
-      const row = t.closest<HTMLElement>(".br-set");
+      if (target.closest(".br-filters-btn")) return this.openFilters(target.closest<HTMLElement>(".br-filters-btn")!);
+      if (target.closest(".br-recheck")) return void this.refreshStatus();
+      if (target.closest(".br-retry")) return this.load(this.sets.length > 0);
+      if (target.closest(".br-more")) return this.load(true);
+      if (target.closest(".br-add-all")) return void this.addAll();
+      const row = target.closest<HTMLElement>(".br-set");
       if (!row) return;
       const s = this.sets.find((x) => x.id === +row.dataset.set!);
       if (!s) return;
-      if (t.closest(".br-play")) return playPreview(s);
-      if (t.closest(".br-add")) return this.add([s]);
-      if (t.closest(".br-open")) return openLibrarySet(s.id);
-      if (t.closest(".br-state")) return openImport();
-      if (t.closest(".br-row")) this.toggle(s.id);
+      if (target.closest(".br-play")) return playPreview(s);
+      if (target.closest(".br-add")) return this.add([s]);
+      if (target.closest(".br-open")) return openLibrarySet(s.id);
+      if (target.closest(".br-state")) return openImport();
+      if (target.closest(".br-row")) this.toggle(s.id);
     });
     this.el.addEventListener("keydown", (e) => {
       const row = (e.target as Element).closest<HTMLElement>(".br-row");
@@ -632,20 +632,20 @@ function diffTip(m: FoundMap): string {
 
 /** A set on its way into osu!lazer: where it is (a click opens Add beatmaps). */
 function stateHtml(st: SetImport): string {
-  const pct = st.total ? Math.round((st.done / st.total) * 100) : 0;
+  const share = st.total ? st.done / st.total : 0;
   const text: Record<SetImport["stage"], string> = {
-    queued: "Queued",
-    waiting: "Waiting",
-    resolving: "Waiting",
-    downloading: st.total ? `${pct}%` : "Downloading",
-    held: "Mirrors busy",
-    ready: "Downloaded",
-    importing: "Importing",
-    done: "Imported",
-    skipped: st.message ?? "Skipped",
-    error: "Failed",
+    queued: t("Queued"),
+    waiting: t("Waiting"),
+    resolving: t("Waiting"),
+    downloading: st.total ? pct(share, 0) : t("Downloading"),
+    held: t("Mirrors busy"),
+    ready: t("Downloaded"),
+    importing: t("Importing"),
+    done: t("Imported"),
+    skipped: st.message === "Cancelled" ? t("Cancelled") : (st.message ?? t("Skipped")),
+    error: t("Failed"),
   };
   const done = st.stage === "done" || st.stage === "skipped";
-  const bar = st.stage === "downloading" && st.total ? `<i class="br-state-bar" style="--p:${pct}%"></i>` : "";
-  return `<button class="br-state${done ? " done" : ""}" type="button" data-tip="Open Add beatmaps">${done ? icon("check") : ""}<span>${esc(text[st.stage])}</span>${bar}</button>`;
+  const bar = st.stage === "downloading" && st.total ? `<i class="br-state-bar" style="--p:${Math.round(share * 100)}%"></i>` : "";
+  return `<button class="br-state${done ? " done" : ""}" type="button" data-tip="${t("Open Add beatmaps")}">${done ? icon("check") : ""}<span>${esc(text[st.stage])}</span>${bar}</button>`;
 }

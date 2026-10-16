@@ -78,7 +78,7 @@ export type SyncResult = { ok: true; summary: SyncSummary } | { ok: false; error
 
 /** Reads the player's scores from osu! (once at a time). */
 export async function syncHistory(): Promise<SyncResult> {
-  if (syncing) return { ok: false, error: { code: "busy", message: "Already reading your scores from osu!." } };
+  if (syncing) return { ok: false, error: { code: "busy", message: t("Already reading your scores from osu!.") } };
   syncing = true;
   historyEvents.emit("sync", true);
   try {

@@ -2,19 +2,20 @@
 import { api, asApiError, onScanProgress } from "./api";
 import { events, refreshStatus, reloadLibrary, store } from "./store";
 import type { ApiError, ScanProgress } from "./types";
+import { t } from "./i18n";
 
 const STAGES: Record<string, { label: string; from: number; to: number }> = {
-  copy: { label: "Copying lazer's database", from: 0, to: 0.06 },
-  sets: { label: "Reading beatmaps", from: 0.06, to: 0.78 },
-  scores: { label: "Reading scores", from: 0.78, to: 0.86 },
-  collections: { label: "Reading collections", from: 0.86, to: 0.9 },
-  import: { label: "Saving", from: 0.9, to: 0.94 },
-  stable: { label: "Reading osu!stable", from: 0.94, to: 1 },
+  copy: { label: t("Copying lazer's database"), from: 0, to: 0.06 },
+  sets: { label: t("Reading beatmaps"), from: 0.06, to: 0.78 },
+  scores: { label: t("Reading scores"), from: 0.78, to: 0.86 },
+  collections: { label: t("Reading collections"), from: 0.86, to: 0.9 },
+  import: { label: t("Saving"), from: 0.9, to: 0.94 },
+  stable: { label: t("Reading osu!stable"), from: 0.94, to: 1 },
 };
 
 export function describeScan(p: ScanProgress | null): { label: string; fraction: number } {
-  if (!p) return { label: "Starting", fraction: 0 };
-  const st = STAGES[p.stage] ?? { label: "Working", from: 0, to: 1 };
+  if (!p) return { label: t("Starting"), fraction: 0 };
+  const st = STAGES[p.stage] ?? { label: t("Working"), from: 0, to: 1 };
   const inner = p.total > 0 ? Math.min(1, p.done / p.total) : 0;
   return { label: st.label, fraction: st.from + (st.to - st.from) * inner };
 }

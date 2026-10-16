@@ -14,6 +14,7 @@ import { closeAnimated, toast } from "../ui/controls";
 import { dissolve } from "../ui/dissolve";
 import { icon } from "../ui/icons";
 import { VirtualList } from "../ui/virtual";
+import { t, tn } from "../lib/i18n";
 
 const ROW_H = 52;
 /** the list shows this much before it scrolls */
@@ -28,7 +29,7 @@ interface Row {
 }
 
 export interface DeleteRequest {
-  /** what the sets are, for the title: "osu!catch sets", "sets shown in the library" */
+  /** what the sets are, for the title (translated): "sets shown here", "sets in your library" */
   what: string;
   /** snapshot set indices */
   sets: number[];
@@ -65,13 +66,13 @@ export function openDeleteWindow(req: DeleteRequest): void {
     rows.push({
       id: s.id,
       title: displayTitle(s, unicode),
-      sub: [displayArtist(s, unicode), s.creator, `${num(maps)} ${maps === 1 ? "difficulty" : "difficulties"}`].filter(Boolean).join(" · "),
+      sub: [displayArtist(s, unicode), s.creator, tn(maps, "{n} difficulty", "{n} difficulties")].filter(Boolean).join(" · "),
       bg: s.bg,
       maps,
     });
   }
   if (!rows.length) {
-    toast(stable ? "Nothing to delete here: Fumen never touches osu!stable's sets." : "Nothing to delete here.");
+    toast(stable ? t("Nothing to delete here: Fumen never touches osu!stable's sets.") : t("Nothing to delete here."));
     return;
   }
   current?.close();
@@ -105,7 +106,7 @@ class DeleteWindow {
     el.className = "modal-backdrop dw-backdrop";
     el.innerHTML = `
       <div class="modal-panel dw" role="dialog" aria-modal="true" aria-labelledby="dw-title">
-        <button class="icon-btn modal-close" type="button" data-act="close" aria-label="Close">${icon("x")}</button>
+        <button class="icon-btn modal-close" type="button" data-act="close" aria-label="${t("Close")}">${icon("x")}</button>
         <div class="dw-head">
           <div class="dw-title" id="dw-title"></div>
           <div class="dw-sub meta-line num"></div>
@@ -120,8 +121,8 @@ class DeleteWindow {
           <div class="dw-done" hidden></div>
         </div>
         <div class="dw-actions">
-          <button class="btn btn-ghost" type="button" data-act="cancel">Cancel</button>
-          <button class="btn btn-danger dw-go" type="button" data-act="go">${icon("trash")}<span>Delete in osu!lazer</span></button>
+          <button class="btn btn-ghost" type="button" data-act="cancel">${t("Cancel")}</button>
+          <button class="btn btn-danger dw-go" type="button" data-act="go">${icon("trash")}<span>${t("Delete in osu!lazer")}</span></button>
         </div>
       </div>`;
     this.el = el;
@@ -226,7 +227,7 @@ class DeleteWindow {
       this.result = await api.deleteSetsInLazer(this.rows.map((r) => r.id));
     } catch (e) {
       const err = asApiError(e);
-      this.error = err.code === "lazer-running" ? "osu!lazer was opened: close it, then delete again." : `osu!lazer couldn't delete them: ${err.message}`;
+      this.error = err.code === "lazer-running" ? t("osu!lazer was opened: close it, then delete again.") : t("osu!lazer couldn't delete them: {error}", { error: err.message });
       this.state = "ask";
       this.render();
       void this.refreshStatus();
@@ -278,16 +279,18 @@ class DeleteWindow {
     const done = this.state === "done";
     const title = this.el.querySelector<HTMLElement>(".dw-title")!;
     title.textContent = done
-      ? `Deleted ${n === 1 ? `"${this.rows[0].title}"` : `${num(this.result?.deleted ?? n)} ${this.req.what}`}`
+      ? n === 1
+        ? t("Deleted “{title}”", { title: this.rows[0].title })
+        : t("Deleted {n} {what}", { n: num(this.result?.deleted ?? n), what: this.req.what })
       : n === 1
-        ? `Delete "${this.rows[0].title}"?`
-        : `Delete ${num(n)} ${this.req.what}?`;
+        ? t("Delete “{title}”?", { title: this.rows[0].title })
+        : t("Delete {n} {what}?", { n: num(n), what: this.req.what });
     const maps = this.rows.reduce((s, r) => s + r.maps, 0);
     const total = this.total();
     this.el.querySelector<HTMLElement>(".dw-sub")!.innerHTML = [
-      n === 1 ? "" : `${num(n)} sets`,
-      `${num(maps)} ${maps === 1 ? "difficulty" : "difficulties"}`,
-      total === null ? "measuring…" : `${bytes(total)} on disk`,
+      n === 1 ? "" : tn(n, "{n} set", "{n} sets"),
+      tn(maps, "{n} difficulty", "{n} difficulties"),
+      total === null ? t("measuring…") : t("{size} on disk", { size: bytes(total) }),
     ]
       .filter(Boolean)
       .map((w) => `<span>${w}</span>`)
@@ -299,7 +302,7 @@ class DeleteWindow {
     const st = this.status;
     if (!st) {
       el.className = "imp-lazer dw-lazer";
-      el.innerHTML = `<span class="imp-lazer-text">Checking osu!lazer…</span>`;
+      el.innerHTML = `<span class="imp-lazer-text">${t("Checking osu!lazer…")}</span>`;
       return;
     }
     el.className = `imp-lazer dw-lazer ${st.ready ? "ok" : st.reason === "running" ? "wait" : "off"}`;
@@ -307,13 +310,13 @@ class DeleteWindow {
     const ic = icon(st.ready ? "check" : "alert", "imp-lazer-ic");
     const why =
       st.reason === "running"
-        ? "osu!lazer is running. Close it to delete."
+        ? t("osu!lazer is running. Close it to delete.")
         : st.reason === "untested" && st.version
-          ? `osu!lazer ${short(st.version)} isn't tested with Fumen yet; deleting through it stays off until it is.`
-          : (st.message ?? "osu!lazer can't be written to right now.");
+          ? t("osu!lazer {version} isn't tested with Fumen yet; deleting through it stays off until it is.", { version: short(st.version) })
+          : (st.message ?? t("osu!lazer can't be written to right now."));
     el.innerHTML =
       st.ready && st.version
-        ? `${ic}<span class="meta-line imp-lazer-text"><span>osu!lazer ${esc(short(st.version))}</span><span>Tested with Fumen</span><span>Closed</span></span>`
+        ? `${ic}<span class="meta-line imp-lazer-text"><span>osu!lazer ${esc(short(st.version))}</span><span>${t("Tested with Fumen")}</span><span>${t("Closed")}</span></span>`
         : `${ic}<span class="imp-lazer-text">${esc(why)}</span>`;
   }
 
@@ -321,11 +324,15 @@ class DeleteWindow {
     const el = this.el.querySelector<HTMLElement>(".dw-note")!;
     const one = this.rows.length === 1;
     const left = [
-      this.stable ? `${num(this.stable)} osu!stable ${this.stable === 1 ? "set stays" : "sets stay"}: Fumen never touches osu!stable's files.` : "",
-      this.kept ? `${num(this.kept)} of osu!lazer's own ${this.kept === 1 ? "set stays" : "sets stay"} (protected).` : "",
+      this.stable ? tn(this.stable, "{n} osu!stable set stays: Fumen never touches osu!stable's files.", "{n} osu!stable sets stay: Fumen never touches osu!stable's files.") : "",
+      this.kept ? tn(this.kept, "{n} of osu!lazer's own sets stays (protected).", "{n} of osu!lazer's own sets stay (protected).") : "",
     ].filter(Boolean);
     el.innerHTML =
-      `<p>osu!lazer's own Delete: ${one ? "it's" : "they're"} gone from osu!lazer at once, and the next time osu!lazer starts it removes ${one ? "it and its" : "them and their"} files for good. Your scores on ${one ? "it" : "them"} stay. osu!lazer's database is backed up first.</p>` +
+      `<p>${
+        one
+          ? t("osu!lazer's own Delete: it's gone from osu!lazer at once, and the next time osu!lazer starts it removes it and its files for good. Your scores on it stay. osu!lazer's database is backed up first.")
+          : t("osu!lazer's own Delete: they're gone from osu!lazer at once, and the next time osu!lazer starts it removes them and their files for good. Your scores on them stay. osu!lazer's database is backed up first.")
+      }</p>` +
       (left.length ? `<p class="dw-left">${esc(left.join(" "))}</p>` : "");
   }
 
@@ -339,10 +346,10 @@ class DeleteWindow {
     const total = this.total();
     el.innerHTML = `
       <div class="dw-done-num num">${num(r.deleted)}</div>
-      <div class="dw-done-what">${r.deleted === 1 ? "set deleted" : "sets deleted"}</div>
+      <div class="dw-done-what">${r.deleted === 1 ? t("set deleted") : t("sets deleted")}</div>
       <div class="dw-done-sub">${
-        total ? `osu!lazer frees up to <b class="num">${bytes(total)}</b> the next time it starts.` : "osu!lazer removes the files the next time it starts."
-      } Your scores on ${r.deleted === 1 ? "it" : "them"} stay.${r.skipped ? ` ${num(r.skipped)} ${r.skipped === 1 ? "was" : "were"} already gone.` : ""}</div>`;
+        total ? t("osu!lazer frees up to {size} the next time it starts.", { size: `<b class="num">${bytes(total)}</b>` }) : t("osu!lazer removes the files the next time it starts.")
+      } ${r.deleted === 1 ? t("Your scores on it stay.") : t("Your scores on them stay.")}${r.skipped ? ` ${tn(r.skipped, "{n} was already gone.", "{n} were already gone.")}` : ""}</div>`;
     el.hidden = false;
   }
 
@@ -356,13 +363,13 @@ class DeleteWindow {
     cancel.disabled = busy;
     if (this.state === "done") {
       go.className = "btn btn-primary dw-go";
-      go.innerHTML = `<span>Close</span>`;
+      go.innerHTML = `<span>${t("Close")}</span>`;
       go.disabled = false;
       go.focus();
       return;
     }
     go.className = "btn btn-danger dw-go";
-    go.innerHTML = busy ? `<span>Deleting…</span>` : `${icon("trash")}<span>Delete in osu!lazer</span>`;
+    go.innerHTML = busy ? `<span>${t("Deleting…")}</span>` : `${icon("trash")}<span>${t("Delete in osu!lazer")}</span>`;
     go.disabled = busy || !this.status?.ready;
   }
 

@@ -74,7 +74,7 @@
 
 .crow {
   display: grid;
-  grid-template-columns: 22px 64px minmax(160px, 1fr) 96px 76px 132px;
+  grid-template-columns: 22px 64px minmax(160px, 1fr) 96px 76px 156px;
   column-gap: 12px;
   align-items: center;
   min-height: 48px;

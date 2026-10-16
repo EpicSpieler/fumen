@@ -10,27 +10,30 @@
  */
 import { asApiError, onCareProgress, thumbUrl } from "../lib/api";
 import { careReport, knownCare } from "../lib/care-data";
-import { bytes, displayArtist, displayTitle, esc, MODE_SHORT, num, relativeTime, statusLabel } from "../lib/format";
+import {
+  bytes, displayArtist, displayTitle, esc, MODE_SHORT, num, pct, relativeTime, statusLabel,
+} from "../lib/format";
 import { events, store } from "../lib/store";
 import type { Broken, CareReport, DupeGroup, DupeSet } from "../lib/types";
 import { attachSegIndicator, openMenu, type MenuEntry } from "../ui/controls";
 import { icon } from "../ui/icons";
 import { openSet } from "./actions";
 import { openDeleteWindow } from "./delete-window";
+import { lower, t, tn } from "../lib/i18n";
 
 /** rows per "Show more" */
 const PAGE = 50;
 const YEAR = 365 * 86_400_000;
-const KIND_NAMES = ["Songs", "Videos", "Images", "Hitsounds", "Other"];
+const KIND_NAMES = [t("Songs"), t("Videos"), t("Images"), t("Hitsounds"), t("Other")];
 const KIND_TIPS = [
-  "The audio the difficulties play",
-  "Background videos",
-  "Backgrounds and storyboard images",
-  "Hitsounds and storyboard sounds",
-  "Charts, storyboard scripts and anything else",
+  t("The audio the difficulties play"),
+  t("Background videos"),
+  t("Backgrounds and storyboard images"),
+  t("Hitsounds and storyboard sounds"),
+  t("Charts, storyboard scripts and anything else"),
 ];
 /** "Mixed": a set with difficulties of more than one ruleset */
-const RULESET_NAMES = [...MODE_SHORT, "Mixed"];
+const RULESET_NAMES = [...MODE_SHORT, t("Mixed")];
 /** …in full, for what's deleted */
 const RULESET_FULL = ["osu!", "osu!taiko", "osu!catch", "osu!mania"];
 /** the breakdown's colours, in order */
@@ -41,10 +44,13 @@ type Tab = "never" | "biggest" | "stale" | "dupes" | "broken";
 
 /** What each kind of duplicate is, and what of it could go. */
 const DUPES: Record<DupeGroup["kind"], { title: string; note: (g: DupeGroup) => string }> = {
-  "stable-copy": { title: "In osu!stable and osu!lazer", note: () => "Every difficulty of the osu!stable copy is in osu!lazer too." },
-  "same-set": { title: "The same beatmap set more than once", note: () => "One set on osu!, newest first." },
-  shared: { title: "Difficulties in common", note: (g) => `${num(g.shared)} ${g.shared === 1 ? "difficulty is" : "difficulties are"} in more than one of these sets, like a pack and a set.` },
-  reupload: { title: "Most likely a re-upload", note: () => "The same title by the same mapper, with the same song file." },
+  "stable-copy": { title: t("In osu!stable and osu!lazer"), note: () => t("Every difficulty of the osu!stable copy is in osu!lazer too.") },
+  "same-set": { title: t("The same beatmap set more than once"), note: () => t("One set on osu!, newest first.") },
+  shared: {
+    title: t("Difficulties in common"),
+    note: (g) => tn(g.shared, "{n} difficulty is in more than one of these sets, like a pack and a set.", "{n} difficulties are in more than one of these sets, like a pack and a set."),
+  },
+  reupload: { title: t("Most likely a re-upload"), note: () => t("The same title by the same mapper, with the same song file.") },
 };
 
 /** A set as library care sees it. */
@@ -84,12 +90,12 @@ export class CareView {
     this.el.innerHTML = `
       <header class="view-head care-head">
         <div class="care-head-text">
-          <h1 class="view-title">Library care</h1>
+          <h1 class="view-title">${t("Library care")}</h1>
           <div class="view-sub care-sub meta-line num"></div>
         </div>
         <div class="care-head-tools">
-          <button class="btn btn-ghost btn-sm care-refresh" type="button">${icon("refresh")}<span>Measure again</span></button>
-          <button class="btn btn-sm care-clean" type="button">${icon("trash")}<span>Clean up</span>${icon("chevron-down")}</button>
+          <button class="btn btn-ghost btn-sm care-refresh" type="button">${icon("refresh")}<span>${t("Measure again")}</span></button>
+          <button class="btn btn-sm care-clean" type="button">${icon("trash")}<span>${t("Clean up")}</span>${icon("chevron-down")}</button>
         </div>
       </header>
       <div class="care-body"></div>`;
@@ -166,7 +172,7 @@ export class CareView {
     this.el.querySelector<HTMLButtonElement>(".care-clean")!.disabled = this.loading || !cached || !this.entries.some((x) => !x.stable);
     if (this.failed) {
       sub.textContent = "";
-      body.innerHTML = `<div class="empty-state">${icon("alert")}<div class="empty-title">Couldn't measure the library</div><div class="empty-sub">${esc(this.failed)}</div></div>`;
+      body.innerHTML = `<div class="empty-state">${icon("alert")}<div class="empty-title">${t("Couldn't measure the library")}</div><div class="empty-sub">${esc(this.failed)}</div></div>`;
       return;
     }
     if (this.loading || !cached) {
@@ -183,41 +189,41 @@ export class CareView {
     const total = e.reduce((s, x) => s + x.size, 0);
     const lazer = cached.lazerSize;
     const stable = cached.stableSize;
-    sub.innerHTML = [`${num(e.length)} ${e.length === 1 ? "set" : "sets"}`, lazer ? `${bytes(lazer)} in osu!lazer` : "", stable ? `${bytes(stable)} in osu!stable` : ""]
+    sub.innerHTML = [tn(e.length, "{n} set", "{n} sets"), lazer ? t("{size} in osu!lazer", { size: bytes(lazer) }) : "", stable ? t("{size} in osu!stable", { size: bytes(stable) }) : ""]
       .filter(Boolean)
       .map((w) => `<span>${w}</span>`)
       .join("");
     if (!e.length) {
-      body.innerHTML = `<div class="empty-state care-empty">${icon("folder")}<div class="empty-title">Nothing to measure yet</div><div class="empty-sub">Library care looks at your sets once the library has been read.</div></div>`;
+      body.innerHTML = `<div class="empty-state care-empty">${icon("folder")}<div class="empty-title">${t("Nothing to measure yet")}</div><div class="empty-sub">${t("Library care looks at your sets once the library has been read.")}</div></div>`;
       return;
     }
     body.innerHTML = `
       <div class="hist-tiles care-tiles">${this.tiles(total)}</div>
       <section class="panel care-split">
         <div class="panel-head">
-          <div class="label-caps">Where it goes</div>
-          <div class="seg-pill care-groups" role="tablist" aria-label="Split by">
-            <button type="button" data-group="kind">Files</button>
-            <button type="button" data-group="ruleset">Ruleset</button>
-            <button type="button" data-group="status">Status</button>
+          <div class="label-caps">${t("Where it goes")}</div>
+          <div class="seg-pill care-groups" role="tablist" aria-label="${t("Split by")}">
+            <button type="button" data-group="kind">${t("Files")}</button>
+            <button type="button" data-group="ruleset">${t("Ruleset")}</button>
+            <button type="button" data-group="status">${t("Status")}</button>
           </div>
         </div>
         <div class="care-split-body"></div>
       </section>
       <section class="section care-lists">
-        <div class="seg-tabs care-tabs" role="tablist" aria-label="Sets">
-          <button type="button" data-tab="never">Never played</button>
-          <button type="button" data-tab="biggest">Biggest</button>
-          <button type="button" data-tab="stale">Not played in a year</button>
-          <button type="button" data-tab="dupes">Duplicates</button>
-          <button type="button" data-tab="broken">Broken files</button>
+        <div class="seg-tabs care-tabs" role="tablist" aria-label="${t("Sets")}">
+          <button type="button" data-tab="never">${t("Never played")}</button>
+          <button type="button" data-tab="biggest">${t("Biggest")}</button>
+          <button type="button" data-tab="stale">${t("Not played in a year")}</button>
+          <button type="button" data-tab="dupes">${t("Duplicates")}</button>
+          <button type="button" data-tab="broken">${t("Broken files")}</button>
         </div>
         <div class="care-note-row"><div class="care-note"></div><button class="btn btn-ghost btn-sm care-pick-all" type="button" hidden></button></div>
         <div class="care-list"></div>
         <div class="care-act" hidden>
           <div class="care-act-text num"></div>
-          <button class="btn btn-ghost btn-sm care-unpick" type="button">Clear</button>
-          <button class="btn btn-danger btn-sm care-delete" type="button">${icon("trash")}<span>Delete in osu!lazer</span></button>
+          <button class="btn btn-ghost btn-sm care-unpick" type="button">${t("Clear")}</button>
+          <button class="btn btn-danger btn-sm care-delete" type="button">${icon("trash")}<span>${t("Delete in osu!lazer")}</span></button>
         </div>
       </section>`;
     attachSegIndicator(body.querySelector(".care-groups")!);
@@ -230,7 +236,7 @@ export class CareView {
     const el = this.el.querySelector<HTMLElement>(".care-progress");
     if (!el) return;
     const p = this.progress;
-    el.textContent = p && p.total > 0 ? `Measuring files · ${num(p.done)} of ${num(p.total)}` : "Measuring the library";
+    el.textContent = p && p.total > 0 ? t("Measuring files · {done} of {total}", { done: num(p.done), total: num(p.total) }) : t("Measuring the library");
   }
 
   /** `total`: the sets' sizes added up (a file two sets share counts for both) */
@@ -241,13 +247,13 @@ export class CareView {
     const stale = e.filter((x) => x.played > 1 && now - x.played > YEAR);
     const videos = e.filter((x) => x.kinds[1] > 0);
     const sum = (list: Entry[], f: (x: Entry) => number = (x) => x.size) => list.reduce((s, x) => s + f(x), 0);
-    const share = (v: number) => (total ? `${Math.round((v / total) * 100)}% of it` : "");
+    const share = (v: number) => (total ? t("{pct} of it", { pct: pct(v / total, 0) }) : "");
     return [
       // a file two sets share is on disk once
-      tile("On disk", bytes(cached!.lazerSize + cached!.stableSize), `${num(e.length)} sets`),
-      tile("Never played", bytes(sum(never)), `${num(never.length)} sets · ${share(sum(never))}`),
-      tile("Videos", bytes(sum(videos, (x) => x.kinds[1])), `in ${num(videos.length)} sets · ${share(sum(videos, (x) => x.kinds[1]))}`),
-      tile("Not played in a year", bytes(sum(stale)), `${num(stale.length)} sets`),
+      tile(t("On disk"), bytes(cached!.lazerSize + cached!.stableSize), tn(e.length, "{n} set", "{n} sets")),
+      tile(t("Never played"), bytes(sum(never)), `${tn(never.length, "{n} set", "{n} sets")} · ${share(sum(never))}`),
+      tile(t("Videos"), bytes(sum(videos, (x) => x.kinds[1])), `${tn(videos.length, "in {n} set", "in {n} sets")} · ${share(sum(videos, (x) => x.kinds[1]))}`),
+      tile(t("Not played in a year"), bytes(sum(stale)), tn(stale.length, "{n} set", "{n} sets")),
     ].join("");
   }
 
@@ -282,12 +288,11 @@ export class CareView {
         const rest = list.slice(5);
         list = [
           ...list.slice(0, 5),
-          ["Other statuses", { size: rest.reduce((s, [, p]) => s + p.size, 0), sets: rest.reduce((s, [, p]) => s + p.sets, 0), tip: rest.map(([n]) => n).join(", "), members: rest.flatMap(([, p]) => p.members) }],
+          [t("Other statuses"), { size: rest.reduce((s, [, p]) => s + p.size, 0), sets: rest.reduce((s, [, p]) => s + p.sets, 0), tip: rest.map(([n]) => n).join(", "), members: rest.flatMap(([, p]) => p.members) }],
         ];
       }
     }
     const total = list.reduce((s, [, p]) => s + p.size, 0) || 1;
-    const setWord = this.group === "kind" ? "with them" : "";
     // a ruleset's or a status's sets can go at once (files can't: they're parts of sets)
     const deletable = this.group !== "kind";
     this.legend = list.map(([name, p]) => ({ name, sets: p.members.filter((x) => !x.stable).map((x) => x.set) }));
@@ -302,8 +307,8 @@ export class CareView {
             <i style="background:${COLOURS[i % COLOURS.length]}"></i>
             <span class="care-leg-name">${esc(name)}</span>
             <b class="num">${bytes(p.size)}</b>
-            <span class="care-leg-sub num">${percent(p.size / total)} · ${num(p.sets)} ${p.sets === 1 ? "set" : "sets"}${setWord ? ` ${setWord}` : ""}</span>
-            ${deletable && this.legend[i].sets.length ? `<button class="icon-btn care-leg-del" type="button" data-leg="${i}" aria-label="Delete these sets in osu!lazer" data-tip="Delete these in osu!lazer…">${icon("trash")}</button>` : ""}
+            <span class="care-leg-sub num">${percent(p.size / total)} · ${this.group === "kind" ? tn(p.sets, "in {n} set", "in {n} sets") : tn(p.sets, "{n} set", "{n} sets")}</span>
+            ${deletable && this.legend[i].sets.length ? `<button class="icon-btn care-leg-del" type="button" data-leg="${i}" aria-label="${t("Delete these sets in osu!lazer")}" data-tip="${t("Delete these in osu!lazer…")}">${icon("trash")}</button>` : ""}
           </div>`,
         )
         .join("")}</div>`;
@@ -333,13 +338,13 @@ export class CareView {
     const size = this.rows.reduce((s, x) => s + x.size, 0);
     note.textContent = this.rows.length
       ? this.tab === "never"
-        ? `${num(this.rows.length)} sets you've never played take ${bytes(size)}. Biggest first.`
+        ? tn(this.rows.length, "{n} set you've never played takes {size}. Biggest first.", "{n} sets you've never played take {size}. Biggest first.", { size: bytes(size) })
         : this.tab === "stale"
-          ? `${num(this.rows.length)} sets you last played over a year ago take ${bytes(size)}. Biggest first.`
-          : "Every set, biggest first."
+          ? tn(this.rows.length, "{n} set you last played over a year ago takes {size}. Biggest first.", "{n} sets you last played over a year ago take {size}. Biggest first.", { size: bytes(size) })
+          : t("Every set, biggest first.")
       : "";
     if (!this.rows.length) {
-      list.innerHTML = `<div class="care-none">${this.tab === "never" ? "You've played every set in your library." : "Nothing here."}</div>`;
+      list.innerHTML = `<div class="care-none">${this.tab === "never" ? t("You've played every set in your library.") : t("Nothing here.")}</div>`;
       return;
     }
     // never played / not in a year: all of them at once
@@ -347,12 +352,12 @@ export class CareView {
     if ((this.tab === "never" || this.tab === "stale") && pickable.length > 1) {
       const every = pickable.every((id) => this.picked.has(id));
       all.hidden = false;
-      all.textContent = every ? "Unpick all" : `Pick all ${num(pickable.length)}`;
+      all.textContent = every ? t("Unpick all") : t("Pick all {n}", { n: num(pickable.length) });
       all.dataset.ids = every ? "" : "all";
     }
     const shown = this.rows.slice(0, this.shownRows);
     const left = this.rows.length - shown.length;
-    list.innerHTML = shown.map((x, i) => this.row(x, i)).join("") + (left > 0 ? `<button class="btn btn-ghost btn-sm hist-more care-more" type="button">Show ${num(Math.min(PAGE, left))} more</button>` : "");
+    list.innerHTML = shown.map((x, i) => this.row(x, i)).join("") + (left > 0 ? `<button class="btn btn-ghost btn-sm hist-more care-more" type="button">${t("Show {n} more", { n: num(Math.min(PAGE, left)) })}</button>` : "");
   }
 
   private row(x: Entry, i: number): string {
@@ -360,15 +365,15 @@ export class CareView {
     const set = snap.sets[x.set];
     const unicode = store.prefs.unicode;
     const diffs = set.maps.length;
-    const sub = [RULESET_NAMES[x.ruleset], `${num(diffs)} ${diffs === 1 ? "difficulty" : "difficulties"}`, displayArtist(set, unicode), x.stable ? "osu!stable" : ""].filter(Boolean).map(esc).join(" · ");
-    const when = x.played > 1 ? `played ${relativeTime(x.played)}` : set.added ? `added ${relativeTime(set.added)}` : "";
+    const sub = [RULESET_NAMES[x.ruleset], tn(diffs, "{n} difficulty", "{n} difficulties"), displayArtist(set, unicode), x.stable ? "osu!stable" : ""].filter(Boolean).map(esc).join(" · ");
+    const when = x.played > 1 ? t("played {when}", { when: relativeTime(x.played) }) : set.added ? t("added {when}", { when: relativeTime(set.added) }) : "";
     const video = x.kinds[1];
     return `
       <div class="crow" data-i="${i}" role="button" tabindex="0">
         ${this.pick(x.stable ? null : set.id)}
         <span class="t-art${set.bg ? "" : " img-missing"}">${set.bg ? `<img src="${thumbUrl(set.bg, 160)}" alt="" loading="lazy" decoding="async" />` : ""}</span>
         <div class="prow-text"><div class="t-title">${esc(displayTitle(set, unicode))}</div><div class="t-sub">${sub}</div></div>
-        <span class="crow-video num">${video ? `<span data-tip="The background video">${icon("play")}${bytes(video)}</span>` : ""}</span>
+        <span class="crow-video num">${video ? `<span data-tip="${t("The background video")}">${icon("play")}${bytes(video)}</span>` : ""}</span>
         <b class="crow-size num">${bytes(x.size)}</b>
         <span class="crow-when">${when}</span>
       </div>`;
@@ -380,7 +385,7 @@ export class CareView {
     const groups = report.duplicates;
     if (!groups.length) {
       note.textContent = "";
-      list.innerHTML = `<div class="care-none">No duplicates: every set in your library is there once.</div>`;
+      list.innerHTML = `<div class="care-none">${t("No duplicates: every set in your library is there once.")}</div>`;
       return;
     }
     const size = new Map(report.sets.map((s) => [s.id, s.size]));
@@ -393,14 +398,14 @@ export class CareView {
           : 0;
     const total = groups.reduce((s, g) => s + could(g), 0);
     const sets = groups.reduce((s, g) => s + g.sets.length, 0);
-    note.textContent = `${num(sets)} sets in ${num(groups.length)} ${groups.length === 1 ? "group" : "groups"}${total ? `; up to ${bytes(total)} could go` : ""}.`;
+    note.textContent = `${t("{sets} in {groups}", { sets: tn(sets, "{n} set", "{n} sets"), groups: tn(groups.length, "{n} group", "{n} groups") })}${total ? `; ${t("up to {size} could go", { size: bytes(total) })}` : ""}.`;
     // the ones that free the most first
     const order = [...groups].sort((a, b) => could(b) - could(a));
     list.innerHTML = order
       .map((g) => {
         const d = DUPES[g.kind];
         const c = could(g);
-        const what = g.kind === "stable-copy" ? "osu!stable's copy" : "all but the newest";
+        const what = g.kind === "stable-copy" ? t("osu!stable's copy") : t("all but the newest");
         // the older copies in lazer, to pick at once (osu!stable's are for osu!stable to delete)
         const older = g.kind === "same-set" || g.kind === "reupload" ? g.sets.slice(1).filter((id) => info.get(id)?.source === "lazer" && this.setIndex(id) !== undefined) : [];
         return `
@@ -409,7 +414,7 @@ export class CareView {
             <div class="dupe-title">${d.title}</div>
             <div class="dupe-note">${esc(d.note(g))}</div>
             ${c ? `<div class="dupe-save num">${what}: ${bytes(c)}</div>` : ""}
-            ${older.length ? `<button class="btn btn-ghost btn-sm dupe-pick" type="button" data-ids="${esc(older.join(" "))}">Pick the older ${older.length === 1 ? "one" : "ones"}</button>` : ""}
+            ${older.length ? `<button class="btn btn-ghost btn-sm dupe-pick" type="button" data-ids="${esc(older.join(" "))}">${older.length === 1 ? t("Pick the older one") : t("Pick the older ones")}</button>` : ""}
           </div>
           ${g.sets.map((id, k) => this.dupeRow(info.get(id), size.get(id) ?? 0, k === 0 && g.kind !== "stable-copy" && g.kind !== "shared")).join("")}
         </div>`;
@@ -424,14 +429,14 @@ export class CareView {
     for (const b of report.broken) bySet.set(b.set, [...(bySet.get(b.set) ?? []), b]);
     if (!bySet.size) {
       note.textContent = "";
-      list.innerHTML = `<div class="care-none">Every song and background is there, and is what it says.</div>`;
+      list.innerHTML = `<div class="care-none">${t("Every song and background is there, and is what it says.")}</div>`;
       return;
     }
     const rank = (b: Broken) => ["song", "background", "files"].indexOf(b.what);
     const sets = [...bySet.entries()].map(([id, issues]) => [id, issues.sort((a, b) => rank(a) - rank(b))] as const);
     sets.sort((a, b) => rank(a[1][0]) - rank(b[1][0]));
     const songs = sets.filter(([, issues]) => issues.some((b) => b.what === "song")).length;
-    note.textContent = `${num(sets.length)} ${sets.length === 1 ? "set" : "sets"}${songs ? `, ${num(songs)} of them with a song that won't play` : ""}.`;
+    note.textContent = `${tn(sets.length, "{n} set", "{n} sets")}${songs ? `, ${t("{n} of them with a song that won't play", { n: num(songs) })}` : ""}.`;
     const size = new Map(report.sets.map((s) => [s.id, s.size]));
     const info = new Map(report.named.map((s) => [s.id, s]));
     list.innerHTML = sets.map(([id, issues]) => this.dupeRow(info.get(id), size.get(id) ?? 0, false, issues)).join("");
@@ -450,14 +455,14 @@ export class CareView {
     }
     const sub = [
       s.source === "stable" ? "osu!stable" : "osu!lazer",
-      `${num(s.maps)} ${s.maps === 1 ? "difficulty" : "difficulties"}`,
+      tn(s.maps, "{n} difficulty", "{n} difficulties"),
       s.creator,
       s.source === "stable" && s.folder ? `Songs/${s.folder}` : "",
     ]
       .filter(Boolean)
       .map(esc);
-    if (newest) sub.unshift(`<b class="dupe-new">Newest</b>`);
-    const when = played > 1 ? `played ${relativeTime(played)}` : set && played ? "played" : s.added ? `added ${relativeTime(s.added)}` : "";
+    if (newest) sub.unshift(`<b class="dupe-new">${t("Newest")}</b>`);
+    const when = played > 1 ? t("played {when}", { when: relativeTime(played) }) : set && played ? t("played") : s.added ? t("added {when}", { when: relativeTime(s.added) }) : "";
     const title = set ? displayTitle(set, unicode) : s.title;
     const bg = set?.bg ?? s.bg;
     return `
@@ -475,7 +480,7 @@ export class CareView {
   private pick(id: string | null): string {
     if (!id) return `<span class="crow-pick-none"></span>`;
     const on = this.picked.has(id);
-    return `<button type="button" class="crow-pick${on ? " on" : ""}" data-pick="${esc(id)}" aria-pressed="${on}" aria-label="Pick to delete" data-tip="${on ? "Picked to delete" : "Pick to delete"}">${icon("check")}</button>`;
+    return `<button type="button" class="crow-pick${on ? " on" : ""}" data-pick="${esc(id)}" aria-pressed="${on}" aria-label="${t("Pick to delete")}" data-tip="${on ? t("Picked to delete") : t("Pick to delete")}">${icon("check")}</button>`;
   }
 
   /** The bar with what's picked: how many, how much, and deleting them. */
@@ -487,7 +492,7 @@ export class CareView {
     if (!n) return;
     const size = new Map(cached.sets.map((s) => [s.id, s.size]));
     const total = [...this.picked].reduce((s, id) => s + (size.get(id) ?? 0), 0);
-    bar.querySelector(".care-act-text")!.textContent = `${num(n)} ${n === 1 ? "set" : "sets"} picked · ${bytes(total)}`;
+    bar.querySelector(".care-act-text")!.textContent = `${tn(n, "{n} set picked", "{n} sets picked")} · ${bytes(total)}`;
   }
 
   private togglePicks(ids: string[], on: boolean): void {
@@ -499,7 +504,7 @@ export class CareView {
       const p = this.picked.has(b.dataset.pick!);
       b.classList.toggle("on", p);
       b.setAttribute("aria-pressed", String(p));
-      b.dataset.tip = p ? "Picked to delete" : "Pick to delete";
+      b.dataset.tip = p ? t("Picked to delete") : t("Pick to delete");
     });
     if (this.tab === "never" || this.tab === "stale") this.renderList();
     else this.renderAct();
@@ -511,7 +516,7 @@ export class CareView {
     if (!this.picked.size || !snap) return;
     const at = new Map(snap.sets.map((s, i) => [s.id, i]));
     const sets = [...this.picked].map((id) => at.get(id)).filter((i): i is number => i !== undefined);
-    openDeleteWindow({ what: "picked sets", sets, deleted: () => this.togglePicks([...this.picked], false) });
+    openDeleteWindow({ what: t("picked sets"), sets, deleted: () => this.togglePicks([...this.picked], false) });
   }
 
   /** What can go at once: every set of a ruleset or a status, the unplayed, older copies. */
@@ -523,29 +528,29 @@ export class CareView {
       const size = list.reduce((s, x) => s + x.size, 0);
       return {
         label,
-        hint: list.length ? `${num(list.length)} · ${bytes(size)}` : "none",
+        hint: list.length ? `${num(list.length)} · ${bytes(size)}` : t("none"),
         disabled: !list.length,
         action: () => openDeleteWindow({ what, sets: list.map((x) => x.set) }),
       };
     };
-    const entries: MenuEntry[] = [{ group: "Every set of a ruleset" }];
+    const entries: MenuEntry[] = [{ group: t("Every set of a ruleset") }];
     RULESET_NAMES.forEach((_, k) => {
       const list = lazer.filter((x) => x.ruleset === k);
-      if (list.length) entries.push(entry(k === 4 ? "Mixed rulesets" : `All ${RULESET_FULL[k]}`, k === 4 ? "sets with mixed rulesets" : `${RULESET_FULL[k]} sets`, list));
+      if (list.length) entries.push(entry(k === 4 ? t("Mixed rulesets") : t("All {ruleset}", { ruleset: RULESET_FULL[k] }), k === 4 ? t("sets with mixed rulesets") : t("{ruleset} sets", { ruleset: RULESET_FULL[k] }), list));
     });
     const statuses = new Map<string, Entry[]>();
     for (const x of lazer) {
       const s = statusLabel(snap.sets[x.set].status);
       statuses.set(s, [...(statuses.get(s) ?? []), x]);
     }
-    entries.push("sep", { group: "Every set of a status" });
-    for (const [s, list] of [...statuses].sort((a, b) => b[1].length - a[1].length)) entries.push(entry(s, `${s.toLowerCase()} sets`, list));
+    entries.push("sep", { group: t("Every set of a status") });
+    for (const [s, list] of [...statuses].sort((a, b) => b[1].length - a[1].length)) entries.push(entry(s, t("{status} sets", { status: lower(s) }), list));
     const now = Date.now();
     entries.push(
       "sep",
-      { group: "By playing" },
-      entry("Never played", "sets you've never played", lazer.filter((x) => !x.played)),
-      entry("Not played in a year", "sets not played in a year", lazer.filter((x) => x.played > 1 && now - x.played > YEAR)),
+      { group: t("By playing") },
+      entry(t("Never played"), t("sets you've never played"), lazer.filter((x) => !x.played)),
+      entry(t("Not played in a year"), t("sets not played in a year"), lazer.filter((x) => x.played > 1 && now - x.played > YEAR)),
     );
     // duplicates: the older copies in lazer of the same set or a re-upload
     const older = new Set<number>();
@@ -557,7 +562,7 @@ export class CareView {
       }
     }
     const olderList = lazer.filter((x) => older.has(x.set));
-    if (olderList.length) entries.push("sep", entry("Older copies of duplicates", "older copies", olderList));
+    if (olderList.length) entries.push("sep", entry(t("Older copies of duplicates"), t("older copies"), olderList));
     openMenu(at, entries, { minWidth: 280, className: "care-clean-menu" });
   }
 
@@ -578,47 +583,48 @@ export class CareView {
 
   private bind(): void {
     this.el.addEventListener("click", (e) => {
-      const t = e.target as Element;
-      if (t.closest(".care-refresh")) return void this.load(true);
-      const clean = t.closest<HTMLElement>(".care-clean");
+      const target = e.target as Element;
+      if (target.closest(".care-refresh")) return void this.load(true);
+      const clean = target.closest<HTMLElement>(".care-clean");
       if (clean) return this.cleanMenu(clean);
-      const leg = t.closest<HTMLElement>(".care-leg-del");
+      const leg = target.closest<HTMLElement>(".care-leg-del");
       if (leg) {
         const l = this.legend[+leg.dataset.leg!];
         if (l) {
           const k = RULESET_NAMES.indexOf(l.name);
-          const what = this.group !== "ruleset" ? `${l.name.toLowerCase()} sets` : k === 4 ? "sets with mixed rulesets" : `${RULESET_FULL[k] ?? l.name} sets`;
+          const what =
+            this.group !== "ruleset" ? t("{status} sets", { status: lower(l.name) }) : k === 4 ? t("sets with mixed rulesets") : t("{ruleset} sets", { ruleset: RULESET_FULL[k] ?? l.name });
           openDeleteWindow({ what, sets: l.sets });
         }
         return;
       }
-      const group = t.closest<HTMLElement>(".care-groups [data-group]");
+      const group = target.closest<HTMLElement>(".care-groups [data-group]");
       if (group) {
         this.group = group.dataset.group as Group;
         return this.renderSplit();
       }
-      const tab = t.closest<HTMLElement>(".care-tabs [data-tab]");
+      const tab = target.closest<HTMLElement>(".care-tabs [data-tab]");
       if (tab) {
         if (this.tab === tab.dataset.tab) return;
         this.tab = tab.dataset.tab as Tab;
         this.shownRows = PAGE;
         return this.renderList();
       }
-      if (t.closest(".care-more")) {
+      if (target.closest(".care-more")) {
         this.shownRows += PAGE;
         return this.renderList();
       }
-      const pick = t.closest<HTMLElement>(".crow-pick");
+      const pick = target.closest<HTMLElement>(".crow-pick");
       if (pick) return this.togglePicks([pick.dataset.pick!], !this.picked.has(pick.dataset.pick!));
-      const older = t.closest<HTMLElement>(".dupe-pick");
+      const older = target.closest<HTMLElement>(".dupe-pick");
       if (older) return this.togglePicks(older.dataset.ids!.split(" "), true);
-      const all = t.closest<HTMLElement>(".care-pick-all");
+      const all = target.closest<HTMLElement>(".care-pick-all");
       if (all) return this.togglePicks(this.rows.filter((x) => !x.stable).map((x) => snapId(x.set)), all.dataset.ids === "all");
-      if (t.closest(".care-unpick")) return this.togglePicks([...this.picked], false);
-      if (t.closest(".care-delete")) return this.deletePicked();
-      const dupe = t.closest<HTMLElement>(".crow[data-set]");
+      if (target.closest(".care-unpick")) return this.togglePicks([...this.picked], false);
+      if (target.closest(".care-delete")) return this.deletePicked();
+      const dupe = target.closest<HTMLElement>(".crow[data-set]");
       if (dupe) return openSet(+dupe.dataset.set!);
-      const row = t.closest<HTMLElement>(".crow[data-i]");
+      const row = target.closest<HTMLElement>(".crow[data-i]");
       if (row) this.open(+row.dataset.i!);
     });
     this.el.addEventListener("contextmenu", (e) => {
@@ -626,7 +632,7 @@ export class CareView {
       if (!row) return;
       e.preventDefault();
       const i = +row.dataset.i!;
-      openMenu({ x: e.clientX, y: e.clientY }, [{ label: "Open beatmap set", icon: "library", action: () => this.open(i) }]);
+      openMenu({ x: e.clientX, y: e.clientY }, [{ label: t("Open beatmap set"), icon: "library", action: () => this.open(i) }]);
     });
     this.el.addEventListener("keydown", (e) => {
       // the pick toggle is a button of its own
@@ -671,22 +677,31 @@ export class CareView {
 /** What's wrong, in a line: what the file is, its name, for how many of the set's difficulties. */
 function issue(b: Broken, s: DupeSet): string {
   const name = b.name ? `<span class="broken-name">${esc(b.name)}</span>` : "";
-  const where = s.source === "stable" ? "the folder" : "the set";
+  const song = b.what === "song";
+  const folder = s.source === "stable";
   const text =
     b.what === "files"
-      ? `${num(b.count)} ${b.count === 1 ? "file is" : "files are"} missing from osu!lazer's files`
+      ? tn(b.count, "{n} file is missing from osu!lazer's files", "{n} files are missing from osu!lazer's files")
       : b.how === "missing"
-        ? `${b.what === "song" ? "Song" : "Background"} ${name} isn't in ${where}`
-        : `${b.what === "song" ? "Song" : "Background"} ${name} isn't ${b.what === "song" ? "audio" : "an image"}`;
-  const of = b.what !== "files" && s.maps > 1 ? ` · ${b.count === s.maps ? "every difficulty" : `${num(b.count)} of ${num(s.maps)} difficulties`}` : "";
-  return `<b>${b.how === "missing" ? "Missing" : "Broken"}</b> ${text}${of}`;
+        ? song
+          ? folder
+            ? t("Song {name} isn't in the folder", { name })
+            : t("Song {name} isn't in the set", { name })
+          : folder
+            ? t("Background {name} isn't in the folder", { name })
+            : t("Background {name} isn't in the set", { name })
+        : song
+          ? t("Song {name} isn't audio", { name })
+          : t("Background {name} isn't an image", { name });
+  const of = b.what !== "files" && s.maps > 1 ? ` · ${b.count === s.maps ? t("every difficulty") : t("{n} of {total} difficulties", { n: num(b.count), total: num(s.maps) })}` : "";
+  return `<b>${b.how === "missing" ? t("Missing") : t("Broken")}</b> ${text}${of}`;
 }
 
 /** A snapshot set's id, by its index. */
 const snapId = (i: number): string => store.snap!.sets[i].id;
 
 /** A share as a whole percentage (under 1: "<1%"). */
-const percent = (v: number): string => (v > 0 && v < 0.005 ? "<1%" : `${Math.round(v * 100)}%`);
+const percent = (v: number): string => (v > 0 && v < 0.005 ? `<${pct(0.01, 0)}` : pct(v, 0));
 
 function tile(k: string, v: string, sub: string): string {
   return `<div class="panel hist-tile"><span class="tile-k">${k}</span><b class="tile-v num">${v}</b><span class="tile-s">${sub}</span></div>`;
