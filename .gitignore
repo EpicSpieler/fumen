@@ -25,3 +25,7 @@ tools/browser-preview/.cache/
 .DS_Store
 Thumbs.db
 *.log
+
+# the site's data when it runs here
+site/cloud/
+site/stats/
