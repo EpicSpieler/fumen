@@ -31,6 +31,8 @@ import type {
 } from "./types";
 
 export const isTauri = "__TAURI_INTERNALS__" in window;
+/** macOS: the window keeps its own title bar buttons (top left), shortcuts use ⌘ */
+export const isMac = navigator.userAgent.includes("Mac OS");
 
 export const api = {
   getSettings: () => invoke<Settings>("get_settings"),

@@ -3,7 +3,7 @@
  * latest version. Fumen looks a little after it starts and then every few hours, never in a
  * development build unless asked; installing is always the player's call. */
 import { check, type Update } from "@tauri-apps/plugin-updater";
-import { asApiError } from "./api";
+import { asApiError, isMac } from "./api";
 import { Emitter, events } from "./store";
 
 /** the first look after start, and how often after that */
@@ -36,9 +36,12 @@ function set(next: UpdateState): void {
 
 const busy = () => state.phase === "checking" || state.phase === "downloading" || state.phase === "installing";
 
+/** Updating from within Fumen: Windows for now (the macOS builds aren't signed for it yet). */
+export const canUpdate = !isMac;
+
 /** Asks whether there's a newer Fumen. Quiet about failures unless `manual`. */
 export async function checkForUpdate(manual = false): Promise<void> {
-  if (busy()) return;
+  if (busy() || !canUpdate) return;
   const before = state;
   set({ phase: "checking" });
   try {
@@ -94,7 +97,7 @@ export function downloadText(s: Extract<UpdateState, { phase: "downloading" }>):
 
 /** Looks for updates now and then (not in a development build). */
 export function initUpdater(): void {
-  if (import.meta.env.DEV) return;
+  if (import.meta.env.DEV || !canUpdate) return;
   setTimeout(() => void checkForUpdate(), FIRST_CHECK);
   setInterval(() => {
     if (state.phase === "idle" || state.phase === "current") void checkForUpdate();
