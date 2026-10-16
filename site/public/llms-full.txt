@@ -65,5 +65,5 @@ Versions 0.1 (library) to 1.0 (release) are out. After 1.0: a tournament pool bu
 - Does Fumen change my osu!lazer library? Only when you add beatmaps, put collections in or delete sets, and then through osu!lazer's own code while osu!lazer is closed.
 - Can it get me banned? It doesn't touch the game while you play and downloads from mirrors, not from osu!'s servers.
 - Does it work without osu!lazer? No, it's a library for osu!lazer; osu!stable is read alongside it.
-- Is it open source? Not yet; the repository is private.
+- Where is the code? On GitHub: https://github.com/EpicSpieler/fumen
 - Where do I send ideas or bugs? To DerTesti, for example on the Rhythm Prodigies Discord.

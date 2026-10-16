@@ -25,6 +25,7 @@ Fumen finds osu!lazer's library by itself and reads it from a private copy, so i
 ## Getting it
 
 - [Homepage and download](https://fumen.dertesti.dev/): the Windows installer, free. macOS is built but not tested yet, so it comes later.
+- [Source code on GitHub](https://github.com/EpicSpieler/fumen)
 - [Roadmap](https://fumen.dertesti.dev/roadmap): what shipped (versions 0.1 to 1.0) and what comes after 1.0: a tournament pool builder (1.1), tournament tools (1.2), sessions, skins, Discord presence, Linux and macOS.
 
 ## Privacy
