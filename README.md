@@ -38,6 +38,7 @@ database first (see [Adding beatmaps](#adding-beatmaps)).
 - Set pages with every difficulty, notes, long-note share, notes per second and your best grade
 - Plays the songs straight from lazer's files, from the beginning
 - Accent colour and ambient background taken from the artwork (Kodama design language)
+- In English and German (the system's language until one is picked in Settings › Appearance)
 - Re-imports automatically when lazer's library changes
 - Home page: recently played and added, most played, sets you haven't played in a while, quick picks
 - Player with a queue from the list you played from, shuffle / repeat and media keys

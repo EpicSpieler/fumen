@@ -100,7 +100,7 @@ const VERSIONS = [
     summary: "Ready for everyone.",
     items: [
       [1, "Installer and auto-update"],
-      [0, "English and German"],
+      [1, "English and German"],
       [1, "Dark, OLED, Light and High contrast"],
       [0, "A website with downloads"],
       [0, "macOS"],
