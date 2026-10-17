@@ -16,7 +16,7 @@
 - Beatmaps and collections it puts into osu!lazer go in through osu!lazer's own code, only while osu!lazer is closed, only on osu!lazer versions tested with Fumen, and with a backup of the database first.
 - Deleting goes through osu!lazer's own Delete; scores stay. It's final the next time osu!lazer opens its database.
 - osu!stable's files are never written.
-- Beatmaps are downloaded from community mirrors (such as osu.direct and catboy.best), never directly from osu!'s servers. Your own replays come from osu! only when you ask for one, one at a time, and are kept.
+- Beatmaps are downloaded from community mirrors (such as osu.direct and catboy.best), never directly from osu!'s servers. Every download is checked before it goes into osu!lazer: it has to be the set that was asked for, with no files that leave its folder and no zip bombs. Your own replays come from osu! only when you ask for one, one at a time, and are kept.
 
 ## Search
 
@@ -56,8 +56,8 @@ Versions 0.1 (library) to 1.0 (release) are out. After 1.0: a tournament pool bu
 
 ## Privacy
 
-- When it starts, Fumen sends one ping to fumen.dertesti.dev: a random id made on the PC and the app's version, nothing else. It's how many people use Fumen gets counted. Settings › About › Count me in turns it off.
-- The osu! login goes through fumen.dertesti.dev because osu!'s OAuth needs a client secret that a desktop app can't keep. The tokens stay on your PC.
+- When it starts, Fumen sends one ping to fumen.dertesti.dev: a random id made on the PC and the app's version, nothing else. It's how many people use Fumen gets counted. The first start says so and can turn it off right there, before anything is sent; later Settings › About › Count me in turns it off.
+- The osu! login goes through fumen.dertesti.dev because osu!'s OAuth needs a client secret that a desktop app can't keep. The tokens stay on your PC, encrypted for your Windows user.
 - Collections saved to the cloud are stored under your osu! user id.
 
 ## FAQ

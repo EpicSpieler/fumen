@@ -166,18 +166,20 @@ So the secret lives on Fumen's site (`site/`, served at https://fumen.dertesti.d
 Fumen's homepage) and nowhere else, not in the app and not in this repository. Fumen opens osu!'s
 login page in the browser; osu! sends the browser to the site, the site hands the code on to Fumen
 (listening on 127.0.0.1), and Fumen trades it for tokens at the site. The tokens stay in Fumen's
-data folder (`osu-account.json`).
+data folder (`osu-account.json`), sealed with Windows' data protection (DPAPI) so only the same
+Windows user can read them back (`src-tauri/src/secret.rs`).
 
 The site is one dependency-free Node file (`site/server.mjs`, Node 20+) running as the systemd
 service `fumen-web` on the VPS, reached through the Cloudflare tunnel. `node scripts/deploy-site.mjs`
 deploys it; `node scripts/deploy-site.mjs --secret` types the osu! client secret into the server's
 `.env` (hidden).
 
-The homepage shows two numbers: downloads (counted at `/download/<platform>`) and the people who
-used Fumen in the last 30 days. For that, a release build sends one ping when it starts
+The site counts downloads (at `/download/<platform>`) and the people who used Fumen in the last
+30 days. For that, a release build sends one ping when it starts
 (`src-tauri/src/ping.rs`): a random id made on that PC (`install-id` in the data folder) and the
-version, nothing else, and nothing is waited for. Settings › About › "Count me in" turns it off;
-development builds never send it. The site keeps the counts in `stats/stats.json`.
+version, nothing else, and nothing is waited for. The first start says so in a notice that can
+turn it off right there, and nothing is sent before it; Settings › About › "Count me in" turns it
+off later. Development builds never send it. The site keeps the counts in `stats/stats.json`.
 
 ## Releases and updates
 

@@ -30,4 +30,4 @@ Fumen finds osu!lazer's library by itself and reads it from a private copy, so i
 
 ## Privacy
 
-When it starts, Fumen sends one ping to fumen.dertesti.dev with a random id made on the PC and its version, to count how many people use it. Settings can turn it off. The osu! login goes through the site because osu!'s OAuth needs a client secret that a desktop app can't keep; the tokens stay on the player's PC.
+When it starts, Fumen sends one ping to fumen.dertesti.dev with a random id made on the PC and its version, to count how many people use it. The first start says so and can turn it off before anything is sent; Settings can turn it off later. The osu! login goes through the site because osu!'s OAuth needs a client secret that a desktop app can't keep; the tokens stay on the player's PC.
