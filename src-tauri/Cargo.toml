@@ -34,7 +34,7 @@ tauri-plugin-updater = "2"
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security_Cryptography", "Win32_System_Diagnostics_ToolHelp", "Win32_System_Threading"] }
 
 [dev-dependencies]
-sha2 = "0.10"
+sha2 = "0.11"
 flate2 = "1"
 
 # Image decoding, SQLite and JSON parsing are painfully slow unoptimised; keep dev builds usable.
