@@ -462,6 +462,41 @@ export async function invoke<T>(cmd: string, args: Record<string, unknown> = {})
       await downloads;
       return summary as T;
     }
+    case "live_plays":
+      return (await previewPlays()) as T;
+    case "live_play":
+      return ((await previewPlays()).find((p) => p.id === args.id) ?? null) as T;
+    case "live_replay": {
+      const all = (await (await fetch("/__fumen/replay-index")).json()) as Record<string, unknown>;
+      const r = all[args.id as string];
+      if (!r) throw { code: "replay-missing", message: "Not in the preview cache." };
+      return r as T;
+    }
+    case "pool_choices": {
+      const snap = await fetch("/__fumen/snapshot").then((r) => r.json());
+      return [
+        ...cols().filter((c) => !c.query).map((c) => ({ id: `f:${c.id}`, name: c.name, source: "fumen", count: c.maps.length })),
+        ...snap.collections.map((c: { id: string; name: string; maps: number[]; source?: string }) => ({ id: `l:${c.id}`, name: c.name, source: c.source ?? "lazer", count: c.maps.length })),
+      ] as T;
+    }
+    case "pool_rows": {
+      const snap = await fetch("/__fumen/snapshot").then((r) => r.json());
+      const id = String(args.id);
+      const ids: string[] = id.startsWith("f:") ? (cols().find((c) => c.id === id.slice(2))?.maps ?? []) : await lazerCollectionIds(id.slice(2));
+      const plays = await previewPlays();
+      return ids.slice(0, 12).map((mid) => {
+        const m = snap.maps.find((x: { id: string }) => x.id === mid);
+        const s = m ? snap.sets[m.set] : null;
+        const p = plays.find((x) => x.map === mid);
+        return { md5: mid, map: m ? mid : null, title: s?.title ?? null, version: m?.version ?? null, stars: m?.sr ?? null, plays: p ? 1 : 0, bestNow: p?.accuracy ?? null, best: m?.best?.acc ?? null };
+      }) as T;
+    }
+    case "open_companion":
+      window.open("/companion.html", "fumen-companion", "width=300,height=440");
+      return undefined as T;
+    case "close_companion":
+    case "show_main":
+      return undefined as T;
     default:
       throw { code: "preview", message: `${cmd} isn't available in the browser preview` };
   }
@@ -475,4 +510,40 @@ async function lazerCollectionIds(id: string): Promise<string[]> {
   const snap = await fetch("/__fumen/snapshot").then((r) => r.json());
   const c = snap.collections.find((x: { id: string }) => x.id === id);
   return c ? c.maps.map((i: number) => snap.maps[i].id) : [];
+}
+
+type PreviewPlay = { id: string; map: string | null; accuracy: number } & Record<string, unknown>;
+/** the cached replays as plays of the last few minutes, newest first */
+async function previewPlays(): Promise<PreviewPlay[]> {
+  const [live, snap] = await Promise.all([fetch("/__fumen/live").then((r) => r.json()), fetch("/__fumen/snapshot").then((r) => r.json())]);
+  const now = Date.now();
+  return (live as { mapId: string; entry: Record<string, unknown> }[]).map(({ mapId, entry }, i) => {
+    const m = snap.maps.find((x: { id: string }) => x.id === mapId);
+    const s = m ? snap.sets[m.set] : null;
+    const acc = entry.accuracy as number;
+    return {
+      id: entry.id as string,
+      md5: mapId,
+      mode: m?.mode ?? 3,
+      player: (entry.user as string) ?? "Someone",
+      date: now - 60_000 - i * 5 * 60_000,
+      accuracy: acc,
+      rank: acc >= 0.95 ? "S" : acc >= 0.9 ? "A" : "B",
+      score: (entry.score as number) ?? 0,
+      combo: (entry.combo as number) ?? 0,
+      mods: (entry.mods as string[]) ?? [],
+      rate: (entry.rate as number) ?? null,
+      statistics: JSON.parse((entry.statistics as string) ?? "{}"),
+      maximumStatistics: {},
+      map: m ? mapId : null,
+      title: s?.title ?? null,
+      artist: s?.artist ?? null,
+      version: m?.version ?? null,
+      set: s?.id ?? null,
+      setOnline: s?.onlineId ?? null,
+      stars: m?.sr ?? null,
+      length: m?.length ?? null,
+      bestBefore: i === 0 ? acc - 0.0042 : acc + 0.012,
+    };
+  });
 }

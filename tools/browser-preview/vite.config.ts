@@ -81,6 +81,18 @@ function fumenFiles(): Plugin {
           res.setHeader("Content-Type", sniff(p));
           return createReadStream(p).pipe(res);
         }
+        // plays as they happen, played by the cached replays (one per difficulty)
+        if (url === "/__fumen/live") {
+          const dir = join(here, ".cache", "replays");
+          const out: unknown[] = [];
+          if (existsSync(dir))
+            for (const f of readdirSync(dir)) {
+              const r = JSON.parse(readFileSync(join(dir, f), "utf8"));
+              if (r.entries?.[0]) out.push({ mapId: f.replace(/.json$/, ""), entry: r.entries[0] });
+            }
+          res.setHeader("Content-Type", "application/json");
+          return res.end(JSON.stringify(out));
+        }
         if (url === "/__fumen/replay-index") {
           const dir = join(here, ".cache", "replays");
           const all: Record<string, unknown> = {};

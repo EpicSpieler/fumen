@@ -14,3 +14,8 @@ export async function listen<T>(event: string, cb: (e: { payload: T }) => void):
 export function emit(event: string, payload: unknown): void {
   handlers.get(event)?.forEach((fn) => fn({ payload }));
 }
+
+/** another window's events: the preview has one window, so they arrive here */
+export async function emitTo(_target: string, event: string, payload?: unknown): Promise<void> {
+  emit(event, payload);
+}
