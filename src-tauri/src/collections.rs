@@ -57,6 +57,8 @@ fn not_smart(conn: &Connection, id: &str) -> Result<()> {
 }
 
 fn clean_name(name: &str) -> Result<String> {
+    // one line of text: no line breaks or other control characters
+    let name: String = name.chars().map(|c| if c.is_control() { ' ' } else { c }).collect();
     let name = name.trim();
     if name.is_empty() {
         return Err(Error::known("bad-name", "A collection needs a name."));

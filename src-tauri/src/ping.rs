@@ -1,7 +1,8 @@
 //! The start ping: once per start, Fumen tells fumen.dertesti.dev "a Fumen started", with a random
 //! id made on this PC (so a person counts once, however often they start it) and its version.
-//! Nothing else goes along, no answer is waited for, and a failure is silent. Settings can turn
-//! it off; development builds never send it.
+//! Nothing else goes along, no answer is waited for, and a failure is silent. The window asks for
+//! it (`send_ping`) only after the first start's notice about it; Settings can turn it off, and
+//! development builds never send it.
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -38,6 +39,7 @@ pub fn start(data_dir: PathBuf, site: String) {
         let agent: ureq::Agent = ureq::Agent::config_builder()
             .user_agent(crate::downloads::USER_AGENT)
             .timeout_global(Some(Duration::from_secs(10)))
+            .https_only(true)
             .build()
             .into();
         let _ = agent.post(&format!("{site}/api/ping")).header("Content-Type", "application/json").send(body.to_string());

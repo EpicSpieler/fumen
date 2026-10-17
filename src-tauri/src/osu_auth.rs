@@ -6,7 +6,8 @@
 //!      site's /oauth/callback as the way back and "<port>-<nonce>" as the state;
 //!   2. the site sends the browser on to Fumen's listener with the code;
 //!   3. Fumen trades the code for tokens at the site (/oauth/token; /oauth/refresh later on).
-//! Tokens and the account stay in Fumen's data folder (`osu-account.json`).
+//! Tokens and the account stay in Fumen's data folder (`osu-account.json`), sealed for the Windows
+//! user (`secret.rs`).
 
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
@@ -73,13 +74,19 @@ struct Stored {
 // ── stored login ────────────────────────────────────────────────────────
 
 fn read(data_dir: &Path) -> Option<Stored> {
-    serde_json::from_slice(&std::fs::read(data_dir.join(FILE)).ok()?).ok()
+    let (plain, sealed) = crate::secret::open(&std::fs::read(data_dir.join(FILE)).ok()?)?;
+    let stored: Stored = serde_json::from_slice(&plain).ok()?;
+    if !sealed {
+        // a login from before 1.0.2 gets sealed now
+        let _ = write(data_dir, &stored);
+    }
+    Some(stored)
 }
 
 fn write(data_dir: &Path, stored: &Stored) -> Result<()> {
     std::fs::create_dir_all(data_dir)?;
     let tmp = data_dir.join(format!("{FILE}.tmp"));
-    std::fs::write(&tmp, serde_json::to_vec(stored)?)?;
+    std::fs::write(&tmp, crate::secret::seal(&serde_json::to_vec(stored)?)?)?;
     std::fs::rename(&tmp, data_dir.join(FILE))?;
     Ok(())
 }
@@ -252,6 +259,7 @@ fn agent() -> ureq::Agent {
     ureq::Agent::config_builder()
         .user_agent(crate::downloads::USER_AGENT)
         .timeout_global(Some(Duration::from_secs(20)))
+        .https_only(cfg!(not(test)))
         .http_status_as_error(false)
         .build()
         .into()

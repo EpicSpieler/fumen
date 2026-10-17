@@ -32,7 +32,11 @@
         "media-src": "'self' blob: fumen: http://fumen.localhost https://catboy.best https://osu.direct",
         "style-src": "'self' 'unsafe-inline'",
         "font-src": "'self' data:",
-        "connect-src": "'self' ipc: http://ipc.localhost fumen: http://fumen.localhost"
+        "connect-src": "'self' ipc: http://ipc.localhost fumen: http://fumen.localhost",
+        "object-src": "'none'",
+        "frame-src": "'none'",
+        "base-uri": "'none'",
+        "form-action": "'none'"
       }
     }
   },

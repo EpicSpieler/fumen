@@ -369,8 +369,10 @@ pub fn analyse_batch(files: &paths::Files, hashes: &[String]) -> Vec<Summary> {
                     loop {
                         let i = next.fetch_add(1, Ordering::Relaxed);
                         let Some(hash) = hashes.get(i) else { break };
-                        if let Ok(chart) = load(files, hash) {
-                            out.push(summarize(hash, &chart));
+                        // a chart that breaks the reader or the analysis is skipped, not the run
+                        let one = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| load(files, hash).map(|chart| summarize(hash, &chart))));
+                        if let Ok(Ok(summary)) = one {
+                            out.push(summary);
                         }
                     }
                     out

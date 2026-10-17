@@ -114,6 +114,7 @@ fn agent() -> ureq::Agent {
     ureq::Agent::config_builder()
         .user_agent(USER_AGENT)
         .timeout_global(Some(Duration::from_secs(60)))
+        .https_only(cfg!(not(test)))
         .http_status_as_error(false)
         .build()
         .into()
@@ -154,7 +155,7 @@ pub fn fetch(data_dir: &Path, ep: &Endpoints) -> Result<Saved> {
         let res = agent().get(&format!("{}/api/collections", ep.site)).header("Authorization", &format!("Bearer {token}")).call();
         let mut res = res.map_err(|e| Error::known("cloud-failed", format!("Fumen's server didn't answer ({e})")))?;
         let status = res.status().as_u16();
-        let text = res.body_mut().with_config().limit(64 * 1024 * 1024).read_to_string().unwrap_or_default();
+        let text = res.body_mut().with_config().limit(16 * 1024 * 1024).read_to_string().unwrap_or_default();
         if status != 200 {
             return Err(failed(status, &text));
         }
@@ -171,8 +172,47 @@ fn by_name(conn: &Connection, name: &str, smart: bool) -> Result<Option<String>>
     Ok(conn.query_row(sql, [name], |r| r.get(0)).optional()?)
 }
 
+/// What a sane cloud save holds, at most (far beyond any real library).
+const MAX_COLLECTIONS: usize = 2000;
+const MAX_MAPS: usize = 200_000;
+const MAX_QUERY: usize = 8 * 1024;
+
+/// Only what can be real comes in from the server: known kinds, one-line names of up to 100
+/// characters, md5s that are md5s, queries of a sane size, and not more than a library holds. A
+/// server (or anyone in between) sending junk can't flood the library or freeze it.
+fn clean(saved: &Saved) -> Saved {
+    let mut maps_left = MAX_MAPS;
+    let collections = saved
+        .collections
+        .iter()
+        .filter(|c| matches!(c.kind.as_str(), "fumen" | "smart" | "lazer" | "stable"))
+        .filter_map(|c| {
+            let name: String = c.name.chars().map(|ch| if ch.is_control() { ' ' } else { ch }).collect::<String>().trim().chars().take(100).collect();
+            if name.is_empty() {
+                return None;
+            }
+            let query = c.query.clone().filter(|q| q.len() <= MAX_QUERY);
+            if c.kind == "smart" && query.is_none() {
+                return None;
+            }
+            let maps: Vec<CloudMap> = c
+                .maps
+                .iter()
+                .filter(|m| m.md5.len() == 32 && m.md5.bytes().all(|b| b.is_ascii_hexdigit()))
+                .take(maps_left)
+                .map(|m| CloudMap { md5: m.md5.to_ascii_lowercase(), b: m.b.filter(|&v| v > 0), s: m.s.filter(|&v| v > 0) })
+                .collect();
+            maps_left -= maps.len();
+            Some(CloudCollection { name, kind: c.kind.clone(), query, maps })
+        })
+        .take(MAX_COLLECTIONS)
+        .collect();
+    Saved { collections, saved: saved.saved }
+}
+
 /// Merges what was saved into this library's collections (see the top).
 pub fn apply(conn: &mut Connection, saved: &Saved) -> Result<PullSummary> {
+    let saved = &clean(saved);
     let (mut created, mut added) = (0, 0);
     let tx = conn.transaction()?;
     for c in &saved.collections {
@@ -226,6 +266,30 @@ pub fn apply(conn: &mut Connection, saved: &Saved) -> Result<PullSummary> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn junk_from_the_server_stays_out() {
+        let map = |md5: &str| CloudMap { md5: md5.into(), b: Some(-3), s: Some(7) };
+        let col = |name: &str, kind: &str, maps: Vec<CloudMap>| CloudCollection { name: name.into(), kind: kind.into(), query: None, maps };
+        let saved = Saved {
+            collections: vec![
+                col("good
+name ", "fumen", vec![map("ABCDEF0123456789abcdef0123456789"), map("not an md5"), map(&"a".repeat(5000))]),
+                col("   ", "fumen", vec![]),
+                col("weird kind", "script", vec![]),
+                col("smart without a query", "smart", vec![]),
+                col(&"x".repeat(500), "lazer", vec![]),
+            ],
+            saved: 1,
+        };
+        let c = clean(&saved);
+        assert_eq!(c.collections.len(), 2);
+        assert_eq!(c.collections[0].name, "good name");
+        assert_eq!(c.collections[0].maps.len(), 1);
+        assert_eq!(c.collections[0].maps[0].md5, "abcdef0123456789abcdef0123456789");
+        assert_eq!(c.collections[0].maps[0].b, None);
+        assert_eq!(c.collections[1].name.chars().count(), 100);
+    }
 
     /// Writes the real library's collections to FUMEN_CLOUD_EXPORT as they'd go up (run by hand).
     #[test]

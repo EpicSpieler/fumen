@@ -88,6 +88,7 @@ impl Compat {
         let agent: ureq::Agent = ureq::Agent::config_builder()
             .user_agent(crate::downloads::USER_AGENT)
             .timeout_global(Some(Duration::from_secs(6)))
+            .https_only(true)
             .build()
             .into();
         let mut res = agent.get(COMPAT_URL).call().ok()?;
