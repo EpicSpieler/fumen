@@ -162,24 +162,19 @@ and pushes the file.
 ## osu! login and the site
 
 osu!'s login hands out tokens only for an app's client secret, and a desktop app can't keep one.
-So the secret lives on Fumen's site (`site/`, served at https://fumen.dertesti.dev, which is also
-Fumen's homepage) and nowhere else, not in the app and not in this repository. Fumen opens osu!'s
+So the secret lives on Fumen's site (https://fumen.dertesti.dev, which is also Fumen's homepage)
+and nowhere else, not in the app and not in this repository; the site's code isn't in it either. Fumen opens osu!'s
 login page in the browser; osu! sends the browser to the site, the site hands the code on to Fumen
 (listening on 127.0.0.1), and Fumen trades it for tokens at the site. The tokens stay in Fumen's
 data folder (`osu-account.json`), sealed with Windows' data protection (DPAPI) so only the same
 Windows user can read them back (`src-tauri/src/secret.rs`).
-
-The site is one dependency-free Node file (`site/server.mjs`, Node 20+) running as the systemd
-service `fumen-web` on the VPS, reached through the Cloudflare tunnel. `node scripts/deploy-site.mjs`
-deploys it; `node scripts/deploy-site.mjs --secret` types the osu! client secret into the server's
-`.env` (hidden).
 
 The site counts downloads (at `/download/<platform>`) and the people who used Fumen in the last
 30 days. For that, a release build sends one ping when it starts
 (`src-tauri/src/ping.rs`): a random id made on that PC (`install-id` in the data folder) and the
 version, nothing else, and nothing is waited for. The first start says so in a notice that can
 turn it off right there, and nothing is sent before it; Settings › About › "Count me in" turns it
-off later. Development builds never send it. The site keeps the counts in `stats/stats.json`.
+off later. Development builds never send it.
 
 ## Releases and updates
 
@@ -212,7 +207,6 @@ Other scripts:
 | Script | What it does |
 |---|---|
 | `npm run sidecar` | rebuild the .NET helpers: `fumen-realm` (lazer database reader) and `fumen-import` (lazer importer) |
-| `node scripts/deploy-site.mjs` | deploy the site to the VPS (`--secret`: set the osu! client secret there) |
 | `npm run verify-lazer` | test the import with the installed lazer and list its version (`--check`: only test, `--push`: commit and push) |
 | `npm run typecheck` | TypeScript checks |
 | `npm test` | UI and Rust unit tests |
@@ -228,7 +222,6 @@ src-tauri/        Rust backend: SQLite cache, import, .osu parser + chart analys
 sidecar/          fumen-realm: reads lazer's client.realm (Realm .NET, dynamic + read-only)
                   fumen-import: imports sets with lazer's own code
 lazer-compat.json lazer versions the import is tested with
-site/             fumen.dertesti.dev: the homepage and the osu! login's server half
 tools/            browser preview, CDP helper
 docs/PLAN.md      roadmap
 ```

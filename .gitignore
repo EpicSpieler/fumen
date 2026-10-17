@@ -12,8 +12,6 @@ sidecar/FumenImport/bin/
 sidecar/FumenImport/obj/
 src-tauri/binaries/
 
-# the site's secrets live on the server only (see site/.env.example)
-site/.env
 
 # local preview data (contains the developer's library)
 tools/browser-preview/.cache/
@@ -26,6 +24,7 @@ tools/browser-preview/.cache/
 Thumbs.db
 *.log
 
-# the site's data when it runs here
-site/cloud/
-site/stats/
+# kept on this PC only, not part of the app's repository: the website (fumen.dertesti.dev, with
+# its deploy script) and Claude Code's local settings
+site/
+.claude/

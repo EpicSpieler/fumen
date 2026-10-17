@@ -7,7 +7,7 @@
 //
 // Needs a clean, pushed main; the updater's private key in ~/.tauri/fumen-updater.key (or
 // TAURI_SIGNING_PRIVATE_KEY, with TAURI_SIGNING_PRIVATE_KEY_PASSWORD if it has one); gh logged in;
-// SSH to the VPS as for deploy-site.mjs ("vps", or VPS_HOST). Lose the key and installed copies
+// SSH to the VPS as the site deploy does ("vps", or VPS_HOST). Lose the key and installed copies
 // can't update any more: keep a copy of it somewhere safe.
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
