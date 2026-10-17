@@ -171,6 +171,24 @@ export class SettingsView {
         </section>
 
         <section class="settings-section">
+          <div class="label-caps settings-label">${t("While you play")}</div>
+          <div class="setting-row">
+            <div class="setting-text">
+              <div class="setting-title">${t("Show the score after a play")}</div>
+              <div class="setting-desc">${t("When you pass a map in osu!lazer, Fumen opens its score: where the accuracy went, the timing, the replay. Only while Fumen isn't the window in front; otherwise it offers it.")}</div>
+            </div>
+            <input type="checkbox" role="switch" data-pref="scoreAuto" aria-label="${t("Show the score after a play")}" ${p.scoreAuto ? "checked" : ""} />
+          </div>
+          <div class="setting-row">
+            <div class="setting-text">
+              <div class="setting-title">${t("Companion window")}</div>
+              <div class="setting-desc">${t("A small window in the corner, on top of the game: this session, your last play and a pool to work through. It shows over osu!lazer in borderless or windowed mode.")}</div>
+            </div>
+            <input type="checkbox" role="switch" data-pref-companion aria-label="${t("Companion window")}" ${p.companion ? "checked" : ""} />
+          </div>
+        </section>
+
+        <section class="settings-section">
           <div class="label-caps settings-label">${t("About")}</div>
           <div class="setting-row">
             <div class="setting-text">
@@ -473,6 +491,9 @@ export class SettingsView {
     if (input.dataset.pref) {
       setPrefs({ [input.dataset.pref]: input.checked } as never);
       applyAppearance();
+    } else if ("prefCompanion" in input.dataset) {
+      setPrefs({ companion: input.checked });
+      void (input.checked ? api.openCompanion() : api.closeCompanion()).catch((err) => toast(asApiError(err).message, { kind: "danger" }));
     } else if (input.dataset.setting === "startPing") {
       api.updateSettings({ startPing: input.checked }).then((s) => (store.settings = s));
     } else if (input.dataset.setting === "autoRescan") {

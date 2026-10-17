@@ -44,8 +44,9 @@ const TICK_LIFE = 3000;
 /** a miss is jumped to this much before it, song ms */
 const LEAD = 2000;
 
-/** what a replay is: lazer's (by its score id) or osu!'s (by osu!'s score id) */
-type Entry = (ReplayEntry & { online?: false }) | (Omit<OnlineReplayEntry, "id"> & { id: string; online: true; scoreId: number });
+/** what a replay is: lazer's (by its score id; `live`: a play that just happened, by its replay
+ * file) or osu!'s (by osu!'s score id) */
+type Entry = (ReplayEntry & { online?: false; live?: boolean }) | (Omit<OnlineReplayEntry, "id"> & { id: string; online: true; scoreId: number });
 
 interface Playing {
   entry: Entry;
@@ -65,6 +66,8 @@ export class ReplayPanel {
   /** last text per field, so frames only touch the DOM on changes */
   private shown = new Map<string, string>();
   private job = 0;
+  /** a replay to start once its difficulty's chart is in */
+  private asked: { mapId: string; entry: Entry } | null = null;
 
   constructor(
     private root: HTMLElement,
@@ -103,6 +106,12 @@ export class ReplayPanel {
       </div>`;
   }
 
+  /** Plays `entry` once `mapId`'s chart is on the playfield. */
+  ask(mapId: string, entry: ReplayEntry & { live?: boolean }): void {
+    this.asked = { mapId, entry };
+    if (this.data && this.mapId === mapId) this.chart(mapId, this.data);
+  }
+
   /** The chart the playfield shows (null while it loads or for another ruleset). */
   chart(mapId: string, d: ChartData | null): void {
     if (mapId !== this.mapId) {
@@ -113,6 +122,11 @@ export class ReplayPanel {
       if (mapId) void this.loadList(mapId);
     }
     this.data = d;
+    if (d && this.asked?.mapId === mapId) {
+      const { entry } = this.asked;
+      this.asked = null;
+      void this.start(entry);
+    }
     this.root.querySelector<HTMLElement>(".fs-replay-set")!.hidden = !(d && ((d.mode === MANIA && d.keys > 0) || (d.mode === TAIKO && d.taiko) || (d.mode === OSU && d.osu) || (d.mode === CATCH && d.catch)));
     if (d && this.playing) this.apply();
     this.render();
@@ -235,7 +249,7 @@ export class ReplayPanel {
     const job = ++this.job;
     let frames: number[];
     try {
-      const r = e.online ? await api.getOnlineReplay(e.scoreId) : await api.getReplay(e.id);
+      const r = e.online ? await api.getOnlineReplay(e.scoreId) : e.live ? await api.liveReplay(e.id) : await api.getReplay(e.id);
       if (e.online) {
         e.cached = true;
         const o = this.online?.find((x) => x.id === e.scoreId);

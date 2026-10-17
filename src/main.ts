@@ -16,12 +16,15 @@ import "./styles/care.css";
 import "./styles/delete.css";
 import "./styles/skills.css";
 import "./styles/browse.css";
+import "./styles/score.css";
 
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { api, asApiError, isMac, isTauri, onAnalysis, thumbUrl } from "./lib/api";
+import { listen } from "@tauri-apps/api/event";
+import { api, asApiError, isMac, isTauri, onAnalysis, onLivePlay, thumbUrl } from "./lib/api";
+import { playMods } from "./lib/live";
 import { adoptLang, t, tn } from "./lib/i18n";
-import { esc, num } from "./lib/format";
-import { current, goSection, initRouterInput, router, sectionRoot, type Route } from "./lib/router";
+import { esc, num, pct } from "./lib/format";
+import { current, go, goSection, initRouterInput, router, sectionRoot, type Route } from "./lib/router";
 import { describeScan, isScanning, runScan } from "./lib/scan";
 import { clearSkins, loadSkinList } from "./lib/skin/skins";
 import { events, loadPrefs, refreshStatus, reloadLibrary, setPrefs, setSnapshot, store } from "./lib/store";
@@ -30,6 +33,7 @@ import { startPing } from "./lib/ping";
 import { mountPlayerBar } from "./player";
 import { openFullscreen } from "./views/fullscreen";
 import { BrowseView } from "./views/browse";
+import { ScoreView } from "./views/score";
 import { CareView } from "./views/care";
 import { importProgressText, isImporting, openImport } from "./views/import";
 import { readLinks } from "./lib/links";
@@ -346,6 +350,10 @@ function show(route: Route): void {
       break;
     case "set":
       view = new SetView(route.id, route.map, route.similar);
+      content.appendChild(view.el);
+      break;
+    case "score":
+      view = new ScoreView(route.id);
       content.appendChild(view.el);
       break;
     case "settings":
@@ -887,8 +895,25 @@ async function boot(): Promise<void> {
   initUpdater();
   initGoals();
   initCollections();
+  initLivePlays();
   document.body.classList.add("ready");
   void startPing().catch((e) => console.warn("[ping]", asApiError(e).message));
+}
+
+/** Plays as they happen: with Fumen behind the game, its score page is waiting when you come back;
+ * in front, a toast offers it. The companion window comes up when it was on last time. */
+function initLivePlays(): void {
+  if (!isTauri) return;
+  void onLivePlay((p) => {
+    const show = () => go({ name: "score", id: p.id });
+    if (store.prefs.scoreAuto && !document.hasFocus()) return show();
+    const what = [p.title ?? t("A play"), p.version ? `[${p.version}]` : "", playMods(p)].filter(Boolean).join(" ");
+    toast(t("{what}: {acc}", { what, acc: pct(p.accuracy) }), { timeout: 9000, action: { label: t("Show"), run: show } });
+  });
+  // from the companion window: a play to show, or it was closed
+  void listen<string>("show-score", (e) => go({ name: "score", id: e.payload }));
+  void listen("companion-closed", () => setPrefs({ companion: false }));
+  if (store.prefs.companion) void api.openCompanion().catch((e) => console.warn("[companion]", asApiError(e).message));
 }
 
 void boot();

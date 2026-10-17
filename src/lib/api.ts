@@ -29,6 +29,9 @@ import type {
   SkinList,
   Snapshot,
   SyncSummary,
+  LivePlay,
+  PoolChoice,
+  PoolRow,
 } from "./types";
 
 export const isTauri = "__TAURI_INTERNALS__" in window;
@@ -64,6 +67,15 @@ export const api = {
   replaysForMap: (id: string) => invoke<ReplayEntry[]>("replays_for_map", { id }),
   /** a lazer score's replay frames ([time, x, y, buttons] each) */
   getReplay: (id: string) => invoke<ReplayData>("get_replay", { id }),
+  /** plays as they happened (live.rs): since a time, one, and its replay */
+  livePlays: (since: number) => invoke<LivePlay[]>("live_plays", { since }),
+  livePlay: (id: string) => invoke<LivePlay | null>("live_play", { id }),
+  liveReplay: (id: string) => invoke<ReplayData>("live_replay", { id }),
+  poolChoices: () => invoke<PoolChoice[]>("pool_choices"),
+  poolRows: (id: string, since: number) => invoke<PoolRow[]>("pool_rows", { id, since }),
+  openCompanion: () => invoke<void>("open_companion"),
+  closeCompanion: () => invoke<void>("close_companion"),
+  showMain: () => invoke<void>("show_main"),
   /** the player's scores on osu! for a difficulty (one API request, when asked) */
   onlineReplaysForMap: (id: string) => invoke<OnlineReplayEntry[]>("online_replays_for_map", { id }),
   /** a score's replay from osu!, downloaded once and kept */
@@ -150,6 +162,11 @@ export function onScanProgress(cb: (p: ScanProgress) => void): Promise<UnlistenF
 /** The plays changed (sync, login, logout); `library`: the library's best scores may have too. */
 export function onCareProgress(cb: (p: { done: number; total: number }) => void): Promise<UnlistenFn> {
   return listen<{ done: number; total: number }>("care-progress", (e) => cb(e.payload));
+}
+
+/** A play just happened (lazer saved its replay). */
+export function onLivePlay(cb: (p: LivePlay) => void): Promise<UnlistenFn> {
+  return listen<LivePlay>("live-play", (e) => cb(e.payload));
 }
 
 export function onHistoryChanged(cb: (library: boolean) => void): Promise<UnlistenFn> {

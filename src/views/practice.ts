@@ -28,6 +28,8 @@ export interface PracticeAsk {
   mapId: string;
   /** the pattern whose hardest part to loop (osu!mania) */
   pattern?: PatternName | null;
+  /** this part instead of the hardest (song ms) */
+  section?: Section;
 }
 
 export class PracticePanel {
@@ -76,11 +78,21 @@ export class PracticePanel {
     this.data = d;
     metronome.setBeats(d?.beats ?? []);
     if (d && this.asked?.mapId === mapId) {
-      const pattern = this.asked.pattern;
+      const { pattern, section } = this.asked;
       this.asked = null;
-      this.setSection(hardest(d, pattern), true);
+      this.setSection(section ?? hardest(d, pattern), true);
       return;
     }
+    this.render();
+  }
+
+  /** No part of `mapId` (the one showing, by default) looped any more, nor remembered. */
+  stopLooping(mapId = this.mapId): void {
+    if (mapId) saveSection(mapId, null);
+    if (this.asked?.mapId === mapId) this.asked = null;
+    if (mapId !== this.mapId) return;
+    this.section = null;
+    this.round = 0;
     this.render();
   }
 
@@ -118,10 +130,7 @@ export class PracticePanel {
       return true;
     }
     if (t.closest(".fs-pr-clear")) {
-      this.section = null;
-      this.round = 0;
-      saveSection(this.mapId, null);
-      this.render();
+      this.stopLooping();
       return true;
     }
     return false;

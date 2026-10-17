@@ -543,7 +543,10 @@ export function uiPrompt(
   });
 }
 
-export function toast(message: string, opts: { kind?: "info" | "success" | "danger"; timeout?: number } = {}): () => void {
+export function toast(
+  message: string,
+  opts: { kind?: "info" | "success" | "danger"; timeout?: number; action?: { label: string; run: () => void } } = {},
+): () => void {
   const kind = opts.kind ?? "info";
   if (!toastHost) {
     toastHost = document.createElement("div");
@@ -555,6 +558,14 @@ export function toast(message: string, opts: { kind?: "info" | "success" | "dang
   t.setAttribute("role", "status");
   t.innerHTML = `${icon(kind === "danger" ? "alert" : kind === "success" ? "check" : "info", "toast-ic")}<span class="toast-msg"></span>`;
   t.querySelector(".toast-msg")!.textContent = message;
+  if (opts.action) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "btn btn-sm toast-action";
+    b.textContent = opts.action.label;
+    b.addEventListener("click", opts.action.run);
+    t.appendChild(b);
+  }
   toastHost.appendChild(t);
   let done = false;
   const close = () => {

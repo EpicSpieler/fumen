@@ -462,6 +462,64 @@ export interface UiPrefs {
   defaultsApplied: boolean;
   /** the one-time notice about the start ping was shown */
   pingNoticed: boolean;
+  /** after a play, show its score when Fumen isn't the window in front */
+  scoreAuto: boolean;
+  /** the companion window opens with Fumen */
+  companion: boolean;
+  /** the collection the companion window works through ("f:<id>" / "l:<id>") */
+  companionPool: string | null;
+}
+
+/** A play as it happened, read from the replay lazer saved (src-tauri/src/live.rs). */
+export interface LivePlay {
+  /** the replay's file in lazer's files */
+  id: string;
+  md5: string;
+  mode: number;
+  player: string;
+  date: number;
+  /** 0–1, as lazer counts it */
+  accuracy: number;
+  /** XH, X, SH, S, A, B, C, D */
+  rank: string | null;
+  score: number;
+  combo: number;
+  mods: string[];
+  rate: number | null;
+  statistics: Record<string, number>;
+  maximumStatistics: Record<string, number>;
+  /** the library difficulty, when Fumen has it */
+  map: string | null;
+  title: string | null;
+  artist: string | null;
+  version: string | null;
+  set: string | null;
+  setOnline: number | null;
+  stars: number | null;
+  /** ms at 1× */
+  length: number | null;
+  /** the best accuracy on the difficulty before this play */
+  bestBefore: number | null;
+}
+
+/** A collection the companion window can work through. */
+export interface PoolChoice {
+  id: string;
+  name: string;
+  source: "fumen" | "lazer" | "stable";
+  count: number;
+}
+
+export interface PoolRow {
+  md5: string;
+  map: string | null;
+  title: string | null;
+  version: string | null;
+  stars: number | null;
+  /** passed this session */
+  plays: number;
+  bestNow: number | null;
+  best: number | null;
 }
 
 /** The osu! account Fumen is logged in to (src-tauri/src/osu_auth.rs). */

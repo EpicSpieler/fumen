@@ -43,6 +43,9 @@ export const DEFAULT_PREFS: UiPrefs = {
   fullscreenMode: "visual",
   defaultsApplied: false,
   pingNoticed: false,
+  scoreAuto: true,
+  companion: false,
+  companionPool: null,
 };
 
 export const store = {

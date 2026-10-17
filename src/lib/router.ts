@@ -11,6 +11,8 @@ export type Route =
   /** similar: open the difficulty's similar maps */
   | { name: "set"; id: string; map?: string; similar?: boolean }
   | { name: "collection"; id: string }
+  /** a play that just happened (its replay file in lazer's files) */
+  | { name: "score"; id: string }
   | { name: "settings" }
   | { name: "welcome" };
 
