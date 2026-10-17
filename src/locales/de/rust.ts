@@ -76,6 +76,7 @@ export const rust: Record<string, string> = {
   "This difficulty isn't on osu!.": "Dieser Schwierigkeitsgrad ist nicht auf osu!.",
   "lazer has no replay for this score.": "lazer hat kein Replay zu diesem Score.",
   "The replay file isn't in lazer's files any more. Update the library.": "Die Replay-Datei ist nicht mehr in lazers Dateien. Aktualisiere die Bibliothek.",
+  "The replay file isn't in lazer's files any more.": "Die Replay-Datei ist nicht mehr in lazers Dateien.",
   "The replay file couldn't be read.": "Die Replay-Datei ließ sich nicht lesen.",
 
   // collections, goals, the cloud

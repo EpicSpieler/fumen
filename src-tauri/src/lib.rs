@@ -21,6 +21,7 @@ mod osu;
 mod osu_auth;
 mod osu_scores;
 mod library;
+mod live;
 mod paths;
 mod ping;
 mod secret;
@@ -77,6 +78,8 @@ pub struct AppState {
     compare_cancel: AtomicBool,
     /// when each difficulty's scores were last asked of osu! (osu!'s difficulty id)
     map_synced: Mutex<std::collections::HashMap<i64, std::time::Instant>>,
+    /// lazer's storage folder being watched for new plays, and the watcher (`live.rs`)
+    live: Mutex<Option<(PathBuf, notify::RecommendedWatcher)>>,
 }
 
 impl AppState {
@@ -166,7 +169,7 @@ fn get_settings(state: State<'_, AppState>) -> Settings {
 }
 
 #[tauri::command]
-fn update_settings(state: State<'_, AppState>, patch: Value) -> Result<Settings> {
+fn update_settings(app: AppHandle, state: State<'_, AppState>, patch: Value) -> Result<Settings> {
     let updated = {
         let mut s = state.settings.lock().unwrap_or_else(|e| e.into_inner());
         s.apply_patch(patch)?;
@@ -174,7 +177,140 @@ fn update_settings(state: State<'_, AppState>, patch: Value) -> Result<Settings>
         s.clone()
     };
     state.refresh_storage();
+    watch_plays(&app);
     Ok(updated)
+}
+
+// ── Plays as they happen (live.rs) ──────────────────────────────────────────
+
+/// Watches lazer's files for new plays (again, when lazer's folder changed). Each new play is
+/// kept and goes to every window as `live-play`.
+fn watch_plays(app: &AppHandle) {
+    let state = app.state::<AppState>();
+    let storage = state.storage();
+    let mut live = state.live.lock().unwrap_or_else(|e| e.into_inner());
+    if live.as_ref().map(|(p, _)| p) == storage.as_ref() {
+        return;
+    }
+    *live = None;
+    let Some(storage) = storage else { return };
+    let handle = app.clone();
+    let watcher = live::watch(&storage, move |play| {
+        let state = handle.state::<AppState>();
+        let play = {
+            let conn = state.db();
+            match live::store(&conn, &play) {
+                Ok(true) => live::with_library(&conn, play),
+                Ok(false) => return,
+                Err(e) => Err(e),
+            }
+        };
+        match play {
+            Ok(p) => {
+                let _ = handle.emit("live-play", p);
+            }
+            Err(e) => eprintln!("[live] {e}"),
+        }
+    });
+    if let Some(w) = watcher {
+        *live = Some((storage, w));
+    }
+}
+
+/// The plays since `since` (unix ms), newest first.
+#[tauri::command]
+async fn live_plays(app: AppHandle, since: i64) -> Result<Vec<live::LivePlay>> {
+    tauri::async_runtime::spawn_blocking(move || live::since(&app.state::<AppState>().db(), since))
+        .await
+        .map_err(|e| Error::known("internal", e.to_string()))?
+}
+
+/// One play.
+#[tauri::command]
+async fn live_play(app: AppHandle, id: String) -> Result<Option<live::LivePlay>> {
+    tauri::async_runtime::spawn_blocking(move || live::get(&app.state::<AppState>().db(), &id))
+        .await
+        .map_err(|e| Error::known("internal", e.to_string()))?
+}
+
+/// The collections that can be a pool in the companion window.
+#[tauri::command]
+fn pool_choices(state: State<'_, AppState>) -> Result<Vec<live::PoolChoice>> {
+    live::pool_choices(&state.db())
+}
+
+/// A pool's difficulties and how they went since `since` (unix ms).
+#[tauri::command]
+fn pool_rows(state: State<'_, AppState>, id: String, since: i64) -> Result<Vec<live::PoolRow>> {
+    live::pool(&state.db(), &id, since)
+}
+
+const COMPANION: &str = "companion";
+
+/// The companion window: small, on top of the game (lazer in borderless or windowed mode), in the
+/// bottom right corner of the main screen. Opening it again just shows it.
+#[tauri::command]
+fn open_companion(app: AppHandle) -> Result<()> {
+    use tauri::Manager;
+    if let Some(w) = app.get_webview_window(COMPANION) {
+        let _ = w.show();
+        return Ok(());
+    }
+    let (w, h) = (300.0, 440.0);
+    let mut b = tauri::WebviewWindowBuilder::new(&app, COMPANION, tauri::WebviewUrl::App("companion.html".into()))
+        .title("Fumen")
+        .inner_size(w, h)
+        .min_inner_size(260.0, 200.0)
+        .decorations(false)
+        .shadow(true)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .focused(false)
+        .resizable(true);
+    if let Ok(Some(m)) = app.primary_monitor() {
+        let area = m.work_area();
+        let scale = m.scale_factor();
+        let right = (area.position.x as f64 + area.size.width as f64) / scale;
+        let bottom = (area.position.y as f64 + area.size.height as f64) / scale;
+        b = b.position(right - w - 16.0, bottom - h - 16.0);
+    }
+    b.build().map_err(|e| Error::known("internal", e.to_string()))?;
+    Ok(())
+}
+
+#[tauri::command]
+fn close_companion(app: AppHandle) {
+    use tauri::Manager;
+    if let Some(w) = app.get_webview_window(COMPANION) {
+        let _ = w.close();
+    }
+}
+
+/// Brings the main window up (from the companion window), e.g. to show a score.
+#[tauri::command]
+fn show_main(app: AppHandle) {
+    use tauri::Manager;
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.unminimize();
+        let _ = w.show();
+        let _ = w.set_focus();
+    }
+}
+
+/// A play's replay (its frames), from lazer's files.
+#[tauri::command]
+async fn live_replay(app: AppHandle, id: String) -> Result<replay::Replay> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let storage = app
+            .state::<AppState>()
+            .storage()
+            .ok_or_else(|| Error::known("lazer-not-found", "osu!lazer's data folder wasn't found. Pick it in Settings."))?;
+        let missing = || Error::known("replay-missing", "The replay file isn't in lazer's files any more.");
+        let path = paths::lazer_file(&storage, &id).ok_or_else(missing)?;
+        replay::parse(&std::fs::read(path).map_err(|_| missing())?)
+    })
+    .await
+    .map_err(|e| Error::known("internal", e.to_string()))?
 }
 
 /// Validates a folder the user picked; `None` if it isn't a lazer data folder.
@@ -357,6 +493,7 @@ fn run_scan(app: &AppHandle, state: &AppState) -> Result<ImportCounts> {
     }
     state.reload_stable_files();
     state.refresh_storage();
+    watch_plays(app);
     if let Err(e) = skins::refresh_builtin(&state.cache_dir) {
         eprintln!("[skins] built-in textures: {e}");
     }
@@ -1383,6 +1520,15 @@ pub fn run() {
             let app = ctx.app_handle().clone();
             std::thread::spawn(move || responder.respond(protocol::handle(&app, &request)));
         })
+        // the companion window goes with the main one
+        .on_window_event(|window, event| {
+            if window.label() == "main" && matches!(event, tauri::WindowEvent::Destroyed) {
+                use tauri::Manager;
+                if let Some(w) = window.app_handle().get_webview_window(COMPANION) {
+                    let _ = w.close();
+                }
+            }
+        })
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
             let config_dir = app.path().app_config_dir()?;
@@ -1410,10 +1556,12 @@ pub fn run() {
                 comparing: AtomicBool::new(false),
                 compare_cancel: AtomicBool::new(false),
                 map_synced: Mutex::new(std::collections::HashMap::new()),
+                live: Mutex::new(None),
             };
             state.refresh_storage();
             state.reload_stable_files();
             app.manage(state);
+            watch_plays(app.handle());
             // difficulties imported by an older version (or before a crash) still need analysing
             start_analysis(app.handle());
             Ok(())
@@ -1442,6 +1590,14 @@ pub fn run() {
             search_mirrors,
             replays_for_map,
             get_replay,
+            live_plays,
+            live_play,
+            live_replay,
+            pool_choices,
+            pool_rows,
+            open_companion,
+            close_companion,
+            show_main,
             online_replays_for_map,
             get_online_replay,
             cloud_push_collections,

@@ -662,7 +662,7 @@ impl Player {
     }
 
     /// The condition on `scores` for this player, with `?1` as its parameter.
-    fn sql(&self) -> &'static str {
+    pub(crate) fn sql(&self) -> &'static str {
         match self {
             // osu!stable's plays only have the name: the one this account plays under in lazer
             Player::Id(_) => "(user_id = ?1 OR (user_id IS NULL AND id LIKE 'st-%' AND user IN (SELECT user FROM scores WHERE user_id = ?1)))",
@@ -671,7 +671,7 @@ impl Player {
         }
     }
 
-    fn param(&self) -> rusqlite::types::Value {
+    pub(crate) fn param(&self) -> rusqlite::types::Value {
         match self {
             Player::Id(id) => (*id).into(),
             Player::Name(name) => name.clone().into(),

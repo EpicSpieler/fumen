@@ -182,8 +182,8 @@ struct Reader<'a> {
     i: usize,
 }
 
-impl Reader<'_> {
-    fn take(&mut self, n: usize) -> Result<&[u8]> {
+impl<'a> Reader<'a> {
+    fn take(&mut self, n: usize) -> Result<&'a [u8]> {
         let end = self.i.checked_add(n).filter(|&e| e <= self.b.len()).ok_or_else(bad)?;
         let s = &self.b[self.i..end];
         self.i = end;
@@ -231,30 +231,87 @@ fn bad() -> Error {
 }
 
 pub fn parse(bytes: &[u8]) -> Result<Replay> {
+    let (h, data) = read_header(bytes)?;
+    let mut text = Capped(Vec::new());
+    lzma_rs::lzma_decompress(&mut Cursor::new(data), &mut text).map_err(|_| bad())?;
+    let text = String::from_utf8_lossy(&text.0);
+    Ok(Replay { mode: h.mode, player: h.player, beatmap_md5: h.beatmap_md5, frames: frames(&text) })
+}
+
+/// Everything about a score an `.osr` says besides its frames.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Header {
+    /// 0 osu!, 1 taiko, 2 catch, 3 mania
+    pub mode: u8,
+    pub version: i32,
+    pub beatmap_md5: String,
+    pub player: String,
+    /// stable's counts: 300, 100, 50, geki, katu, miss
+    pub counts: [u16; 6],
+    pub score: i32,
+    pub combo: u16,
+    /// stable's mod bits
+    pub mods: i32,
+    /// unix ms
+    pub date: i64,
+    /// what lazer adds to replays it writes (`LegacyReplaySoloScoreInfo`): `mods` with their
+    /// settings, `statistics`, `maximum_statistics`, `rank` …
+    pub lazer: Option<serde_json::Value>,
+}
+
+/// lazer's replays have versions from this on (LegacyScoreEncoder.FIRST_LAZER_VERSION)
+const FIRST_LAZER_VERSION: i32 = 30000001;
+
+/// An `.osr`'s header (with lazer's score info, when it has one), without unpacking the frames.
+pub fn header(bytes: &[u8]) -> Result<Header> {
+    read_header(bytes).map(|(h, _)| h)
+}
+
+/// The header and the packed frames.
+fn read_header(bytes: &[u8]) -> Result<(Header, &[u8])> {
     let mut r = Reader { b: bytes, i: 0 };
     let mode = r.u8()?;
-    let _version = r.i32()?;
+    let version = r.i32()?;
     let beatmap_md5 = r.string()?;
     let player = r.string()?;
     let _replay_md5 = r.string()?;
-    for _ in 0..6 {
-        r.u16()?;
+    let mut counts = [0u16; 6];
+    for c in &mut counts {
+        *c = r.u16()?;
     }
-    let _score = r.i32()?;
-    let _combo = r.u16()?;
+    let score = r.i32()?;
+    let combo = r.u16()?;
     let _perfect = r.u8()?;
-    let _mods = r.i32()?;
+    let mods = r.i32()?;
     let _life = r.string()?;
-    let _timestamp = r.i64()?;
+    let ticks = r.i64()?;
     let len = r.i32()?;
     if len <= 0 {
         return Err(bad());
     }
     let data = r.take(len as usize)?;
-    let mut text = Capped(Vec::new());
-    lzma_rs::lzma_decompress(&mut Cursor::new(data), &mut text).map_err(|_| bad())?;
-    let text = String::from_utf8_lossy(&text.0);
-    Ok(Replay { mode, player, beatmap_md5, frames: frames(&text) })
+    // lazer's score info after the frames (older replays end here, or after the online id)
+    let mut lazer = None;
+    if version >= FIRST_LAZER_VERSION {
+        let _online_id = r.i64()?;
+        // Target Practice (stable) keeps its accuracy here
+        if mods & (1 << 23) != 0 {
+            r.take(8)?;
+        }
+        if let Ok(n) = r.i32() {
+            if n > 0 {
+                if let Ok(packed) = r.take(n as usize) {
+                    let mut json = Capped(Vec::new());
+                    if lzma_rs::lzma_decompress(&mut Cursor::new(packed), &mut json).is_ok() {
+                        lazer = serde_json::from_slice(&json.0).ok();
+                    }
+                }
+            }
+        }
+    }
+    // .NET ticks (100 ns from year 1) to unix ms
+    let date = (ticks - 621_355_968_000_000_000) / 10_000;
+    Ok((Header { mode, version, beatmap_md5, player, counts, score, combo, mods, date, lazer }, data))
 }
 
 /// The frames' text, unpacked up to a size no real replay comes near (hours of play are a few

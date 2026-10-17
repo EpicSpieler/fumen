@@ -260,6 +260,26 @@ const MIGRATIONS: &[&str] = &[
         format TEXT NOT NULL
     );
     "#,
+    // 17 — plays as they happen (src/live.rs): each passed play, read from the replay lazer saves
+    r#"
+    CREATE TABLE live_plays (
+        id                 TEXT PRIMARY KEY,
+        md5                TEXT NOT NULL,
+        mode               INTEGER NOT NULL,
+        player             TEXT NOT NULL DEFAULT '',
+        date               INTEGER NOT NULL,
+        accuracy           REAL NOT NULL,
+        rank               TEXT,
+        score              INTEGER NOT NULL DEFAULT 0,
+        combo              INTEGER NOT NULL DEFAULT 0,
+        mods               TEXT NOT NULL DEFAULT '[]',
+        rate               REAL,
+        statistics         TEXT NOT NULL DEFAULT '{}',
+        maximum_statistics TEXT NOT NULL DEFAULT '{}'
+    );
+    CREATE INDEX live_plays_date ON live_plays(date);
+    CREATE INDEX live_plays_md5 ON live_plays(md5);
+    "#,
 ];
 
 pub fn open(path: &Path) -> Result<Connection> {
