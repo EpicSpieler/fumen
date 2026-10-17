@@ -1440,7 +1440,8 @@ mod tests {
             let _ = std::fs::copy(data.join(name), dir.join(name));
         }
         let mut conn = db::open(&dir.join("library.db")).unwrap();
-        let stored: Value = serde_json::from_slice(&std::fs::read(dir.join("osu-account.json")).unwrap_or_default()).unwrap_or_default();
+        let raw = std::fs::read(dir.join("osu-account.json")).unwrap_or_default();
+        let stored: Value = crate::secret::open(&raw).and_then(|(plain, _)| serde_json::from_slice(&plain).ok()).unwrap_or_default();
         let fresh = stored["tokens"]["expires_at"].as_i64().unwrap_or(0) - crate::lazer::now_ms() > 10 * 60 * 1000;
         if let (true, Some(account)) = (fresh, crate::osu_auth::account(&dir)) {
             let ep = Endpoints::default();

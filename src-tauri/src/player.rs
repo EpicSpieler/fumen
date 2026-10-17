@@ -450,9 +450,13 @@ pub fn build(
                     let text = found.and_then(|(_, key)| crate::charts::read(files, key).ok()).or_else(|| {
                         let file = cache_file(cache, beatmap, md5);
                         if let Ok(t) = std::fs::read_to_string(&file) {
-                            return Some(t);
+                            if md5.is_none_or(|want| md5_is(&t, want)) {
+                                return Some(t);
+                            }
                         }
                         match crate::downloads::download_chart(&agent, beatmap, worker) {
+                            // the mirror's file has to be the one osu! names (when it names one)
+                            Ok(Some(t)) if md5.is_some_and(|want| !md5_is(&t, want)) => None,
                             Ok(Some(t)) => {
                                 let _ = std::fs::write(&file, &t);
                                 Some(t)
@@ -534,8 +538,22 @@ pub fn build(
     Ok(serde_json::to_vec(&out)?)
 }
 
+/// Whether `text` (a .osu as downloaded) has the MD5 `want` (hex).
+fn md5_is(text: &str, want: &str) -> bool {
+    use md5::Digest;
+    let got: String = md5::Md5::digest(text.as_bytes()).iter().map(|b| format!("{b:02x}")).collect();
+    got.eq_ignore_ascii_case(want)
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_chart_is_checked_against_its_md5() {
+        // md5("hello")
+        assert!(super::md5_is("hello", "5d41402abc4b2a76b9719d911017c592"));
+        assert!(!super::md5_is("hello!", "5d41402abc4b2a76b9719d911017c592"));
+    }
+
     use super::*;
 
     /// A 4K chart: a stream, then jacks.
@@ -619,14 +637,21 @@ mod tests {
         let conn = crate::db::open(&dir.join("library.db")).unwrap();
         let cache = dir.join("charts");
         std::fs::create_dir_all(&cache).unwrap();
-        // two charts already in the cache (nothing is downloaded)
+        // two charts already in the cache (nothing is downloaded), under osu!'s MD5 of them
+        let md5_of = |t: &str| -> String {
+            use md5::Digest;
+            md5::Md5::digest(t.as_bytes()).iter().map(|b| format!("{b:02x}")).collect()
+        };
         for b in [100i64, 101] {
-            std::fs::write(cache_file(&cache, b, Some(&format!("{b:032x}"))), chart(&format!("Song {b}"))).unwrap();
+            let text = chart(&format!("Song {b}"));
+            std::fs::write(cache_file(&cache, b, Some(&md5_of(&text))), &text).unwrap();
         }
         let mut f = Fetched { user: serde_json::json!({ "id": 9, "username": "Some One", "statistics": { "hit_accuracy": 97.5 } }), ..Default::default() };
         for v in [score(1, 100, 0.98, "[]", "mania"), score(2, 101, 0.95, r#"[{"acronym":"DT","settings":{"speed_change":1.2}}]"#, "mania")] {
             let (s, b) = parse_score(&v, MANIA, Some(1)).unwrap();
-            f.beatmaps.insert(b.as_ref().unwrap().id, b.unwrap());
+            let mut b = b.unwrap();
+            b.md5 = Some(md5_of(&chart(&format!("Song {}", b.id))));
+            f.beatmaps.insert(b.id, b);
             f.scores.push(s);
         }
         let out: Value = serde_json::from_slice(&build(&conn, &crate::paths::Files { lazer: None, stable: Default::default() }, &cache, f, &AtomicBool::new(false), |_| {}).unwrap()).unwrap();

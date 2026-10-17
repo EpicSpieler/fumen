@@ -210,6 +210,9 @@ fn agent(timeout: Duration) -> ureq::Agent {
     ureq::Agent::config_builder()
         .user_agent(USER_AGENT)
         .timeout_global(Some(timeout))
+        // never down to plain http, where anyone on the way could swap the file
+        .https_only(true)
+        .max_redirects(5)
         .http_status_as_error(false)
         .build()
         .into()
@@ -282,8 +285,18 @@ pub fn download_set(set: u32, dir: &Path, mirrors: &Mirrors, mut progress: impl 
         match outcome {
             Ok(()) => {
                 mirrors.finished(i, None);
-                std::fs::rename(&part, &target)?;
-                return Ok((target, mirror.name));
+                // what the mirror sent has to be the set asked for, and a sane archive
+                match crate::archive::check_set(&part, set) {
+                    Ok(()) => {
+                        std::fs::rename(&part, &target)?;
+                        return Ok((target, mirror.name));
+                    }
+                    Err(w) => {
+                        let _ = std::fs::remove_file(&part);
+                        tried[i] = Tried::Missing;
+                        why[i] = format!("{} sent {w}", mirror.name);
+                    }
+                }
             }
             Err(outcome) => {
                 let _ = std::fs::remove_file(&part);
@@ -383,6 +396,9 @@ fn fetch(agent: &ureq::Agent, url: &str, out: &Path, progress: &mut impl FnMut(P
         _ => return Err(Outcome::Failed(format!("HTTP {status}"))),
     }
     let total = res.body().content_length();
+    if total.is_some_and(|t| t > crate::archive::MAX_DOWNLOAD) {
+        return Err(Outcome::Missing(format!("{} MB, too big for a set", total.unwrap_or(0) / 1024 / 1024)));
+    }
     let mut reader = res.body_mut().as_reader();
     let mut file = std::fs::File::create(out).map_err(|e| Outcome::Failed(e.to_string()))?;
     let mut buf = vec![0u8; 64 * 1024];
@@ -399,6 +415,9 @@ fn fetch(agent: &ureq::Agent, url: &str, out: &Path, progress: &mut impl FnMut(P
         }
         file.write_all(&buf[..n]).map_err(|e| Outcome::Failed(e.to_string()))?;
         done += n as u64;
+        if done > crate::archive::MAX_DOWNLOAD {
+            return Err(Outcome::Missing("too big for a set".into()));
+        }
         if !progress(Progress::Bytes { done, total }) {
             return Err(Outcome::Cancelled);
         }

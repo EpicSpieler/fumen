@@ -58,6 +58,10 @@ fn route(app: &AppHandle, req: &Request<Vec<u8>>) -> Result<Response<Vec<u8>>, S
     }
 }
 
+/// Files up to this size are sent whole when asked without a range; bigger ones in pieces.
+const WHOLE: u64 = 64 * 1024 * 1024;
+const CHUNK: u64 = 8 * 1024 * 1024;
+
 fn serve_file(path: &Path, req: &Request<Vec<u8>>) -> Result<Response<Vec<u8>>, StatusCode> {
     let mut file = std::fs::File::open(path).map_err(|_| StatusCode::NOT_FOUND)?;
     let len = file.metadata().map_err(|_| StatusCode::NOT_FOUND)?.len();
@@ -66,11 +70,14 @@ fn serve_file(path: &Path, req: &Request<Vec<u8>>) -> Result<Response<Vec<u8>>, 
     let n = file.read(&mut head).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let mime = sniff(&head[..n]);
 
+    // at most CHUNK per answer: a long video is read a piece at a time, never all into memory
     let range = req
         .headers()
         .get(header::RANGE)
         .and_then(|v| v.to_str().ok())
-        .and_then(|v| parse_range(v, len));
+        .and_then(|v| parse_range(v, len))
+        .map(|(start, end)| (start, end.min(start + CHUNK - 1)))
+        .or_else(|| (!req.headers().contains_key(header::RANGE) && len > WHOLE).then(|| (0, CHUNK - 1)));
 
     let builder = Response::builder()
         .header(header::CONTENT_TYPE, mime)

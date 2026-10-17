@@ -1,4 +1,5 @@
 mod analysis;
+mod archive;
 mod care;
 mod catch;
 mod chart;
@@ -22,6 +23,7 @@ mod osu_scores;
 mod library;
 mod paths;
 mod ping;
+mod secret;
 mod player;
 mod protocol;
 mod settings;
@@ -739,12 +741,34 @@ async fn delete_sets_in_lazer(app: AppHandle, ids: Vec<String>) -> Result<LazerS
     .map_err(|e| Error::known("internal", e.to_string()))?
 }
 
-/// Writes the picked collections as a stable `collection.db` at `path` (picked by the user).
+/// Writes the picked collections as a stable `collection.db` where the user picks in the save
+/// dialog, opened from here: the page never names a path to write to. None: the dialog was
+/// cancelled. `title` and `filter` are the dialog's words in the app's language.
+/// The start ping (`ping.rs`), once per start and only while Settings allow it. The window asks
+/// for it after the one-time notice about it, so nothing is sent before the player knew.
 #[tauri::command]
-fn save_collection_db(state: State<AppState>, path: String, picks: Vec<collections::Pick>) -> Result<usize> {
-    let cols = collections::outgoing(&state.db(), &picks)?;
-    collections::save_collection_db(std::path::Path::new(&path), &cols)?;
-    Ok(cols.len())
+fn send_ping(state: State<AppState>) {
+    static SENT: AtomicBool = AtomicBool::new(false);
+    if state.settings.lock().unwrap_or_else(|e| e.into_inner()).start_ping && !SENT.swap(true, Ordering::SeqCst) {
+        ping::start(state.data_dir.clone(), osu_auth::Endpoints::default().site);
+    }
+}
+
+#[tauri::command]
+async fn save_collection_db(app: AppHandle, title: String, filter: String, picks: Vec<collections::Pick>) -> Result<Option<usize>> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri_plugin_dialog::DialogExt;
+        let picked = app.dialog().file().set_title(&title).set_file_name("collection.db").add_filter(&filter, &["db"]).blocking_save_file();
+        let Some(path) = picked.and_then(|p| p.into_path().ok()) else { return Ok(None) };
+        // a stable collection file, nothing else
+        let path = if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("db")) { path } else { path.with_extension("db") };
+        let state = app.state::<AppState>();
+        let cols = collections::outgoing(&state.db(), &picks)?;
+        collections::save_collection_db(&path, &cols)?;
+        Ok(Some(cols.len()))
+    })
+    .await
+    .map_err(|e| Error::known("internal", e.to_string()))?
 }
 
 /// A Fumen copy of one of lazer's collections (Fumen's can be changed).
@@ -1336,11 +1360,25 @@ async fn get_library(app: AppHandle) -> Result<tauri::ipc::Response> {
 // ── App ─────────────────────────────────────────────────────────────────────
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
+/// Fumen's own page: the bundled app (tauri://localhost, http(s)://tauri.localhost on Windows)
+/// or the dev server on localhost.
+fn own_page(url: &tauri::Url) -> bool {
+    match url.scheme() {
+        "tauri" => true,
+        "http" | "https" => matches!(url.host_str(), Some("localhost" | "tauri.localhost" | "127.0.0.1")),
+        "about" => url.as_str() == "about:blank",
+        _ => false,
+    }
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        // the window only ever shows Fumen's own page: links out go to the browser (opener), and
+        // anything that tried to navigate the window elsewhere is stopped
+        .plugin(tauri::plugin::Builder::<tauri::Wry>::new("navigation-guard").on_navigation(|_, url| own_page(url)).build())
         .register_asynchronous_uri_scheme_protocol("fumen", |ctx, request, responder| {
             let app = ctx.app_handle().clone();
             std::thread::spawn(move || responder.respond(protocol::handle(&app, &request)));
@@ -1375,9 +1413,6 @@ pub fn run() {
             };
             state.refresh_storage();
             state.reload_stable_files();
-            if state.settings.lock().unwrap_or_else(|e| e.into_inner()).start_ping {
-                ping::start(state.data_dir.clone(), osu_auth::Endpoints::default().site);
-            }
             app.manage(state);
             // difficulties imported by an older version (or before a crash) still need analysing
             start_analysis(app.handle());
@@ -1421,6 +1456,7 @@ pub fn run() {
             put_collections_into_lazer,
             delete_sets_in_lazer,
             save_collection_db,
+            send_ping,
             copy_lazer_collection,
             rename_collection,
             delete_collection,
@@ -1437,4 +1473,19 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running Fumen");
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn the_window_stays_on_fumen() {
+        let ok = |u: &str| super::own_page(&tauri::Url::parse(u).unwrap());
+        assert!(ok("tauri://localhost/index.html"));
+        assert!(ok("http://tauri.localhost/"));
+        assert!(ok("http://localhost:1430/"));
+        assert!(!ok("https://evil.example/"));
+        assert!(!ok("https://osu.ppy.sh/beatmapsets/1"));
+        assert!(!ok("file:///C:/Windows/"));
+        assert!(!ok("javascript:alert(1)"));
+    }
 }

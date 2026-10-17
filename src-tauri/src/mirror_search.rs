@@ -118,6 +118,8 @@ fn agent() -> ureq::Agent {
     ureq::Agent::config_builder()
         .user_agent(USER_AGENT)
         .timeout_global(Some(Duration::from_secs(20)))
+        .https_only(cfg!(not(test)))
+        .max_redirects(5)
         .http_status_as_error(false)
         .build()
         .into()

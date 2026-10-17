@@ -251,10 +251,29 @@ pub fn parse(bytes: &[u8]) -> Result<Replay> {
         return Err(bad());
     }
     let data = r.take(len as usize)?;
-    let mut text = Vec::new();
+    let mut text = Capped(Vec::new());
     lzma_rs::lzma_decompress(&mut Cursor::new(data), &mut text).map_err(|_| bad())?;
-    let text = String::from_utf8_lossy(&text);
+    let text = String::from_utf8_lossy(&text.0);
     Ok(Replay { mode, player, beatmap_md5, frames: frames(&text) })
+}
+
+/// The frames' text, unpacked up to a size no real replay comes near (hours of play are a few
+/// MB): a crafted .osr can't make it ask for gigabytes.
+struct Capped(Vec<u8>);
+
+const MAX_FRAMES_TEXT: usize = 64 * 1024 * 1024;
+
+impl std::io::Write for Capped {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        if self.0.len() + buf.len() > MAX_FRAMES_TEXT {
+            return Err(std::io::Error::other("replay too big"));
+        }
+        self.0.extend_from_slice(buf);
+        Ok(buf.len())
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
 }
 
 /// The frames, as lazer's LegacyScoreDecoder reads them.
@@ -289,6 +308,16 @@ fn frames(text: &str) -> Vec<f64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_replay_bomb_stops_at_the_cap() {
+        // 80 MB of zeros pack into a few KB
+        let mut packed = Vec::new();
+        lzma_rs::lzma_compress(&mut Cursor::new(vec![0u8; 80 * 1024 * 1024]), &mut packed).unwrap();
+        let mut out = Capped(Vec::new());
+        assert!(lzma_rs::lzma_decompress(&mut Cursor::new(packed), &mut out).is_err());
+        assert!(out.0.len() <= MAX_FRAMES_TEXT);
+    }
 
     #[test]
     fn reads_frames_like_lazer() {
