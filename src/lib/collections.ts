@@ -2,7 +2,6 @@
  * changed here). They hold difficulties; the backend keeps them by MD5 (src-tauri/src/collections.rs)
  * and hands back library ids, which this turns into snapshot indices. A smart collection holds a
  * saved search instead (the library's filters) and is whatever in the library matches it now. */
-import { save } from "@tauri-apps/plugin-dialog";
 import { api, asApiError } from "./api";
 import { mapIndexOf } from "./history";
 import { num } from "./format";
@@ -213,16 +212,9 @@ export async function putIntoLazer(cols: FumenCollection[]): Promise<void> {
 /** Saves collections as a stable collection.db (for stable or Collection Manager). */
 export async function saveCollectionDb(cols: FumenCollection[]): Promise<void> {
   if (!cols.length) return;
-  let path: string | null;
   try {
-    path = await save({ title: t("Save as collection.db"), defaultPath: "collection.db", filters: [{ name: t("osu! collections"), extensions: ["db"] }] });
-  } catch (e) {
-    toast(asApiError(e).message, { kind: "danger", timeout: 6000 });
-    return;
-  }
-  if (!path) return;
-  try {
-    const n = await api.saveCollectionDb(path, cols.map(pick));
+    const n = await api.saveCollectionDb(t("Save as collection.db"), t("osu! collections"), cols.map(pick));
+    if (n === null) return;
     toast(n === 1 ? t("Saved “{name}” as collection.db", { name: cols[0].name }) : t("Saved {n} collections as collection.db", { n: num(n) }), { kind: "success" });
   } catch (e) {
     toast(t("Couldn't save collection.db: {error}", { error: asApiError(e).message }), { kind: "danger", timeout: 6000 });

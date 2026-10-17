@@ -26,6 +26,7 @@ import { describeScan, isScanning, runScan } from "./lib/scan";
 import { clearSkins, loadSkinList } from "./lib/skin/skins";
 import { events, loadPrefs, refreshStatus, reloadLibrary, setPrefs, setSnapshot, store } from "./lib/store";
 import type { ScanProgress } from "./lib/types";
+import { startPing } from "./lib/ping";
 import { mountPlayerBar } from "./player";
 import { openFullscreen } from "./views/fullscreen";
 import { BrowseView } from "./views/browse";
@@ -887,6 +888,7 @@ async function boot(): Promise<void> {
   initGoals();
   initCollections();
   document.body.classList.add("ready");
+  void startPing().catch((e) => console.warn("[ping]", asApiError(e).message));
 }
 
 void boot();

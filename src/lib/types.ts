@@ -460,6 +460,8 @@ export interface UiPrefs {
   fullscreenMode: "visual" | "field";
   /** set once the first-run defaults (e.g. mode from play history) were applied */
   defaultsApplied: boolean;
+  /** the one-time notice about the start ping was shown */
+  pingNoticed: boolean;
 }
 
 /** The osu! account Fumen is logged in to (src-tauri/src/osu_auth.rs). */
