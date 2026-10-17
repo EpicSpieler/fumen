@@ -253,5 +253,4 @@ source. The parts that came from other projects keep their own licences (MIT, se
 
 "Fumen" is the name of this project: a fork is welcome, under another name.
 
-Contributions are welcome under the same licence. By contributing you agree that the maintainer
-may also offer your contribution under the MIT licence later, should Fumen move to it.
+Contributions are welcome under the same licence.
