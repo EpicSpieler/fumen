@@ -37,6 +37,7 @@ export const isMac = navigator.userAgent.includes("Mac OS");
 
 export const api = {
   getSettings: () => invoke<Settings>("get_settings"),
+  sendPing: () => invoke<void>("send_ping"),
   updateSettings: (patch: Partial<Settings> | Record<string, unknown>) => invoke<Settings>("update_settings", { patch }),
   inspectLazerPath: (path: string) => invoke<LazerInstall | null>("inspect_lazer_path", { path }),
   inspectStablePath: (path: string) => invoke<StableInstall | null>("inspect_stable_path", { path }),
@@ -128,7 +129,8 @@ export const api = {
   /** lazer's own Delete on these sets (lazer removes them for good when it next starts) */
   deleteSetsInLazer: (ids: string[]) => invoke<{ deleted: number; skipped: number }>("delete_sets_in_lazer", { ids }),
   /** a stable collection.db at `path`; how many collections went in */
-  saveCollectionDb: (path: string, picks: CollectionPick[]) => invoke<number>("save_collection_db", { path, picks }),
+  /** opens the save dialog itself; null when it was cancelled */
+  saveCollectionDb: (title: string, filter: string, picks: CollectionPick[]) => invoke<number | null>("save_collection_db", { title, filter, picks }),
   renameCollection: (id: string, name: string) => invoke<void>("rename_collection", { id, name }),
   deleteCollection: (id: string) => invoke<void>("delete_collection", { id }),
   /** how many weren't in it yet */

@@ -42,6 +42,7 @@ export const DEFAULT_PREFS: UiPrefs = {
   hitsoundVolume: 0.6,
   fullscreenMode: "visual",
   defaultsApplied: false,
+  pingNoticed: false,
 };
 
 export const store = {

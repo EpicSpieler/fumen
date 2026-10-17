@@ -15,6 +15,10 @@ export const settings: Record<string, string> = {
   // library
   "Keep up to date": "Aktuell halten",
   "Count me in": "Mitzählen",
+  "Counting who uses Fumen": "Wer Fumen nutzt",
+  "When it starts, Fumen tells fumen.dertesti.dev that it did: a random number made on this PC and Fumen's version, nothing else. That's how many people use it gets counted. You can turn it off here or later in Settings › About.":
+    "Beim Start sagt Fumen fumen.dertesti.dev Bescheid: eine Zufallszahl, die auf diesem PC entsteht, und Fumens Version, sonst nichts. So lässt sich zählen, wie viele Fumen nutzen. Du kannst das hier oder später unter Einstellungen › Über ausschalten.",
+  "Turn it off": "Ausschalten",
   "When Fumen starts, it tells fumen.dertesti.dev that it did: a random number made on this PC and Fumen's version, nothing else. That's how many people use it.":
     "Beim Start sagt Fumen fumen.dertesti.dev Bescheid: eine Zufallszahl, die auf diesem PC entsteht, und Fumens Version, sonst nichts. So lässt sich zählen, wie viele Fumen nutzen.",
   "Re-import when osu!lazer's or osu!stable's library changed since the last import.":
