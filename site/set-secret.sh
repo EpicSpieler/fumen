@@ -13,11 +13,10 @@ if ! [[ "$secret" =~ ^[A-Za-z0-9]{20,100}$ ]]; then
   exit 1
 fi
 
-if grep -q '^OSU_CLIENT_SECRET=' .env; then
-  sed -i "s|^OSU_CLIENT_SECRET=.*|OSU_CLIENT_SECRET=$secret|" .env
-else
-  echo "OSU_CLIENT_SECRET=$secret" >> .env
-fi
+# printf is a shell builtin: the secret never becomes a program's argument (visible in ps)
+umask 077
+{ grep -v '^OSU_CLIENT_SECRET=' .env || true; printf 'OSU_CLIENT_SECRET=%s\n' "$secret"; } > .env.new
+mv .env.new .env
 chmod 600 .env
 unset secret
 

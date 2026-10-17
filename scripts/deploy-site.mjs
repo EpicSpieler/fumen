@@ -17,13 +17,18 @@ const host = process.env.VPS_HOST ?? "vps";
 const dir = "fumen-web"; // in the home folder of the SSH user
 const run = (cmd, args) => execFileSync(cmd, args, { cwd: root, stdio: "inherit" });
 const sudoPassword = process.env.VPS_SUDO_PASSWORD;
-// sudo fed from VPS_SUDO_PASSWORD instead of a prompt
-const sudoFromEnv = `SUDO_PW=${JSON.stringify(sudoPassword ?? "")}\nsudo() { printf '%s\\n' "$SUDO_PW" | command sudo -S -p "" "$@"; }\n`;
-const withSudo = (script) => (sudoPassword ? sudoFromEnv + script : script);
-const remote = (script, tty = false) => run("ssh", [...(tty && !sudoPassword ? ["-t"] : []), host, withSudo(script)]);
+// sudo fed from VPS_SUDO_PASSWORD instead of a prompt (in single quotes: nothing in it is expanded)
+const sudoFromEnv = `SUDO_PW='${(sudoPassword ?? "").replaceAll("'", `'\\''`)}'\nsudo() { printf '%s\\n' "$SUDO_PW" | command sudo -S -p "" "$@"; }\n`;
+/** A script run on the server. With the password it goes through ssh's stdin, so the password is
+ * never part of a command line (here or in the server's `ps`); without it, sudo asks on a terminal. */
+const remote = (script) =>
+  sudoPassword
+    ? execFileSync("ssh", [host, "bash", "-s"], { cwd: root, input: sudoFromEnv + script, stdio: ["pipe", "inherit", "inherit"] })
+    : run("ssh", ["-t", host, script]);
 
 if (process.argv.includes("--secret")) {
-  remote(`bash ~/${dir}/set-secret.sh`, true);
+  // typed in on a terminal, so sudo asks there too
+  run("ssh", ["-t", host, `bash ~/${dir}/set-secret.sh`]);
   process.exit(0);
 }
 
@@ -47,6 +52,5 @@ remote(
     "port=$(sed -n 's/^PORT=//p' .env)",
     'echo "  health: $(curl -s "http://127.0.0.1:${port:-3020}/health")"',
   ].join("\n"),
-  true,
 );
 console.log("✓ deployed");

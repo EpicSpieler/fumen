@@ -12,14 +12,38 @@ EnvironmentFile=/home/dertesti/fumen-web/.env
 ExecStart=/usr/bin/node server.mjs
 Restart=on-failure
 RestartSec=3
+UMask=0077
+MemoryMax=512M
+# the sandbox: of the home folders the site sees only its own folder (read only), and of the
+# system only what a plain network service needs
 NoNewPrivileges=true
 PrivateTmp=true
+PrivateDevices=true
 ProtectSystem=strict
-ReadOnlyPaths=/home/dertesti/fumen-web
+ProtectHome=tmpfs
+BindReadOnlyPaths=/home/dertesti/fumen-web
 # collections saved to the cloud (`/api/collections`)
-ReadWritePaths=/home/dertesti/fumen-web/cloud
+BindPaths=/home/dertesti/fumen-web/cloud
 # download and start counts (`/api/stats`)
-ReadWritePaths=/home/dertesti/fumen-web/stats
+BindPaths=/home/dertesti/fumen-web/stats
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+ProtectProc=invisible
+ProcSubset=pid
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
 
 [Install]
 WantedBy=multi-user.target
