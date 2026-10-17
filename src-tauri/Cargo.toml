@@ -4,7 +4,7 @@ version = "1.0.1"
 description = "Fumen — a beatmap library for osu!"
 edition = "2021"
 rust-version = "1.80"
-license = "UNLICENSED"
+license = "GPL-3.0-or-later"
 
 [lib]
 # `_lib` keeps the lib name distinct from the bin name (cargo#8519 on Windows).

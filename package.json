@@ -1,6 +1,7 @@
 {
   "name": "fumen",
   "private": true,
+  "license": "GPL-3.0-or-later",
   "version": "1.0.1",
   "description": "A beatmap library for osu!",
   "type": "module",
