@@ -140,6 +140,20 @@ database first (see [Adding beatmaps](#adding-beatmaps)).
   osu! pp or rank. Each shows how far along it is, and Fumen ticks it off (with a note) once your
   plays or the next sync get there
 
+**While you play (v1.1)**
+- After every pass in osu!lazer, its score: Fumen reads the replay lazer just saved (a new `.osr`
+  in lazer's files; no database opened, nothing of the running game touched) and shows the grade
+  and accuracy against your best before it, the judgements, where the accuracy went (the song's
+  notes per second with the losses over it, the worst stretches with their osu!mania pattern), and
+  the timing (average error, unstable rate, an offset hint). One click watches the replay,
+  practises the worst stretch in a loop at the play's rate, tries another rate, adds the map to a
+  collection or finds similar maps. With Fumen behind the game the score is waiting when you come
+  back; otherwise a note offers it (Settings › While you play)
+- Companion window: a small window in the corner over the game (lazer in borderless or windowed
+  mode) with this session (plays, time, accuracy, new bests), your last play, and a pool to work
+  through: a collection whose difficulties are ticked off as you pass them, with your best accuracy
+  this session
+
 ## Adding beatmaps
 
 The import runs lazer's own `BeatmapImporter` (through `sidecar/FumenImport`, on the installed
@@ -186,7 +200,7 @@ Installing restarts Fumen (Tauri's updater checks the signature first; not while
 going into lazer). The signing key is `~/.tauri/fumen-updater.key` on the machine that releases,
 never in the repo; without it, installed copies can't be updated, so keep a copy somewhere safe.
 
-`npm run mac` (not for now: macOS moved to 1.6, until someone can test it) builds the macOS app on GitHub's Macs (`.github/workflows/mac.yml`; a Mac app can't
+`npm run mac` (not for now: macOS moved to 1.7, until someone can test it) builds the macOS app on GitHub's Macs (`.github/workflows/mac.yml`; a Mac app can't
 be built on Windows) for Apple Silicon and Intel and puts the disk images on the site's updates
 folder (the commit in their names). The Apple Silicon build is tested first against osu!lazer's
 macOS release: lazer's own import into a fresh library, read back by Fumen's reader. The app isn't
