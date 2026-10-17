@@ -12,5 +12,7 @@ export default defineConfig({
   build: {
     target: "es2022",
     sourcemap: false,
+    // the main window and the companion window (src/companion.ts)
+    rollupOptions: { input: { main: "index.html", companion: "companion.html" } },
   },
 });

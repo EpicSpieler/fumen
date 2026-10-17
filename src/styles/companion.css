@@ -1,0 +1,129 @@
+/* ===========================================================================
+   Companion — the small window over the game (src/companion.ts)
+   =========================================================================== */
+
+body.companion { background: var(--bg-surface); overflow: hidden; }
+#companion {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  padding: 0 12px 12px;
+  gap: 12px;
+}
+
+.cmp-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 38px;
+  margin-right: -6px;
+  flex: none;
+}
+.cmp-brand { font-size: var(--fs-12); font-weight: 600; color: var(--t2); letter-spacing: .02em; }
+
+.cmp-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  flex: none;
+}
+.cmp-stats div {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 8px 10px;
+  border-radius: var(--r-lg);
+  background: var(--fill-subtle);
+}
+.cmp-stats i { font-style: normal; font-size: var(--fs-11); color: var(--t3); }
+.cmp-stats b { font-size: var(--fs-16); }
+
+.cmp-empty { font-size: var(--fs-12); color: var(--t3); padding: 2px; }
+
+.cmp-last {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px 10px 8px;
+  border-radius: var(--r-lg);
+  background: var(--fill-subtle);
+  text-align: left;
+  color: var(--t1);
+  flex: none;
+  transition: background-color .15s var(--ease-std);
+}
+.cmp-last:hover { background: var(--fill-mod); }
+.cmp-grade { font-size: var(--fs-22); font-weight: 700; color: var(--c); text-align: center; }
+.cmp-last-text { display: flex; flex-direction: column; min-width: 0; }
+.cmp-last-text b, .cmp-last-text span, .cmp-row-text b, .cmp-row-text span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cmp-last-text span { font-size: var(--fs-12); color: var(--t3); }
+.cmp-last-acc { display: flex; flex-direction: column; align-items: flex-end; }
+.cmp-last-acc b { font-size: var(--fs-15); }
+.cmp-last-acc span { font-size: var(--fs-11); color: var(--t3); }
+.cmp-last-acc span.up { color: var(--success); }
+
+.cmp-pool { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.cmp-pool-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.cmp-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 70%;
+  padding: 3px 6px 3px 10px;
+  border-radius: var(--r-full);
+  color: var(--t1);
+  font-size: var(--fs-12);
+  font-weight: 600;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.cmp-pick:hover { background: var(--tint-hover); }
+.cmp-pick .ic { width: 14px; height: 14px; flex: none; color: var(--t3); }
+.cmp-pool-sub { margin: 2px 0 6px; font-size: var(--fs-11); color: var(--t3); }
+.cmp-pool-rows { overflow-y: auto; min-height: 0; margin: 0 -4px; padding: 0 4px; }
+.cmp-row {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto 54px;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 4px;
+  border-radius: var(--r-md);
+}
+.cmp-row + .cmp-row { margin-top: 1px; }
+.cmp-row.missing { opacity: .5; }
+.cmp-tick {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--r-full);
+  box-shadow: inset 0 0 0 1.5px var(--stroke-med);
+}
+.cmp-row.done .cmp-tick { background: var(--accent); box-shadow: none; color: var(--on-accent); }
+.cmp-tick .ic { width: 11px; height: 11px; }
+.cmp-row-text { display: flex; flex-direction: column; min-width: 0; font-size: var(--fs-12); }
+.cmp-row-text span { color: var(--t3); font-size: var(--fs-11); }
+.cmp-row-acc { text-align: right; font-size: var(--fs-12); }
+.cmp-row-acc i { font-style: normal; color: var(--t3); }
+
+/* star chips (the library's stylesheet isn't loaded here) */
+.sr-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: var(--r-full);
+  background: var(--c);
+  color: var(--ink);
+  font-size: var(--fs-11);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.sr-chip .ic { width: 10px; height: 10px; }
