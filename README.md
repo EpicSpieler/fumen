@@ -243,3 +243,15 @@ docs/PLAN.md      roadmap
   [Interlude](https://github.com/YAVSRG/YAVSRG)'s pattern analysis,
   [Star-Rating-Rebirth](https://github.com/sunnyxxy/Star-Rating-Rebirth) (Sunny) and
   [Daniel](https://thebagelofman.github.io/Daniel/)
+
+## Licence
+
+Fumen is free software under the [GNU General Public License v3.0](LICENSE) or later: use it,
+change it and pass it on, as long as what you pass on stays under the same licence, with its
+source. The parts that came from other projects keep their own licences (MIT, see Credits;
+`src-tauri/src/mma` has its licence alongside).
+
+"Fumen" is the name of this project: a fork is welcome, under another name.
+
+Contributions are welcome under the same licence. By contributing you agree that the maintainer
+may also offer your contribution under the MIT licence later, should Fumen move to it.
