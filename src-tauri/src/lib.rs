@@ -247,35 +247,92 @@ fn pool_rows(state: State<'_, AppState>, id: String, since: i64) -> Result<Vec<l
 
 const COMPANION: &str = "companion";
 
+/// The companion window's width; its height follows what it shows (`fit_companion`).
+const COMPANION_WIDTH: f64 = 248.0;
+
 /// The companion window: small, on top of the game (lazer in borderless or windowed mode), in the
-/// bottom right corner of the main screen. Opening it again just shows it.
+/// bottom right corner of the main screen. Opening it again just shows it. Async: a window made in
+/// a synchronous command deadlocks on Windows (it stays white).
 #[tauri::command]
-fn open_companion(app: AppHandle) -> Result<()> {
+async fn open_companion(app: AppHandle) -> Result<()> {
     use tauri::Manager;
     if let Some(w) = app.get_webview_window(COMPANION) {
         let _ = w.show();
         return Ok(());
     }
-    let (w, h) = (300.0, 440.0);
+    let (w, h) = (COMPANION_WIDTH, 180.0);
     let mut b = tauri::WebviewWindowBuilder::new(&app, COMPANION, tauri::WebviewUrl::App("companion.html".into()))
         .title("Fumen")
         .inner_size(w, h)
-        .min_inner_size(260.0, 200.0)
         .decorations(false)
-        .shadow(true)
+        .transparent(true)
+        .shadow(false)
         .always_on_top(true)
         .skip_taskbar(true)
         .focused(false)
-        .resizable(true);
+        .resizable(false);
     if let Ok(Some(m)) = app.primary_monitor() {
         let area = m.work_area();
         let scale = m.scale_factor();
         let right = (area.position.x as f64 + area.size.width as f64) / scale;
         let bottom = (area.position.y as f64 + area.size.height as f64) / scale;
-        b = b.position(right - w - 16.0, bottom - h - 16.0);
+        b = b.position(right - w - 12.0, bottom - h - 12.0);
     }
-    b.build().map_err(|e| Error::known("internal", e.to_string()))?;
+    let window = b.build().map_err(|e| Error::known("internal", e.to_string()))?;
+    #[cfg(windows)]
+    see_through(window);
+    #[cfg(not(windows))]
+    drop(window);
     Ok(())
+}
+
+/// Lets clicks through the companion window while the cursor is over it, so it never stands in
+/// the game's way; holding Ctrl makes it clickable again. The page fades while it lets clicks
+/// through (event `companion-through`). A window that ignores the cursor gets no mouse events, so
+/// the cursor is looked at from here, until the window is gone.
+#[cfg(windows)]
+fn see_through(window: tauri::WebviewWindow) {
+    use tauri::Emitter;
+    std::thread::spawn(move || {
+        let mut through = false;
+        loop {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+            let (Ok(pos), Ok(size)) = (window.outer_position(), window.outer_size()) else { break };
+            let Ok(cursor) = window.app_handle().cursor_position() else { continue };
+            let over = cursor.x >= pos.x as f64
+                && cursor.y >= pos.y as f64
+                && cursor.x < pos.x as f64 + size.width as f64
+                && cursor.y < pos.y as f64 + size.height as f64;
+            let now = over && !ctrl_held();
+            if now != through {
+                through = now;
+                let _ = window.set_ignore_cursor_events(through);
+                let _ = window.emit_to(COMPANION, "companion-through", through);
+            }
+        }
+    });
+}
+
+#[cfg(windows)]
+fn ctrl_held() -> bool {
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_CONTROL};
+    // the high bit: down right now
+    unsafe { GetAsyncKeyState(VK_CONTROL as i32) as u16 & 0x8000 != 0 }
+}
+
+/// Fits the companion window's height to what it shows, keeping its bottom edge where it is.
+#[tauri::command]
+fn fit_companion(app: AppHandle, height: f64) {
+    use tauri::Manager;
+    let Some(w) = app.get_webview_window(COMPANION) else { return };
+    let (Ok(pos), Ok(size), Ok(scale)) = (w.outer_position(), w.outer_size(), w.scale_factor()) else { return };
+    let height = (height.clamp(120.0, 520.0) * scale).round() as u32;
+    if height == size.height {
+        return;
+    }
+    let bottom = pos.y + size.height as i32;
+    let _ = w.set_size(tauri::PhysicalSize::new(size.width, height));
+    let _ = w.set_position(tauri::PhysicalPosition::new(pos.x, bottom - height as i32));
 }
 
 #[tauri::command]
@@ -1597,6 +1654,7 @@ pub fn run() {
             pool_rows,
             open_companion,
             close_companion,
+            fit_companion,
             show_main,
             online_replays_for_map,
             get_online_replay,

@@ -43,6 +43,10 @@ export const live: Record<string, string> = {
 
   // companion window
   "New bests": "Neue Bestleistungen",
+  Time: "Zeit",
+  Acc: "Acc",
+  Bests: "Rekorde",
+  "Hold Ctrl to click": "Strg halten zum Klicken",
   "Pass a map in osu!lazer and it shows up here.": "Schaff eine Map in osu!lazer, dann taucht sie hier auf.",
   "Open the score in Fumen": "Score in Fumen öffnen",
   Pool: "Pool",
@@ -63,6 +67,6 @@ export const live: Record<string, string> = {
   "When you pass a map in osu!lazer, Fumen opens its score: where the accuracy went, the timing, the replay. Only while Fumen isn't the window in front; otherwise it offers it.":
     "Wenn du in osu!lazer eine Map schaffst, öffnet Fumen ihren Score: wo die Accuracy geblieben ist, das Timing, das Replay. Nur solange Fumen nicht das Fenster im Vordergrund ist, sonst bietet es ihn an.",
   "Companion window": "Begleitfenster",
-  "A small window in the corner, on top of the game: this session, your last play and a pool to work through. It shows over osu!lazer in borderless or windowed mode.":
-    "Ein kleines Fenster in der Ecke, über dem Spiel: diese Session, dein letzter Play und ein Pool zum Durchspielen. Über osu!lazer ist es im randlosen oder Fenstermodus zu sehen.",
+  "A small window in the corner, on top of the game: this session, your last play and a pool to work through. It shows over osu!lazer in borderless or windowed mode. With the cursor over it, clicks go through to the game; hold Ctrl to click it.":
+    "Ein kleines Fenster in der Ecke, über dem Spiel: diese Session, dein letzter Play und ein Pool zum Durchspielen. Über osu!lazer ist es im randlosen oder Fenstermodus zu sehen. Mit der Maus darüber gehen Klicks durch ins Spiel; halte Strg, um es anzuklicken.",
 };

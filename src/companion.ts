@@ -4,12 +4,16 @@
  * best accuracy this session.
  *
  * Plays come from the replays lazer saves (src-tauri/src/live.rs, event `live-play`). A click on
- * the last play brings the main window up at its score page (event `show-score`). */
+ * the last play brings the main window up at its score page (event `show-score`).
+ *
+ * The window is transparent around the panel. While the cursor is over it, clicks go through to
+ * the game and the panel fades (event `companion-through`, from lib.rs); holding Ctrl makes it
+ * clickable. Its height follows the panel (`fit_companion`). */
 import "./styles/tokens.css";
 import "./styles/base.css";
 import "./styles/components.css";
 import "./styles/companion.css";
-import { emitTo } from "@tauri-apps/api/event";
+import { emitTo, listen } from "@tauri-apps/api/event";
 import { api, asApiError, onLivePlay } from "./lib/api";
 import { duration, esc, num, pct, rankInfo, srChip } from "./lib/format";
 import { isBest, playMods, rankNumber, sessionStart, summary } from "./lib/live";
@@ -25,6 +29,10 @@ let plays: LivePlay[] = [];
 let start = Date.now();
 let choices: PoolChoice[] = [];
 let pool: PoolRow[] = [];
+/** the pool menu is open: the window is taller than the panel for it */
+let menuOpen = false;
+/** room above the panel for the pool menu */
+const MENU_ROOM = 320;
 
 async function boot(): Promise<void> {
   try {
@@ -36,6 +44,11 @@ async function boot(): Promise<void> {
   injectIconSprite();
   initControls();
   root.addEventListener("click", (e) => click(e.target as Element));
+  const hint = document.createElement("div");
+  hint.className = "cmp-hint";
+  hint.textContent = t("Hold Ctrl to click");
+  document.body.append(hint);
+  void listen<boolean>("companion-through", (e) => document.body.classList.toggle("through", e.payload));
   // no webview menu here either
   window.addEventListener("contextmenu", (e) => e.preventDefault());
   await refresh();
@@ -65,12 +78,24 @@ function render(): void {
     </header>
     <section class="cmp-stats">
       <div><i>${t("Plays")}</i><b class="num">${num(s.plays)}</b></div>
-      <div><i>${t("Played")}</i><b class="num">${s.time ? duration(s.time) : "–"}</b></div>
-      <div><i>${t("Accuracy")}</i><b class="num">${s.accuracy === null ? "–" : pct(s.accuracy)}</b></div>
-      <div><i>${t("New bests")}</i><b class="num">${num(s.bests)}</b></div>
+      <div><i>${t("Time")}</i><b class="num">${s.time ? duration(s.time) : "–"}</b></div>
+      <div><i>${t("Acc")}</i><b class="num">${s.accuracy === null ? "–" : pct(s.accuracy)}</b></div>
+      <div data-tip="${t("New bests")}"><i>${t("Bests")}</i><b class="num">${num(s.bests)}</b></div>
     </section>
     ${last ? lastPlay(last) : `<p class="cmp-empty">${t("Pass a map in osu!lazer and it shows up here.")}</p>`}
     ${poolHtml()}`;
+  if (!menuOpen) void fit();
+}
+
+/** fits the window to the panel, with `extra` room above it; resolves once the window has its size */
+function fit(extra = 0): Promise<void> {
+  const height = Math.ceil(root.getBoundingClientRect().height) + extra;
+  if (Math.abs(window.innerHeight - height) < 2) return Promise.resolve();
+  return new Promise((done) => {
+    const timer = setTimeout(done, 300);
+    window.addEventListener("resize", () => (clearTimeout(timer), done()), { once: true });
+    void api.fitCompanion(height);
+  });
 }
 
 function lastPlay(p: LivePlay): string {
@@ -156,7 +181,16 @@ function click(target: Element): void {
       }
     }
     if (!entries.length) entries.push({ label: t("No collections yet"), disabled: true });
-    openMenu(pick, entries, { minWidth: 240 });
+    menuOpen = true;
+    void fit(MENU_ROOM).then(() =>
+      openMenu(pick, entries, {
+        minWidth: 220,
+        onClose: () => {
+          menuOpen = false;
+          void fit();
+        },
+      }),
+    );
   }
 }
 

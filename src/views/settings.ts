@@ -182,7 +182,7 @@ export class SettingsView {
           <div class="setting-row">
             <div class="setting-text">
               <div class="setting-title">${t("Companion window")}</div>
-              <div class="setting-desc">${t("A small window in the corner, on top of the game: this session, your last play and a pool to work through. It shows over osu!lazer in borderless or windowed mode.")}</div>
+              <div class="setting-desc">${t("A small window in the corner, on top of the game: this session, your last play and a pool to work through. It shows over osu!lazer in borderless or windowed mode. With the cursor over it, clicks go through to the game; hold Ctrl to click it.")}</div>
             </div>
             <input type="checkbox" role="switch" data-pref-companion aria-label="${t("Companion window")}" ${p.companion ? "checked" : ""} />
           </div>

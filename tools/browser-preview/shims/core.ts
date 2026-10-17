@@ -495,6 +495,7 @@ export async function invoke<T>(cmd: string, args: Record<string, unknown> = {})
       window.open("/companion.html", "fumen-companion", "width=300,height=440");
       return undefined as T;
     case "close_companion":
+    case "fit_companion":
     case "show_main":
       return undefined as T;
     default:

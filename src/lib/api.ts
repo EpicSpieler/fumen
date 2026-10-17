@@ -75,6 +75,7 @@ export const api = {
   poolRows: (id: string, since: number) => invoke<PoolRow[]>("pool_rows", { id, since }),
   openCompanion: () => invoke<void>("open_companion"),
   closeCompanion: () => invoke<void>("close_companion"),
+  fitCompanion: (height: number) => invoke<void>("fit_companion", { height }),
   showMain: () => invoke<void>("show_main"),
   /** the player's scores on osu! for a difficulty (one API request, when asked) */
   onlineReplaysForMap: (id: string) => invoke<OnlineReplayEntry[]>("online_replays_for_map", { id }),
