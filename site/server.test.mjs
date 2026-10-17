@@ -3,11 +3,18 @@ import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { configFromEnv, createSite } from "./server.mjs";
+import { cleanCollections, configFromEnv, createSite, visitor } from "./server.mjs";
 
-// osu!'s token endpoint, played by a local server
+// osu!'s token endpoint and /me, played by a local server
 const seen = [];
+let meCalls = 0;
 const osu = createServer(async (req, res) => {
+  if (req.url === "/api/v2/me") {
+    meCalls++;
+    const ok = req.headers.authorization === `Bearer ${PLAYER_TOKEN}`;
+    res.writeHead(ok ? 200 : 401, { "Content-Type": "application/json" });
+    return res.end(JSON.stringify(ok ? { id: 5 } : { authentication: "basic" }));
+  }
   let raw = "";
   for await (const c of req) raw += c;
   const form = Object.fromEntries(new URLSearchParams(raw));
@@ -17,6 +24,7 @@ const osu = createServer(async (req, res) => {
   res.end(JSON.stringify(ok ? { token_type: "Bearer", expires_in: 86400, access_token: "a1", refresh_token: "r2", extra: "dropped" } : { error: "invalid_grant", message: "The provided authorization grant is invalid." }));
 });
 
+const PLAYER_TOKEN = "player-token-0123456789abcdef";
 let base = "";
 let site;
 // the updates folder, with a release in it and a file beside it that mustn't come out
@@ -32,7 +40,7 @@ const listen = (server) => new Promise((r) => server.listen(0, "127.0.0.1", () =
 
 beforeAll(async () => {
   const osuPort = await listen(osu);
-  const config = { ...configFromEnv({}), clientId: "71003", clientSecret: "s3cret", tokenUrl: `http://127.0.0.1:${osuPort}/oauth/token`, updatesDir: updates, statsDir: join(scratch, "stats"), statsDelay: 10 };
+  const config = { ...configFromEnv({}), clientId: "71003", clientSecret: "s3cret", tokenUrl: `http://127.0.0.1:${osuPort}/oauth/token`, updatesDir: updates, statsDir: join(scratch, "stats"), statsDelay: 10, cloudDir: join(scratch, "cloud"), osuApi: `http://127.0.0.1:${osuPort}/api/v2` };
   site = createServer(createSite(config));
   base = `http://127.0.0.1:${await listen(site)}`;
 });
@@ -43,6 +51,41 @@ afterAll(() => {
 });
 
 const post = (path, body) => fetch(base + path, { method: "POST", body: JSON.stringify(body) });
+const cloud = (method, token, body) => fetch(base + "/api/collections", { method, headers: { Authorization: `Bearer ${token}` }, body: body && JSON.stringify(body) });
+
+describe("visitors", () => {
+  const req = (ip) => ({ headers: { "cf-connecting-ip": ip }, socket: {} });
+  it("counts an IPv6 /64 as one visitor", () => {
+    expect(visitor(req("2001:db8:1:2:aaaa::1"))).toBe("2001:db8:1:2::/64");
+    expect(visitor(req("2001:DB8:1:2:ffff:1:2:3"))).toBe("2001:db8:1:2::/64");
+    expect(visitor(req("2001:db8::5"))).toBe("2001:db8:0:0::/64");
+    expect(visitor(req("203.0.113.9"))).toBe("203.0.113.9");
+    expect(visitor(req("::ffff:203.0.113.9"))).toBe("203.0.113.9");
+  });
+});
+
+describe("cloud collections", () => {
+  const md5 = "0123456789ABCDEF0123456789abcdef";
+  it("keeps what the app would keep", () => {
+    expect(cleanCollections("nope")).toBeNull();
+    expect(
+      cleanCollections([
+        { kind: "fumen", name: " Mine\u0007", maps: [{ md5, b: 75, s: 1 }, { md5: "x" }, { md5, b: -1, s: "1" }, null] },
+        { kind: "smart", name: "Smart" },
+        { kind: "smart", name: "Smart", query: "keys=7" },
+        { kind: "evil", name: "x", maps: [] },
+        { kind: "lazer", name: "   ", maps: [] },
+        { kind: "stable", name: "y".repeat(500), maps: "no" },
+        "junk",
+      ]),
+    ).toEqual([
+      { kind: "fumen", name: "Mine", maps: [{ md5: md5.toLowerCase(), b: 75, s: 1 }, { md5: md5.toLowerCase() }] },
+      { kind: "smart", name: "Smart", query: "keys=7", maps: [] },
+      { kind: "stable", name: "y".repeat(100), maps: [] },
+    ]);
+    expect(cleanCollections(Array.from({ length: 3000 }, (_, i) => ({ kind: "fumen", name: `c${i}`, maps: [] })))).toHaveLength(2000);
+  });
+});
 
 describe("site", () => {
   it("counts downloads and the people whose Fumen starts, once each", async () => {
@@ -54,6 +97,8 @@ describe("site", () => {
     expect((await post("/api/ping", { id, version: "<script>" })).status).toBe(400);
     expect((await fetch(base + "/download/windows", { redirect: "manual" })).status).toBe(302);
     expect((await fetch(base + "/download/windows", { method: "HEAD", redirect: "manual" })).status).toBe(302);
+    // the same visitor again the same day: not another download
+    expect((await fetch(base + "/download/windows", { redirect: "manual" })).status).toBe(302);
     expect(await (await fetch(base + "/api/stats")).json()).toEqual({ downloads: 1, users: 2, everyone: 2 });
     await new Promise((r) => setTimeout(r, 100));
     const saved = JSON.parse(readFileSync(join(scratch, "stats", "stats.json"), "utf8"));
@@ -61,6 +106,50 @@ describe("site", () => {
     expect(saved.installs[id][2]).toBe("1.0.1");
   });
 
+
+  it("saves, hands back and deletes a player's collections", async () => {
+    expect((await cloud("GET", PLAYER_TOKEN)).status).toBe(404);
+    const put = await cloud("PUT", PLAYER_TOKEN, { collections: [{ kind: "fumen", name: "A", maps: [{ md5: "a".repeat(32) }] }, { kind: "evil", name: "B" }] });
+    expect(put.status).toBe(200);
+    expect((await put.json()).collections).toBe(1);
+    const got = await (await cloud("GET", PLAYER_TOKEN)).json();
+    expect(got).toMatchObject({ user: 5, collections: [{ kind: "fumen", name: "A", maps: [{ md5: "a".repeat(32) }] }] });
+    expect((await cloud("PUT", PLAYER_TOKEN, { collections: "x" })).status).toBe(400);
+    expect((await cloud("DELETE", PLAYER_TOKEN)).status).toBe(204);
+    expect((await cloud("GET", PLAYER_TOKEN)).status).toBe(404);
+  });
+
+  it("asks osu! about a refused token once a minute, not every time", async () => {
+    const before = meCalls;
+    for (let i = 0; i < 3; i++) expect((await cloud("GET", "not-a-real-token-0123456789")).status).toBe(401);
+    expect(meCalls - before).toBe(1);
+  });
+
+  it("answers broken addresses without falling over", async () => {
+    expect((await fetch(base + "/%E0%A4%A")).status).toBe(404);
+    expect((await fetch(base + "/a%00b")).status).toBe(404);
+  });
+
+  it("sends its security headers", async () => {
+    const page = await fetch(base + "/");
+    expect(page.headers.get("strict-transport-security")).toContain("max-age=");
+    expect(page.headers.get("permissions-policy")).toContain("camera=()");
+    const stats = await fetch(base + "/api/stats");
+    expect(stats.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(stats.headers.get("strict-transport-security")).toContain("max-age=");
+  });
+
+  it("forgets people not seen for 90 days", async () => {
+    const dir = join(scratch, "old-stats");
+    mkdirSync(dir);
+    const now = Date.now();
+    const day = 24 * 3600_000;
+    writeFileSync(join(dir, "stats.json"), JSON.stringify({ version: 1, downloads: { windows: 3 }, installs: { ["b".repeat(32)]: [now - 200 * day, now - 100 * day, "0.9.0"], ["c".repeat(32)]: [now - 50 * day, now - 40 * day, "1.0.0"] } }));
+    const other = createServer(createSite({ ...configFromEnv({}), statsDir: dir }));
+    const url = `http://127.0.0.1:${await listen(other)}`;
+    expect(await (await fetch(url + "/api/stats")).json()).toEqual({ downloads: 3, users: 0, everyone: 1 });
+    other.close();
+  });
 
   it("serves the page", async () => {
     const r = await fetch(base + "/");

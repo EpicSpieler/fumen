@@ -13,14 +13,16 @@
 // signed installers next to it, from the updates folder that scripts/release.mjs fills. A site
 // deploy never touches that folder.
 //
-// And it counts, for the numbers on the homepage: downloads through /download/<platform>, and the
-// start ping Fumen sends (/api/ping: a random id made on the player's PC and the version, nothing
-// else), so people are counted once however often they start it. /api/stats has the totals.
+// And it counts: downloads through /download/<platform> (once per visitor and day), and the start
+// ping Fumen sends (/api/ping: a random id made on the player's PC and the version, nothing else),
+// so people are counted once however often they start it; ids not seen for 90 days are forgotten.
+// /api/stats has the totals.
 //
 // No dependencies (Node 20+): `node --env-file=.env server.mjs`, settings as in .env.example.
 import { createReadStream } from "node:fs";
 import { createServer } from "node:http";
-import { mkdir, readdir, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { createHash, randomBytes } from "node:crypto";
+import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { extname, join, normalize, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -41,16 +43,84 @@ const TYPES = {
 /** what /updates/ hands out: a plain file name, no folders */
 const UPDATE_FILE = /^[A-Za-z0-9][A-Za-z0-9._-]*\.(json|exe|sig|zip|dmg)$/;
 
+/** on every answer */
+const BASE_HEADERS = {
+  "Strict-Transport-Security": "max-age=31536000",
+  "X-Content-Type-Options": "nosniff",
+};
 const PAGE_HEADERS = {
   "Content-Security-Policy": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
-  "X-Content-Type-Options": "nosniff",
   "Referrer-Policy": "strict-origin-when-cross-origin",
+  "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
 };
 
 /** where Fumen comes back to: "<port>-<nonce>" */
 const STATE = /^(\d{4,5})-([A-Za-z0-9_-]{16,128})$/;
-/** requests to /oauth/token and /oauth/refresh per address and minute */
-const OAUTH_PER_MINUTE = 30;
+/** requests per address (an IPv6 /64 counts as one) and minute, per kind */
+const PER_MINUTE = { oauth: 30, collections: 30, ping: 10 };
+/** what the cloud keeps per player (the app keeps to the same: src-tauri/src/cloud.rs) */
+const MAX_COLLECTIONS = 2000;
+const MAX_MAPS = 200_000;
+const MAX_QUERY = 8192;
+/** a PUT's body; the app reads at most 16 MB back */
+const MAX_CLOUD_BODY = 16 * 1024 * 1024;
+const KINDS = new Set(["fumen", "smart", "lazer", "stable"]);
+/** people not seen for this long are forgotten */
+const FORGET = 90 * 24 * 3600_000;
+const MAX_INSTALLS = 500_000;
+
+/** Who a request is from: the visitor's address (Cloudflare's header, as the site only listens
+ * behind the tunnel), IPv6 cut to its /64, which one person usually has whole. */
+export function visitor(req) {
+  const ip = String(req.headers["cf-connecting-ip"] ?? req.socket.remoteAddress ?? "?");
+  if (!ip.includes(":")) return ip;
+  if (ip.toLowerCase().startsWith("::ffff:") && ip.includes(".")) return ip.slice(7);
+  const [head, tail] = ip.toLowerCase().split("::");
+  const parts = head ? head.split(":") : [];
+  // "a:b::c" style addresses: the missing groups are zeros
+  if (tail !== undefined && parts.length < 4) parts.push(...Array(4 - parts.length).fill("0"));
+  return parts.slice(0, 4).map((p) => p.replace(/^0+(?=.)/, "")).join(":") + "::/64";
+}
+
+/** A player's collections as the cloud keeps them, cleaned the way the app cleans them; null when
+ * it isn't a list of collections at all. */
+export function cleanCollections(list) {
+  if (!Array.isArray(list)) return null;
+  let mapsLeft = MAX_MAPS;
+  const out = [];
+  for (const c of list) {
+    if (out.length >= MAX_COLLECTIONS) break;
+    if (!c || typeof c !== "object" || !KINDS.has(c.kind) || typeof c.name !== "string") continue;
+    const name = [...c.name.replace(/\p{Cc}/gu, " ").trim()].slice(0, 100).join("");
+    if (!name) continue;
+    const query = typeof c.query === "string" && c.query.length <= MAX_QUERY ? c.query : undefined;
+    if (c.kind === "smart" && query === undefined) continue;
+    const maps = [];
+    for (const m of Array.isArray(c.maps) ? c.maps : []) {
+      if (mapsLeft <= 0) break;
+      if (!m || typeof m.md5 !== "string" || !/^[0-9a-fA-F]{32}$/.test(m.md5)) continue;
+      const map = { md5: m.md5.toLowerCase() };
+      if (Number.isSafeInteger(m.b) && m.b > 0) map.b = m.b;
+      if (Number.isSafeInteger(m.s) && m.s > 0) map.s = m.s;
+      maps.push(map);
+      mapsLeft--;
+    }
+    out.push({ name, kind: c.kind, ...(query === undefined ? {} : { query }), maps });
+  }
+  return out;
+}
+
+/** a file written whole or not at all, under a temporary name no other write uses */
+async function writeWhole(file, data) {
+  const tmp = `${file}.${process.pid}-${randomBytes(6).toString("hex")}.tmp`;
+  try {
+    await writeFile(tmp, data);
+    await rename(tmp, file);
+  } catch (e) {
+    await rm(tmp, { force: true });
+    throw e;
+  }
+}
 
 export function configFromEnv(env = process.env) {
   return {
@@ -74,20 +144,23 @@ export function createSite(config) {
   const redirectUri = `${config.origin}/oauth/callback`;
   const hits = new Map();
 
-  const limited = (req) => {
-    const who = req.headers["cf-connecting-ip"] ?? req.socket.remoteAddress ?? "?";
+  /** true when this visitor asked for this kind of thing too often in the last minute */
+  const limited = (req, kind) => {
+    const who = `${kind} ${visitor(req)}`;
     const now = Date.now();
     const h = hits.get(who);
     if (!h || now - h.since > 60_000) {
+      if (hits.size >= 10_000) for (const [k, v] of hits) if (now - v.since > 60_000) hits.delete(k);
+      // still full (everyone at once): the oldest go
+      if (hits.size >= 10_000) for (const k of [...hits.keys()].slice(0, 2_000)) hits.delete(k);
       hits.set(who, { since: now, n: 1 });
-      if (hits.size > 10_000) for (const [k, v] of hits) if (now - v.since > 60_000) hits.delete(k);
       return false;
     }
-    return ++h.n > OAUTH_PER_MINUTE;
+    return ++h.n > PER_MINUTE[kind];
   };
 
   const send = (res, status, body, headers = {}) => {
-    res.writeHead(status, { "Cache-Control": "no-store", ...headers });
+    res.writeHead(status, { "Cache-Control": "no-store", "Content-Type": TYPES[".txt"], ...BASE_HEADERS, ...headers });
     res.end(body);
   };
   const json = (res, status, value) => send(res, status, JSON.stringify(value), { "Content-Type": "application/json" });
@@ -134,7 +207,13 @@ export function createSite(config) {
   }
 
   async function staticFile(res, pathname, head) {
-    let rel = pathname === "/" ? "index.html" : decodeURIComponent(pathname).replace(/^\/+/, "").replace(/\/+$/, "");
+    let rel;
+    try {
+      rel = pathname === "/" ? "index.html" : decodeURIComponent(pathname).replace(/^\/+/, "").replace(/\/+$/, "");
+    } catch {
+      return false; // a broken %-escape
+    }
+    if (rel.includes("\0")) return false;
     // pages without their extension: /roadmap is roadmap.html
     if (rel && !extname(rel)) rel += ".html";
     const file = normalize(join(config.publicDir, rel));
@@ -150,7 +229,8 @@ export function createSite(config) {
       "Content-Type": type,
       // pages, styles and scripts are checked every time (they change together); the rest keeps a day
       "Cache-Control": type.startsWith("text/") ? "no-cache" : "public, max-age=86400",
-      ...(type.startsWith("text/html") ? PAGE_HEADERS : { "X-Content-Type-Options": "nosniff" }),
+      ...BASE_HEADERS,
+      ...(type.startsWith("text/html") ? PAGE_HEADERS : {}),
     });
     res.end(head ? undefined : data);
     return true;
@@ -173,7 +253,7 @@ export function createSite(config) {
       "Content-Type": json ? "application/json" : "application/octet-stream",
       "Content-Length": info.size,
       "Cache-Control": json ? "no-store" : "public, max-age=31536000, immutable",
-      "X-Content-Type-Options": "nosniff",
+      ...BASE_HEADERS,
       ...(json ? {} : { "Content-Disposition": `attachment; filename="${name}"` }),
     });
     if (head) res.end();
@@ -223,7 +303,30 @@ export function createSite(config) {
     (counts ??= readFile(join(config.statsDir, "stats.json"), "utf8")
       .then(JSON.parse)
       .catch(() => null)
-      .then((c) => ({ version: 1, downloads: c?.downloads ?? {}, installs: c?.installs ?? {} })));
+      .then((c) => ({ version: 1, downloads: c?.downloads ?? {}, installs: c?.installs ?? {} }))
+      .then((c) => (forget(c), c)));
+  /** People not seen for 90 days are forgotten; past the cap, the longest unseen go first. */
+  let forgotAt = 0;
+  const forget = (c) => {
+    const now = Date.now();
+    forgotAt = now;
+    for (const [id, seen] of Object.entries(c.installs)) if (!(now - seen?.[1] < FORGET)) delete c.installs[id];
+    const ids = Object.keys(c.installs);
+    if (ids.length > MAX_INSTALLS) {
+      ids.sort((a, b) => c.installs[a][1] - c.installs[b][1]);
+      for (const id of ids.slice(0, ids.length - MAX_INSTALLS)) delete c.installs[id];
+    }
+  };
+  /** a download counts once per visitor, platform and day */
+  let counted = { day: "", seen: new Set() };
+  const firstToday = (req, platform) => {
+    const day = new Date().toISOString().slice(0, 10);
+    if (counted.day !== day) counted = { day, seen: new Set() };
+    const key = `${platform} ${visitor(req)}`;
+    if (counted.seen.has(key)) return false;
+    counted.seen.add(key);
+    return true;
+  };
   const saveCounts = () => {
     saving ??= new Promise((done) =>
       setTimeout(async () => {
@@ -232,8 +335,7 @@ export function createSite(config) {
           const c = await counts;
           const file = join(config.statsDir, "stats.json");
           await mkdir(config.statsDir, { recursive: true });
-          await writeFile(`${file}.tmp`, JSON.stringify(c));
-          await rename(`${file}.tmp`, file);
+          await writeWhole(file, JSON.stringify(c));
         } catch (e) {
           console.error("[site] stats:", e instanceof Error ? e.message : e);
         }
@@ -245,31 +347,43 @@ export function createSite(config) {
   /** people whose Fumen started in the last 30 days */
   const ACTIVE = 30 * 24 * 3600_000;
 
-  /** osu! tokens already checked, to the player behind them (for a few minutes) */
+  /** osu! tokens already checked (by their hash): the player behind them for a few minutes, or null
+   * for a minute when osu! refused them */
   const players = new Map();
   /** The osu! player whose token comes with the request (asked of osu!), or null. */
   async function osuPlayer(req) {
     const auth = req.headers.authorization ?? "";
     const m = /^Bearer ([A-Za-z0-9._~+/=-]{20,8192})$/.exec(auth);
     if (!m) return null;
-    const hit = players.get(m[1]);
+    const key = createHash("sha256").update(m[1]).digest("base64");
+    const hit = players.get(key);
     if (hit && hit.until > Date.now()) return hit.id;
+    const remember = (id, ms) => {
+      if (players.size > 2000) players.clear();
+      players.set(key, { id, until: Date.now() + ms });
+      return id;
+    };
     let r;
     try {
       r = await fetch(`${config.osuApi}/me`, { headers: { Authorization: auth, Accept: "application/json" }, signal: AbortSignal.timeout(15_000) });
     } catch {
       return null;
     }
-    if (!r.ok) return null;
+    if (!r.ok) return r.status === 401 || r.status === 403 ? remember(null, 60_000) : null;
     const id = Number((await r.json().catch(() => ({}))).id);
     if (!Number.isInteger(id) || id <= 0) return null;
-    if (players.size > 1000) players.clear();
-    players.set(m[1], { id, until: Date.now() + 10 * 60_000 });
-    return id;
+    return remember(id, 10 * 60_000);
   }
+  /** players whose collections are being changed right now */
+  const writing = new Set();
 
   return async function handle(req, res) {
-    const url = new URL(req.url ?? "/", "http://site");
+    let url;
+    try {
+      url = new URL(req.url ?? "/", "http://site");
+    } catch {
+      return send(res, 400, "That address isn't readable.");
+    }
     const { pathname } = url;
     try {
       if (pathname === "/health") {
@@ -291,7 +405,7 @@ export function createSite(config) {
       }
 
       if ((pathname === "/oauth/token" || pathname === "/oauth/refresh") && req.method === "POST") {
-        if (limited(req)) return json(res, 429, { error: "slow_down", message: "Too many logins at once. Wait a minute." });
+        if (limited(req, "oauth")) return json(res, 429, { error: "slow_down", message: "Too many logins at once. Wait a minute." });
         let input;
         try {
           input = await body(req);
@@ -307,8 +421,8 @@ export function createSite(config) {
       }
 
       // a player's collections, kept for their other Fumens (the same osu! login)
-      if (pathname === "/api/collections" && (req.method === "GET" || req.method === "PUT")) {
-        if (limited(req)) return json(res, 429, { error: "slow_down", message: "Too many requests. Wait a minute." });
+      if (pathname === "/api/collections" && ["GET", "PUT", "DELETE"].includes(req.method)) {
+        if (limited(req, "collections")) return json(res, 429, { error: "slow_down", message: "Too many requests. Wait a minute." });
         const id = await osuPlayer(req);
         if (!id) return json(res, 401, { error: "unauthorized", message: "osu! didn't accept the login. Log in again in Fumen's settings." });
         const file = join(config.cloudDir, `${id}.json`);
@@ -316,22 +430,33 @@ export function createSite(config) {
           const data = await readFile(file, "utf8").catch(() => null);
           return data ? send(res, 200, data, { "Content-Type": "application/json" }) : json(res, 404, { error: "none", message: "Nothing saved in the cloud yet." });
         }
-        let input;
+        // one change per player at a time
+        if (writing.has(id)) return json(res, 409, { error: "busy", message: "Your collections are being saved already. Try again in a moment." });
+        writing.add(id);
         try {
-          input = await body(req, 32 * 1024 * 1024);
-        } catch {
-          return json(res, 400, { error: "bad_request", message: "That request wasn't readable." });
+          if (req.method === "DELETE") {
+            await rm(file, { force: true });
+            return send(res, 204, "");
+          }
+          let input;
+          try {
+            input = await body(req, MAX_CLOUD_BODY);
+          } catch {
+            return json(res, 400, { error: "bad_request", message: "That request wasn't readable." });
+          }
+          const collections = cleanCollections(input?.collections);
+          if (!collections) return json(res, 400, { error: "bad_request", message: "No collections." });
+          const saved = Date.now();
+          await mkdir(config.cloudDir, { recursive: true });
+          await writeWhole(file, JSON.stringify({ version: 1, user: id, saved, collections }));
+          return json(res, 200, { saved, collections: collections.length });
+        } finally {
+          writing.delete(id);
         }
-        if (!Array.isArray(input.collections)) return json(res, 400, { error: "bad_request", message: "No collections." });
-        const saved = Date.now();
-        await mkdir(config.cloudDir, { recursive: true });
-        await writeFile(`${file}.tmp`, JSON.stringify({ version: 1, user: id, saved, collections: input.collections }));
-        await rename(`${file}.tmp`, file);
-        return json(res, 200, { saved, collections: input.collections.length });
       }
 
       if (req.method === "POST" && pathname === "/api/ping") {
-        if (limited(req)) return json(res, 429, { error: "slow_down" });
+        if (limited(req, "ping")) return json(res, 429, { error: "slow_down" });
         let input;
         try {
           input = await body(req, 1024);
@@ -344,6 +469,7 @@ export function createSite(config) {
         const c = await loadCounts();
         const now = Date.now();
         c.installs[id] = [c.installs[id]?.[0] ?? now, now, version];
+        if (now - forgotAt > 3600_000 || Object.keys(c.installs).length > MAX_INSTALLS) forget(c);
         void saveCounts();
         return send(res, 204, "");
       }
@@ -365,7 +491,7 @@ export function createSite(config) {
         const r = await releases();
         const pick = r?.[DOWNLOADS[pathname.slice(10)]];
         if (!pick) return message(res, 404, "Not there yet", "This download isn't available right now. <a href=\"/\">Back to Fumen</a>");
-        if (req.method === "GET") {
+        if (req.method === "GET" && firstToday(req, pathname.slice(10))) {
           const c = await loadCounts();
           const key = pathname.slice(10);
           c.downloads[key] = (c.downloads[key] ?? 0) + 1;
