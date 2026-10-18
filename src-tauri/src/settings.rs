@@ -18,6 +18,10 @@ pub struct Settings {
     pub stable_path: Option<String>,
     /// stable's beatmaps in the library too (when it's found).
     pub use_stable: bool,
+    /// Imports may go into osu!stable: the one place Fumen writes into stable's files (it puts the
+    /// downloaded .osz into stable's Songs folder, stable imports it on its next start). Off unless
+    /// turned on behind the warnings in Settings › osu!stable.
+    pub stable_import: bool,
     /// The start ping (ping.rs): counted among the people using Fumen.
     pub start_ping: bool,
     pub ui: Map<String, Value>,
@@ -25,7 +29,7 @@ pub struct Settings {
 
 impl Default for Settings {
     fn default() -> Self {
-        Settings { lazer_path: None, auto_rescan: true, stable_path: None, use_stable: true, start_ping: true, ui: Map::new() }
+        Settings { lazer_path: None, auto_rescan: true, stable_path: None, use_stable: true, stable_import: false, start_ping: true, ui: Map::new() }
     }
 }
 

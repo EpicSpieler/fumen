@@ -32,6 +32,10 @@ export const rust: Record<string, string> = {
   "Not an osu! beatmap link": "Kein osu!-Beatmap-Link",
   "Same set as above": "Dasselbe Set wie oben",
   "Already in your library": "Schon in deiner Bibliothek",
+  "Already waiting in osu!stable's Songs folder": "Wartet schon im Songs-Ordner von osu!stable",
+  "Importing into osu!stable is turned off (Settings › osu!stable).": "Importieren in osu!stable ist ausgeschaltet (Einstellungen › osu!stable).",
+  "osu!stable wasn't found. Pick its folder in Settings.": "osu!stable wurde nicht gefunden. Wähle seinen Ordner in den Einstellungen.",
+  "osu!stable's Songs folder wasn't found.": "Der Songs-Ordner von osu!stable wurde nicht gefunden.",
   "The importer didn't report on this set": "Der Importer hat zu diesem Set nichts gemeldet",
   "lazer found no beatmaps in the download": "lazer hat im Download keine Beatmaps gefunden",
 

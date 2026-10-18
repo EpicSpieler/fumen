@@ -1,6 +1,7 @@
 //! osu!stable as a source: its `osu!.db` (every difficulty with its metadata), the files in its
 //! Songs folder, its `collection.db` and its `scores.db` (the plays on this computer, into the
-//! history as lazer would have them). Read only — Fumen never writes stable's files.
+//! history as lazer would have them). Read only — Fumen never writes stable's files, except the one opt-in exception in
+//! `stable_import.rs` (downloaded sets into the Songs folder).
 //!
 //! stable's sets go into the same tables as lazer's (`sets.source = 'stable'`). lazer keeps files
 //! by content hash; stable keeps them by name, so each file Fumen needs (charts, audio,

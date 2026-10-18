@@ -30,6 +30,7 @@ mod protocol;
 mod settings;
 mod skins;
 mod stable;
+mod stable_import;
 mod stars;
 mod taiko;
 #[cfg(test)]
@@ -1267,17 +1268,18 @@ async fn search_mirrors(query: mirror_search::Query) -> Result<mirror_search::Pa
 }
 
 /// Downloads the sets behind pasted osu! links and imports them into lazer (see
-/// `lazer_import.rs` for when that's allowed), then updates Fumen's library. Emits
-/// `import-progress` per line along the way.
+/// `lazer_import.rs` for when that's allowed), then updates Fumen's library. With `target`
+/// "stable" they go into osu!stable's Songs folder instead (`stable_import.rs`, only while that's
+/// turned on). Emits `import-progress` per line along the way.
 #[tauri::command]
-async fn import_beatmaps(app: AppHandle, links: Vec<String>) -> Result<ImportSummary> {
+async fn import_beatmaps(app: AppHandle, links: Vec<String>, target: Option<String>) -> Result<ImportSummary> {
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
         if state.scanning.swap(true, Ordering::SeqCst) {
             return Err(Error::known("busy", "The library is being updated; try again in a moment."));
         }
         state.import_cancel.store(false, Ordering::SeqCst);
-        let result = run_import(&app, &state, &links);
+        let result = run_import(&app, &state, &links, target.as_deref() == Some("stable"));
         state.scanning.store(false, Ordering::SeqCst);
         result
     })
@@ -1285,22 +1287,35 @@ async fn import_beatmaps(app: AppHandle, links: Vec<String>) -> Result<ImportSum
     .map_err(|e| Error::known("internal", e.to_string()))?
 }
 
-fn run_import(app: &AppHandle, state: &AppState, links: &[String]) -> Result<ImportSummary> {
+fn run_import(app: &AppHandle, state: &AppState, links: &[String], into_stable: bool) -> Result<ImportSummary> {
     let emit = |index: usize, stage: &'static str, set: Option<u32>, title: Option<String>, message: Option<String>| {
         let p = ImportProgress { index, stage, set, title, done: 0, total: 0, message };
         let _ = app.emit("import-progress", p);
     };
     let mut summary = ImportSummary::default();
 
-    let storage = state
-        .storage()
-        .ok_or_else(|| Error::known("lazer-not-found", "osu!lazer's data folder wasn't found. Pick it in Settings."))?;
+    // into lazer (its data folder), or into stable (its Songs folder); nothing gets downloaded for
+    // an import that couldn't happen anyway
     let compat = state.compat();
-    // nothing gets downloaded for an import that couldn't happen anyway
-    let st = lazer_import::status(Some(&storage), &compat);
-    if let Some(reason) = st.reason {
-        return Err(Error::known(lazer_import::error_code(reason), st.message.unwrap_or_default()));
-    }
+    let (storage, songs) = if into_stable {
+        if !state.settings().stable_import {
+            return Err(Error::known("stable-import-off", "Importing into osu!stable is turned off (Settings › osu!stable)."));
+        }
+        let install = state
+            .stable_install()
+            .ok_or_else(|| Error::known("stable-not-found", "osu!stable wasn't found. Pick its folder in Settings."))?;
+        (PathBuf::new(), Some(PathBuf::from(install.songs)))
+    } else {
+        let storage = state
+            .storage()
+            .ok_or_else(|| Error::known("lazer-not-found", "osu!lazer's data folder wasn't found. Pick it in Settings."))?;
+        let st = lazer_import::status(Some(&storage), &compat);
+        if let Some(reason) = st.reason {
+            return Err(Error::known(lazer_import::error_code(reason), st.message.unwrap_or_default()));
+        }
+        (storage, None)
+    };
+    let source = if into_stable { "stable" } else { "lazer" };
 
     // links → sets (each set once)
     let mut sets: Vec<(usize, u32)> = Vec::new();
@@ -1337,8 +1352,8 @@ fn run_import(app: &AppHandle, state: &AppState, links: &[String]) -> Result<Imp
         state
             .db()
             .query_row(
-                "SELECT artist || ' - ' || title FROM sets WHERE online_id = ?1 AND source = 'lazer' LIMIT 1",
-                [set],
+                "SELECT artist || ' - ' || title FROM sets WHERE online_id = ?1 AND source = ?2 LIMIT 1",
+                rusqlite::params![set, source],
                 |r| r.get::<_, String>(0),
             )
             .optional()
@@ -1348,6 +1363,11 @@ fn run_import(app: &AppHandle, state: &AppState, links: &[String]) -> Result<Imp
     sets.retain(|&(i, set)| match title_of(set) {
         Some(title) => {
             emit(i, "skipped", Some(set), Some(title), Some("Already in your library".into()));
+            summary.skipped += 1;
+            false
+        }
+        None if songs.as_deref().is_some_and(|songs| stable_import::waiting(songs, set)) => {
+            emit(i, "skipped", Some(set), None, Some("Already waiting in osu!stable's Songs folder".into()));
             summary.skipped += 1;
             false
         }
@@ -1436,6 +1456,24 @@ fn run_import(app: &AppHandle, state: &AppState, links: &[String]) -> Result<Imp
                     break;
                 }
                 continue;
+            }
+            // into stable: each set into its Songs folder as soon as it's downloaded
+            if let Some(songs) = &songs {
+                for (i, set, path) in ready.drain(..) {
+                    emit(i, "importing", Some(set), None, None);
+                    match stable_import::put(&path, songs, set) {
+                        Ok(()) => {
+                            emit(i, "done", Some(set), None, None);
+                            summary.imported += 1;
+                        }
+                        Err(e) => {
+                            let _ = std::fs::remove_file(&path);
+                            emit(i, "error", Some(set), None, Some(e.to_string()));
+                            summary.failed += 1;
+                        }
+                    }
+                    waiting.fetch_sub(1, Ordering::SeqCst);
+                }
             }
             if ready.len() >= IMPORT_BATCH || (!downloading && !ready.is_empty()) {
                 let batch: Vec<(usize, u32, PathBuf)> = ready.drain(..ready.len().min(IMPORT_BATCH)).collect();
