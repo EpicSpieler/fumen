@@ -58,8 +58,8 @@
   font-size: var(--fs-11);
 }
 
-.imp-tabs { align-self: flex-start; margin-top: -2px; }
-.imp-tabs[hidden] { display: none; }
+.imp-modes { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-top: -2px; }
+.imp-modes[hidden], .imp-target[hidden] { display: none; }
 
 /* ---------- Maps you've played: before the import ---------- */
 .imp-played {

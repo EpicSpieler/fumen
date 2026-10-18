@@ -5,17 +5,23 @@
    mirrors' search), whose sets wait in a queue while another import runs. Downloads run a few at
    a time while lazer imports what's ready in batches; each set is a card moving along, like
    lazer's own download notifications. The dialog can be closed while an import runs; reopening
-   it shows where it is. */
+   it shows where it is.
+
+   With imports into osu!stable turned on (Settings › osu!stable, behind two warnings) the dialog
+   can send sets there instead: into stable's Songs folder (src-tauri/src/stable_import.rs), which
+   stable imports on its next start. Choosing it asks once more each session. */
 import { api, asApiError, onImportProgress, onPlayedProgress } from "../lib/api";
 import { esc, fixed, num } from "../lib/format";
 import { readLinks } from "../lib/links";
-import { Emitter, events, refreshStatus, reloadLibrary } from "../lib/store";
+import { Emitter, events, refreshStatus, reloadLibrary, store } from "../lib/store";
 import type { ImportProgress, ImportStage, ImportSummary, LazerImportStatus, OsuAccount, PlayedFound } from "../lib/types";
-import { attachSegIndicator, closeAnimated, reduceMotion, toast } from "../ui/controls";
+import { attachSegIndicator, closeAnimated, reduceMotion, toast, uiConfirm } from "../ui/controls";
 import { icon } from "../ui/icons";
 import { fromRust, t, tn } from "../lib/i18n";
 
 type Mode = "links" | "played";
+/** where the sets go */
+type Target = "lazer" | "stable";
 /** where an import's sets came from: a tab of the dialog, or Browse */
 type From = Mode | "search";
 
@@ -40,6 +46,8 @@ interface Job {
   running: boolean;
   /** where the sets came from */
   from: From;
+  /** where they go */
+  target: Target;
   /** Stop was pressed; the sets being imported right now still go in */
   stopping?: boolean;
   summary?: ImportSummary;
@@ -67,6 +75,17 @@ let dialog: ImportDialog | null = null;
 let repairing = false;
 /** sets from Browse waiting for the running import to end */
 let queued: Line[] = [];
+/** where the next import goes: osu!lazer, or osu!stable when that's turned on */
+let target: Target = "lazer";
+/** the warning before importing into stable was answered this session */
+let stableAsked = false;
+
+/** imports into osu!stable are turned on and stable is there */
+const stableAllowed = (): boolean => !!store.settings?.stableImport && !!store.status?.stable?.install;
+/** where the next import really goes (stable only while it's allowed) */
+const goesTo = (): Target => (target === "stable" && stableAllowed() ? "stable" : "lazer");
+/** where Browse's sets go right now */
+export const importTarget = (): Target => goesTo();
 
 /** a set's import moved along (Browse follows its sets with it) */
 export const importEvents = new Emitter<{ set: number }>();
@@ -145,6 +164,8 @@ const words = (list: [string, string?][]) =>
 class ImportDialog {
   private readonly el: HTMLElement;
   private readonly tabsEl: HTMLElement;
+  private readonly modesEl: HTMLElement;
+  private readonly targetEl: HTMLElement;
   private readonly subEl: HTMLElement;
   private readonly input: HTMLTextAreaElement;
   private readonly playedEl: HTMLElement;
@@ -187,9 +208,15 @@ class ImportDialog {
           <div class="imp-title" id="imp-title">${t("Add beatmaps")}</div>
           <div class="imp-sub"></div>
         </div>
-        <div class="seg-pill imp-tabs" role="tablist" aria-label="${t("Where the beatmaps come from")}">
-          <button type="button" role="tab" data-mode="links">${t("Links")}</button>
-          <button type="button" role="tab" data-mode="played">${t("Maps you've played")}</button>
+        <div class="imp-modes">
+          <div class="seg-pill imp-tabs" role="tablist" aria-label="${t("Where the beatmaps come from")}">
+            <button type="button" role="tab" data-mode="links">${t("Links")}</button>
+            <button type="button" role="tab" data-mode="played">${t("Maps you've played")}</button>
+          </div>
+          <div class="seg-pill imp-target" aria-label="${t("Where the beatmaps go")}" hidden>
+            <button type="button" data-target="lazer">osu!lazer</button>
+            <button type="button" data-target="stable">osu!stable</button>
+          </div>
         </div>
         <div class="imp-lazer"></div>
         <div class="imp-repair" hidden></div>
@@ -209,6 +236,8 @@ class ImportDialog {
       </div>`;
     this.el = el;
     this.tabsEl = el.querySelector(".imp-tabs")!;
+    this.modesEl = el.querySelector(".imp-modes")!;
+    this.targetEl = el.querySelector(".imp-target")!;
     this.subEl = el.querySelector(".imp-sub")!;
     this.input = el.querySelector(".imp-input")!;
     this.playedEl = el.querySelector(".imp-played")!;
@@ -237,6 +266,10 @@ class ImportDialog {
       this.render(true);
       if (mode === "links") this.input.focus();
     });
+    this.targetEl.addEventListener("click", (e) => {
+      const b = (e.target as Element).closest<HTMLElement>("[data-target]");
+      if (b && !job?.running) void this.pickTarget(b.dataset.target as Target);
+    });
     this.input.addEventListener("input", () => {
       draft = this.input.value;
       // editing the links clears why the last try didn't start
@@ -252,6 +285,7 @@ class ImportDialog {
     document.addEventListener("keydown", this.onKey, true);
     document.body.appendChild(el);
     attachSegIndicator(this.tabsEl);
+    attachSegIndicator(this.targetEl);
 
     this.render(true);
     void this.refreshStatus();
@@ -272,6 +306,27 @@ class ImportDialog {
     document.removeEventListener("keydown", this.onKey, true);
     closeAnimated(this.el);
     dialog = null;
+  }
+
+  /** stable asks first, once a session */
+  private async pickTarget(to: Target): Promise<void> {
+    if (to === target) return;
+    if (to === "stable" && !stableAsked) {
+      const ok = await uiConfirm(
+        t("The sets go into osu!stable's Songs folder, and stable imports them with its own code the next time it starts. This is the one place Fumen writes into stable's files; it can't check or undo stable's import."),
+        { title: t("Import into osu!stable?"), confirmLabel: t("Into osu!stable"), danger: true },
+      );
+      if (!ok) return;
+      stableAsked = true;
+    }
+    target = to;
+    if (job && !job.running && !showsRows(job)) job = null;
+    this.render();
+  }
+
+  /** the import can start (lazer is ready, or it goes into stable) */
+  private ready(): boolean {
+    return goesTo() === "stable" || !!this.status?.ready;
   }
 
   private async refreshStatus(): Promise<void> {
@@ -312,14 +367,23 @@ class ImportDialog {
   render(fromDraft = false): void {
     const rows = showsRows(job);
     if (fromDraft && this.input.value !== draft) this.input.value = draft;
-    this.tabsEl.hidden = rows;
+    this.modesEl.hidden = rows;
+    this.targetEl.hidden = !stableAllowed();
+    const to = goesTo();
+    this.targetEl.querySelectorAll<HTMLElement>("[data-target]").forEach((b) => b.classList.toggle("active", b.dataset.target === to));
     this.tabsEl.querySelectorAll<HTMLElement>("[data-mode]").forEach((b) => {
       const on = b.dataset.mode === mode;
       b.classList.toggle("active", on);
       b.setAttribute("aria-selected", String(on));
     });
-    this.subEl.textContent =
-      rows && job?.from === "search"
+    const stable = (rows ? job!.target : to) === "stable";
+    this.subEl.textContent = stable
+      ? rows && job?.from === "search"
+        ? t("Sets from Browse: Fumen downloads each one from the mirrors and puts it into osu!stable's Songs folder; stable imports it on its next start.")
+        : mode === "played" && !rows
+          ? t("Every set you've played on osu! that neither osu!lazer nor osu!stable has: Fumen downloads them into stable's Songs folder; stable imports them on its next start.")
+          : t("Paste links from osu.ppy.sh. Fumen downloads each set into osu!stable's Songs folder; stable imports it on its next start.")
+      : rows && job?.from === "search"
         ? t("Sets from Browse: Fumen downloads each one from the mirrors and imports it into osu!lazer, the way lazer itself does.")
         : mode === "played" && !rows
           ? t("Every set you've played on osu! that osu!lazer doesn't have: Fumen downloads them and imports them into lazer, the way lazer itself does.")
@@ -343,6 +407,13 @@ class ImportDialog {
   private renderLazer(): void {
     const st = this.status;
     const el = this.lazerEl;
+    if ((showsRows(job) ? job.target : goesTo()) === "stable") {
+      el.className = "imp-lazer ok";
+      el.innerHTML = `${icon("check", "imp-lazer-ic")}<span class="meta-line imp-lazer-text"><span>osu!stable</span><span>${t("Into its Songs folder")}</span><span>${t("Imported on its next start")}</span></span>`;
+      el.dataset.tip = store.status?.stable?.install?.songs ?? "";
+      this.repairEl.hidden = true;
+      return;
+    }
     if (!st) {
       el.className = "imp-lazer";
       el.innerHTML = `<span class="imp-lazer-text">${t("Checking osu!lazer…")}</span>`;
@@ -419,17 +490,29 @@ class ImportDialog {
         return;
       case "found": {
         const f = played.found!;
-        if (this.shownFound === f) return;
+        if (this.shownFound === f && p.dataset.target === goesTo()) return;
         this.shownFound = f;
-        const missing = f.missing;
+        p.dataset.target = goesTo();
+        const missing = playedMissing();
+        const stable = goesTo() === "stable";
         const inStable = missing.filter((s) => s.inStable).length;
         const top = missing.filter((s) => s.top).length;
         const meta: [string, string?][] = [[tn(f.played, "{n} set played in all", "{n} sets played in all")]];
         if (top) meta.push([t("{n} with top plays", { n: num(top) })]);
-        if (inStable) meta.push([t("{n} in osu!stable", { n: num(inStable) })]);
+        if (inStable && !stable) meta.push([t("{n} in osu!stable", { n: num(inStable) })]);
         p.innerHTML = `
           <div class="imp-pl-sum">
-            <div class="imp-pl-big"><b>${num(missing.length)}</b><span>${missing.length === 1 ? t("set you've played isn't in osu!lazer yet") : missing.length ? t("sets you've played aren't in osu!lazer yet") : t("sets you've played aren't in osu!lazer")}</span></div>
+            <div class="imp-pl-big"><b>${num(missing.length)}</b><span>${
+              stable
+                ? missing.length === 1
+                  ? t("set you've played is in neither osu!lazer nor osu!stable")
+                  : t("sets you've played are in neither osu!lazer nor osu!stable")
+                : missing.length === 1
+                  ? t("set you've played isn't in osu!lazer yet")
+                  : missing.length
+                    ? t("sets you've played aren't in osu!lazer yet")
+                    : t("sets you've played aren't in osu!lazer")
+            }</span></div>
             <button class="btn btn-ghost btn-sm" type="button" data-act="find">${icon("refresh")}${t("Check again")}</button>
           </div>
           <div class="imp-pl-meta">${words(meta)}</div>
@@ -506,17 +589,17 @@ class ImportDialog {
       b.disabled = false;
       b.textContent = job.from === "played" ? t("Back to played maps") : job.summary?.failed ? t("Try failed again") : t("Add more");
     } else if (mode === "played") {
-      const missing = played.found?.missing.length ?? 0;
+      const missing = played.found ? playedMissing().length : 0;
       if (played.state === "found" && missing) {
         b.textContent = tn(missing, "Download and import {n} set", "Download and import {n} sets");
-        b.disabled = !this.status?.ready;
+        b.disabled = !this.ready();
       } else {
         b.textContent = played.state === "finding" ? t("Finding…") : played.state === "found" ? t("Check again") : t("Find played maps");
         b.disabled = played.state === "finding" || !this.account;
       }
     } else {
       b.textContent = t("Import");
-      b.disabled = !this.status?.ready || readLinks(this.input.value).links.length === 0;
+      b.disabled = !this.ready() || readLinks(this.input.value).links.length === 0;
     }
   }
 
@@ -537,7 +620,9 @@ class ImportDialog {
     const total = rows.length || 1;
     el.querySelector(".imp-ov-count")!.innerHTML = job.running
       ? t("{done} of {total}", { done: `<b>${num(finished)}</b>`, total: num(rows.length) })
-      : tn(done, "<b>{n}</b> set imported", "<b>{n}</b> sets imported");
+      : job.target === "stable"
+        ? tn(done, "<b>{n}</b> set put into osu!stable", "<b>{n}</b> sets put into osu!stable")
+        : tn(done, "<b>{n}</b> set imported", "<b>{n}</b> sets imported");
     const meta: [string, string?][] = [];
     if (job.running) {
       const dl = count(["downloading", "resolving"]);
@@ -548,7 +633,7 @@ class ImportDialog {
       if (dl) meta.push([t("{n} downloading", { n: num(dl) })]);
       if (held) meta.push([t("{n} waiting for a mirror", { n: num(held) })]);
       if (ready) meta.push([t("{n} ready", { n: num(ready) })]);
-      if (importing) meta.push([t("{n} going into osu!lazer", { n: num(importing) })]);
+      if (importing) meta.push([job.target === "stable" ? t("{n} going into osu!stable", { n: num(importing) }) : t("{n} going into osu!lazer", { n: num(importing) })]);
       if (failed) meta.push([t("{n} failed", { n: num(failed) }), "bad"]);
     } else {
       if (failed) meta.push([t("{n} failed", { n: num(failed) }), "bad"]);
@@ -596,7 +681,7 @@ class ImportDialog {
     if (live && changed) el.classList.add("live");
     el.querySelector(".imp-row-title")!.textContent = r.title ?? (r.set ? t("Beatmap set {id}", { id: r.set }) : r.link.replace(/^https?:\/\/(www\.)?osu\.ppy\.sh/i, ""));
     const state = el.querySelector<HTMLElement>(".imp-row-state")!;
-    state.textContent = stateText(r);
+    state.textContent = stateText(r, job!.target);
     // long reasons don't fit the card
     if (r.stage === "error" && r.message) state.dataset.tip = fromRust(r.message);
     else delete state.dataset.tip;
@@ -653,14 +738,14 @@ class ImportDialog {
       return;
     }
     if (mode === "played") {
-      const missing = played.found?.missing ?? [];
+      const missing = played.found ? playedMissing() : [];
       if (played.state === "found" && missing.length) {
-        if (this.status?.ready) void runImport(missing.map((s) => ({ link: String(s.id), set: s.id, title: `${s.artist} - ${s.title}` })), "played");
+        if (this.ready()) void runImport(missing.map((s) => ({ link: String(s.id), set: s.id, title: `${s.artist} - ${s.title}` })), "played");
       } else if (played.state !== "finding" && this.account) void findPlayed();
       return;
     }
     const { links } = readLinks(this.input.value);
-    if (links.length && this.status?.ready) void runImport(links.map((link) => ({ link })), "links");
+    if (links.length && this.ready()) void runImport(links.map((link) => ({ link })), "links");
   }
 }
 
@@ -682,7 +767,7 @@ function wireCovers(root: HTMLElement): void {
   });
 }
 
-function stateText(r: Row): string {
+function stateText(r: Row, to: Target): string {
   switch (r.stage) {
     case "waiting":
       return t("Waiting");
@@ -697,11 +782,11 @@ function stateText(r: Row): string {
     case "held":
       return r.total > 2 ? t("Mirrors are busy · trying again in {time}", { time: clock(r.total) }) : t("Waiting for a free mirror");
     case "ready":
-      return t("Downloaded · waiting for osu!lazer");
+      return to === "stable" ? t("Downloaded") : t("Downloaded · waiting for osu!lazer");
     case "importing":
-      return t("Importing into osu!lazer");
+      return to === "stable" ? t("Into osu!stable's Songs folder") : t("Importing into osu!lazer");
     case "done":
-      return t("Imported");
+      return to === "stable" ? t("In the Songs folder · osu!stable imports it on its next start") : t("Imported");
     case "skipped":
       return r.message ? fromRust(r.message) : t("Skipped");
     case "error":
@@ -713,6 +798,12 @@ function stateText(r: Row): string {
 function clock(seconds: number): string {
   const s = Math.ceil(seconds);
   return s < 60 ? `${s} s` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+
+/** the played sets the import's target doesn't have (stable: neither lazer nor stable) */
+function playedMissing(): PlayedFound["missing"] {
+  const missing = played.found?.missing ?? [];
+  return goesTo() === "stable" ? missing.filter((s) => !s.inStable) : missing;
 }
 
 async function findPlayed(): Promise<void> {
@@ -748,7 +839,8 @@ async function stopImport(): Promise<void> {
 
 async function runImport(lines: Line[], from: From): Promise<void> {
   const links = lines.map((l) => l.link);
-  const current: Job = { rows: lines.map((l) => ({ ...l, stage: "waiting", done: 0, total: 0 })), running: true, from };
+  const to = goesTo();
+  const current: Job = { rows: lines.map((l) => ({ ...l, stage: "waiting", done: 0, total: 0 })), running: true, from, target: to };
   job = current;
   events.emit("importing", true);
   for (const r of current.rows) if (r.set) importEvents.emit("set", r.set);
@@ -776,7 +868,7 @@ async function runImport(lines: Line[], from: From): Promise<void> {
     }
   });
   try {
-    const s = await api.importBeatmaps(links);
+    const s = await api.importBeatmaps(links, to);
     current.summary = s;
     if (from === "links") draft = "";
     // what went in isn't missing any more
@@ -786,10 +878,17 @@ async function runImport(lines: Line[], from: From): Promise<void> {
     }
     if (s.stopped) toast(t("Import stopped: {error}", { error: s.stopped }), { kind: "danger", timeout: 6000 });
     else if (s.imported || s.failed) {
-      const parts = [s.imported && tn(s.imported, "{n} set imported into osu!lazer", "{n} sets imported into osu!lazer"), s.failed && t("{n} failed", { n: num(s.failed) })];
+      const parts = [
+        s.imported &&
+          (to === "stable"
+            ? tn(s.imported, "{n} set put into osu!stable's Songs folder", "{n} sets put into osu!stable's Songs folder")
+            : tn(s.imported, "{n} set imported into osu!lazer", "{n} sets imported into osu!lazer")),
+        s.failed && t("{n} failed", { n: num(s.failed) }),
+      ];
       toast(parts.filter(Boolean).join(", "), { kind: s.imported ? "success" : "danger", timeout: 4200 });
     }
-    if (s.imported) {
+    // stable's sets come into the library once stable has imported them (osu!.db changes)
+    if (s.imported && to === "lazer") {
       await reloadLibrary().catch((e) => console.warn("[import] reload failed", e));
       await refreshStatus().catch(() => {});
     }

@@ -18,7 +18,7 @@ import { attachSegIndicator, createSelect, openMenu, toast, uiConfirm, type Menu
 import { icon } from "../ui/icons";
 import { starRange } from "../ui/star-range";
 import { openSet } from "./actions";
-import { importEvents, importSets, openImport, setImportState, type SetImport } from "./import";
+import { importEvents, importSets, importTarget, openImport, setImportState, type SetImport } from "./import";
 import { fromRust, t, tn } from "../lib/i18n";
 
 const MODES = [
@@ -298,7 +298,7 @@ export class BrowseView {
     const order = this.plain
       ? `<span data-tip="${t("osu.direct couldn't answer, so catboy.best did: its order, filtered here")}">${t("from {mirror}, in its own order", { mirror: esc(this.mirror) })}</span>`
       : `<span>${t("from {mirror}", { mirror: esc(this.mirror) })}</span>`;
-    const ready = !!this.status?.ready;
+    const ready = this.canAdd();
     el.innerHTML = `
       <span class="meta-line num"><span>${this.more ? tn(this.sets.length, "{n} set so far", "{n} sets so far") : tn(this.sets.length, "{n} set", "{n} sets")}</span>${order}</span>
       ${
@@ -306,6 +306,11 @@ export class BrowseView {
           ? `<button class="btn btn-sm br-add-all" type="button"${ready ? "" : ` disabled data-tip="${esc(this.lazerReason())}"`}>${icon("download")}<span>${fresh.length === 1 ? t("Add the new set") : t("Add all {n} new", { n: num(fresh.length) })}</span></button>`
           : ""
       }`;
+  }
+
+  /** Sets can be added: osu!lazer takes them, or they go into osu!stable (Add beatmaps' target). */
+  private canAdd(): boolean {
+    return importTarget() === "stable" || !!this.status?.ready;
   }
 
   /** Why sets can't go into osu!lazer right now (the bar under the toolbar says it too). */
@@ -319,7 +324,7 @@ export class BrowseView {
   private renderLazer(): void {
     const el = this.el.querySelector<HTMLElement>(".br-lazer")!;
     const s = this.status;
-    if (!s || s.ready) {
+    if (!s || s.ready || importTarget() === "stable") {
       el.hidden = true;
       return;
     }
@@ -412,11 +417,11 @@ export class BrowseView {
 
   /** What can be done with a set: open it, add it, or how its import goes. */
   private actionHtml(id: number, lib: LibraryIndex): string {
-    if (lib.lazer.has(id)) return `<button class="btn btn-ghost btn-sm br-open" type="button">${icon("library")}<span>${t("In library")}</span></button>`;
+    if (have(lib, id)) return `<button class="btn btn-ghost btn-sm br-open" type="button">${icon("library")}<span>${t("In library")}</span></button>`;
     const st = setImportState(id);
     if (st && st.stage !== "error" && !(st.stage === "skipped" && st.message === "Cancelled")) return stateHtml(st);
-    const ready = !!this.status?.ready;
-    const why = st?.stage === "error" ? t("Failed: {error}. Again?", { error: st.message ? fromRust(st.message) : t("unknown") }) : ready ? t("Download it and put it into osu!lazer") : this.lazerReason();
+    const ready = this.canAdd();
+    const why = st?.stage === "error" ? t("Failed: {error}. Again?", { error: st.message ? fromRust(st.message) : t("unknown") }) : ready ? (importTarget() === "stable" ? t("Download it into osu!stable's Songs folder") : t("Download it and put it into osu!lazer")) : this.lazerReason();
     return `<button class="btn btn-sm br-add${st?.stage === "error" ? " failed" : ""}" type="button"${ready ? "" : " disabled"} data-tip="${esc(why)}">${icon(st?.stage === "error" ? "refresh" : "download")}<span>${st?.stage === "error" ? t("Again") : t("Add")}</span></button>`;
   }
 
@@ -430,7 +435,7 @@ export class BrowseView {
   private addable(): FoundSet[] {
     const lib = libraryIndex();
     return this.sets.filter((s) => {
-      if (lib.lazer.has(s.id)) return false;
+      if (have(lib, s.id)) return false;
       const st = setImportState(s.id);
       return !st || st.stage === "error" || (st.stage === "skipped" && st.message === "Cancelled");
     });
@@ -438,7 +443,7 @@ export class BrowseView {
 
   /** `window`: open Add beatmaps on the import (a whole search); one set just follows along here */
   private add(sets: FoundSet[], window = false): void {
-    if (!this.status?.ready) return void toast(this.lazerReason(), { kind: "danger", timeout: 3500 });
+    if (!this.canAdd()) return void toast(this.lazerReason(), { kind: "danger", timeout: 3500 });
     const unicode = store.prefs.unicode;
     const how = importSets(sets.map((s) => ({ id: s.id, title: `${(unicode && s.artistUnicode) || s.artist} - ${(unicode && s.titleUnicode) || s.title}` })));
     for (const s of sets) this.renderAction(s.id);
@@ -476,8 +481,8 @@ export class BrowseView {
   private menu(at: { x: number; y: number }, s: FoundSet): void {
     const lib = libraryIndex();
     const entries: MenuEntry[] = [];
-    if (lib.lazer.has(s.id)) entries.push({ label: t("Open in library"), icon: "library", action: () => openLibrarySet(s.id) });
-    else entries.push({ label: t("Add to osu!lazer"), icon: "download", disabled: !this.status?.ready, action: () => this.add([s]) });
+    if (have(lib, s.id)) entries.push({ label: t("Open in library"), icon: "library", action: () => openLibrarySet(s.id) });
+    else entries.push({ label: importTarget() === "stable" ? t("Add to osu!stable") : t("Add to osu!lazer"), icon: "download", disabled: !this.canAdd(), action: () => this.add([s]) });
     entries.push(
       { label: preview?.set === s.id ? t("Stop the preview") : t("Play the preview"), icon: preview?.set === s.id ? "pause" : "play", action: () => playPreview(s) },
       "sep",
@@ -618,8 +623,16 @@ function libraryIndex(): LibraryIndex {
   return { lazer, stable };
 }
 
+/** The target already has the set: lazer, or (going into stable) lazer or stable. */
+function have(lib: LibraryIndex, id: number): boolean {
+  return lib.lazer.has(id) || (importTarget() === "stable" && lib.stable.has(id));
+}
+
+/** lazer's copy of the set, else stable's */
 function openLibrarySet(id: number): void {
-  const i = store.snap?.sets.findIndex((s) => s.onlineId === id && s.from !== "stable" && s.maps.length) ?? -1;
+  const sets = store.snap?.sets ?? [];
+  let i = sets.findIndex((s) => s.onlineId === id && s.from !== "stable" && s.maps.length);
+  if (i < 0) i = sets.findIndex((s) => s.onlineId === id && s.maps.length);
   if (i >= 0) openSet(i);
 }
 

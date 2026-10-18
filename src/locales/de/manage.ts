@@ -352,4 +352,43 @@ export const manage: Record<string, string> = {
   "Chords that keep hitting the same columns": "Akkorde, die immer wieder dieselben Spalten treffen",
   "The same column hit repeatedly": "Dieselbe Spalte wiederholt getroffen",
   "Long notes held for most of the time": "Long Notes, die die meiste Zeit gehalten werden",
+
+  // importing into osu!stable (the one exception, behind warnings)
+  "Download it into osu!stable's Songs folder": "In den Songs-Ordner von osu!stable herunterladen",
+  "Add to osu!stable": "Zu osu!stable hinzufügen",
+  "Where the beatmaps go": "Wohin die Beatmaps gehen",
+  "The sets go into osu!stable's Songs folder, and stable imports them with its own code the next time it starts. This is the one place Fumen writes into stable's files; it can't check or undo stable's import.":
+    "Die Sets landen im Songs-Ordner von osu!stable, und stable importiert sie beim nächsten Start mit seinem eigenen Code. Das ist die einzige Stelle, an der Fumen in die Dateien von stable schreibt; den Import von stable kann Fumen weder prüfen noch rückgängig machen.",
+  "Import into osu!stable?": "In osu!stable importieren?",
+  "Into osu!stable": "In osu!stable",
+  "Sets from Browse: Fumen downloads each one from the mirrors and puts it into osu!stable's Songs folder; stable imports it on its next start.":
+    "Sets aus Browse: Fumen lädt jedes von den Mirrors und legt es in den Songs-Ordner von osu!stable; stable importiert es beim nächsten Start.",
+  "Every set you've played on osu! that neither osu!lazer nor osu!stable has: Fumen downloads them into stable's Songs folder; stable imports them on its next start.":
+    "Jedes Set, das du auf osu! gespielt hast und das weder osu!lazer noch osu!stable hat: Fumen lädt sie in den Songs-Ordner von stable; stable importiert sie beim nächsten Start.",
+  "Paste links from osu.ppy.sh. Fumen downloads each set into osu!stable's Songs folder; stable imports it on its next start.":
+    "Füg Links von osu.ppy.sh ein. Fumen lädt jedes Set in den Songs-Ordner von osu!stable; stable importiert es beim nächsten Start.",
+  "Into its Songs folder": "In seinen Songs-Ordner",
+  "Imported on its next start": "Import beim nächsten Start",
+  "set you've played is in neither osu!lazer nor osu!stable": "gespieltes Set ist weder in osu!lazer noch in osu!stable",
+  "sets you've played are in neither osu!lazer nor osu!stable": "gespielte Sets sind weder in osu!lazer noch in osu!stable",
+  "{n} going into osu!stable": "{n} gehen nach osu!stable",
+  "Into osu!stable's Songs folder": "In den Songs-Ordner von osu!stable",
+  "In the Songs folder · osu!stable imports it on its next start": "Im Songs-Ordner · osu!stable importiert es beim nächsten Start",
+  "<b>{n}</b> set put into osu!stable|<b>{n}</b> sets put into osu!stable": "<b>{n}</b> Set nach osu!stable gelegt|<b>{n}</b> Sets nach osu!stable gelegt",
+  "{n} set put into osu!stable's Songs folder|{n} sets put into osu!stable's Songs folder":
+    "{n} Set in den Songs-Ordner von osu!stable gelegt|{n} Sets in den Songs-Ordner von osu!stable gelegt",
+  "Add beatmaps can put sets into its Songs folder.": "„Beatmaps hinzufügen“ kann Sets in seinen Songs-Ordner legen.",
+  "Stop importing into osu!stable": "Nicht mehr in osu!stable importieren",
+  "Import into osu!stable…": "In osu!stable importieren …",
+  "Fumen never writes into osu!stable's files, with this one exception: Add beatmaps and Browse can then put downloaded sets into stable's Songs folder, and stable imports them with its own code the next time it starts. Fumen can't check or undo that import, and it doesn't make backups of stable.":
+    "Fumen schreibt nie in die Dateien von osu!stable, mit dieser einen Ausnahme: „Beatmaps hinzufügen“ und Browse können dann heruntergeladene Sets in den Songs-Ordner von stable legen, und stable importiert sie beim nächsten Start mit seinem eigenen Code. Fumen kann diesen Import weder prüfen noch rückgängig machen und legt keine Sicherung von stable an.",
+  "I understand": "Verstanden",
+  stable: "stable",
+  "Nothing in the Songs folder is ever replaced or removed; a set that's already there is left alone. Type “{word}” to turn it on.":
+    "Im Songs-Ordner wird nie etwas ersetzt oder gelöscht; ein Set, das schon da ist, bleibt unangetastet. Tippe „{word}“, um es einzuschalten.",
+  "Turn on importing into osu!stable": "Import in osu!stable einschalten",
+  "Turn on": "Einschalten",
+  "Not turned on: that wasn't “{word}”.": "Nicht eingeschaltet: Das war nicht „{word}“.",
+  "Imports can go into osu!stable now. Pick it at the top of Add beatmaps.": "Importe können jetzt nach osu!stable gehen. Wähl es oben in „Beatmaps hinzufügen“.",
+  "Imports go only into osu!lazer again.": "Importe gehen wieder nur nach osu!lazer.",
 };

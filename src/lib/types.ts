@@ -419,6 +419,8 @@ export interface Settings {
   autoRescan: boolean;
   stablePath: string | null;
   useStable: boolean;
+  /** imports may go into osu!stable's Songs folder (behind the warnings in Settings › osu!stable) */
+  stableImport: boolean;
   /** the start ping, so fumen.dertesti.dev can count the people using Fumen */
   startPing: boolean;
   ui: Partial<UiPrefs>;

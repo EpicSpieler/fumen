@@ -90,9 +90,10 @@ export const api = {
   },
   /** whether sets can be imported into osu!lazer right now */
   lazerImportStatus: () => invoke<LazerImportStatus>("lazer_import_status").then((s) => ({ ...s, message: s.message && fromRust(s.message) })),
-  /** downloads the sets behind osu! links and imports them into lazer (progress: onImportProgress) */
-  importBeatmaps: (links: string[]) =>
-    invoke<ImportSummary>("import_beatmaps", { links }).then((s) => ({ ...s, stopped: s.stopped && fromRust(s.stopped) })),
+  /** downloads the sets behind osu! links and imports them into lazer, or puts them into osu!stable's
+   * Songs folder (progress: onImportProgress) */
+  importBeatmaps: (links: string[], target: "lazer" | "stable" = "lazer") =>
+    invoke<ImportSummary>("import_beatmaps", { links, target }).then((s) => ({ ...s, stopped: s.stopped && fromRust(s.stopped) })),
   /** every collection into the cloud (fumen.dertesti.dev), under the osu! login */
   cloudPushCollections: () => invoke<{ collections: number; saved: number }>("cloud_push_collections"),
   /** the cloud's collections merged into this library; the sets they want that it doesn't have */

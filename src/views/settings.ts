@@ -10,7 +10,7 @@ import { canUpdate, checkForUpdate, downloadText, installUpdate, updateEvents, u
 import { describeScan, isScanning, runScan } from "../lib/scan";
 import { DEFAULT_ACCENT, events, flushPrefs, refreshStatus, setPrefs, store } from "../lib/store";
 import type { OsuAccount } from "../lib/types";
-import { attachSegIndicator, toast, uiConfirm } from "../ui/controls";
+import { attachSegIndicator, openMenu, toast, uiConfirm, uiPrompt } from "../ui/controls";
 import { importSets, openImport } from "./import";
 import { icon } from "../ui/icons";
 import { ACCENT_PRESETS, applyAppearance } from "../ui/theme";
@@ -389,16 +389,58 @@ export class SettingsView {
       : on
         ? `<span class="is-missing">${stableCustom ? t("Not found in the chosen folder") : sst?.defaultPath ? t("Not found in {path}", { path: esc(sst.defaultPath) }) : t("Not found")}</span>`
         : t("Off: only osu!lazer's beatmaps are in the library.");
+    const importing = !!store.settings?.stableImport && !!sst?.install;
     stableRow.innerHTML = `
       <div class="setting-text">
         <div class="setting-title">osu!stable</div>
-        <div class="setting-desc">${where}</div>
+        <div class="setting-desc">${where}${importing ? `<br><span class="is-missing">${t("Add beatmaps can put sets into its Songs folder.")}</span>` : ""}</div>
       </div>
       <div class="setting-actions">
+        ${sst?.install ? `<button class="icon-btn sm s-stable-more" type="button" aria-label="${t("More")}">${icon("more-vert")}</button>` : ""}
         ${stableCustom ? `<button class="btn btn-ghost btn-sm s-stable-reset" type="button">${t("Use default")}</button>` : ""}
         <button class="btn btn-sm s-stable-pick" type="button">${icon("folder")}${t("Change")}</button>
         <input type="checkbox" role="switch" data-setting="useStable" aria-label="${t("Use osu!stable's beatmaps")}" ${on ? "checked" : ""} />
       </div>`;
+  }
+
+  /** stable's hidden menu: imports into osu!stable, the one place Fumen writes into stable's files */
+  private stableMenu(anchor: HTMLElement): void {
+    const on = !!store.settings?.stableImport;
+    openMenu(anchor, [
+      on
+        ? { label: t("Stop importing into osu!stable"), action: () => void this.setStableImport(false) }
+        : { label: t("Import into osu!stable…"), action: () => void this.turnOnStableImport() },
+    ]);
+  }
+
+  /** two warnings, then on */
+  private async turnOnStableImport(): Promise<void> {
+    const first = await uiConfirm(
+      t("Fumen never writes into osu!stable's files, with this one exception: Add beatmaps and Browse can then put downloaded sets into stable's Songs folder, and stable imports them with its own code the next time it starts. Fumen can't check or undo that import, and it doesn't make backups of stable."),
+      { title: t("Import into osu!stable?"), confirmLabel: t("I understand"), danger: true },
+    );
+    if (!first) return;
+    const word = t("stable");
+    const typed = await uiPrompt(
+      t("Nothing in the Songs folder is ever replaced or removed; a set that's already there is left alone. Type “{word}” to turn it on.", { word }),
+      { title: t("Turn on importing into osu!stable"), placeholder: word, confirmLabel: t("Turn on"), maxLength: 20 },
+    );
+    if (typed === null) return;
+    if (typed.trim().toLowerCase() !== word.toLowerCase()) {
+      toast(t("Not turned on: that wasn't “{word}”.", { word }));
+      return;
+    }
+    await this.setStableImport(true);
+  }
+
+  private async setStableImport(on: boolean): Promise<void> {
+    try {
+      store.settings = await api.updateSettings({ stableImport: on });
+      this.renderLibrary();
+      toast(on ? t("Imports can go into osu!stable now. Pick it at the top of Add beatmaps.") : t("Imports go only into osu!lazer again."), { kind: on ? "success" : undefined });
+    } catch (e) {
+      toast(asApiError(e).message, { kind: "danger" });
+    }
   }
 
   /** After stable's folder or switch changed: the library follows (when there is one). */
@@ -476,6 +518,7 @@ export class SettingsView {
       store.settings = await api.updateSettings({ stablePath: dir, useStable: true });
       return void this.stableChanged();
     }
+    if (target.closest(".s-stable-more")) return this.stableMenu(target.closest<HTMLElement>(".s-stable-more")!);
     if (target.closest(".s-stable-reset")) {
       store.settings = await api.updateSettings({ stablePath: null });
       return void this.stableChanged();
