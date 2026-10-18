@@ -478,12 +478,21 @@ The accuracy from those counts matches lazer's own on 600 of 600 real scores (`l
       early / late, an offset hint from 5 ms); watch the replay, practise a stretch (the practice
       loop takes a part now), try a rate (osu!mania), add to a collection, similar maps; the session's
       other plays. With Fumen behind the game the page is waiting; in front, a toast offers it
-- [x] Companion window (`companion.html`, `src/companion.ts`): 300×440, on top, bottom right of the
-      main screen, no taskbar entry; the session (plays since the last hour-long pause: count,
+- [x] Companion window (`companion.html`, `src/companion.ts`): 248 wide, as tall as what it shows
+      (`fit_companion`, the bottom edge stays), transparent around its panel, on top, bottom right
+      of the main screen, no taskbar entry; with the cursor over it clicks go through to the game
+      and the panel fades, Ctrl makes it clickable (lib.rs `see_through`; made in an async command,
+      a synchronous one deadlocks on Windows); the session (plays since the last hour-long pause: count,
       time, mean accuracy, new bests), the last play (a click shows its score in the main window),
       and a pool: a collection (Fumen's own, lazer's or stable's; not smart ones) ticked off as its
       difficulties are passed this session, with the best accuracy now and ever. Shows over lazer
       in borderless or windowed mode. Settings › While you play
+- [x] Imports into osu!stable (1.1.2): the one exception to "never writes stable's files", opt-in
+      behind Settings › osu!stable › ⋮ (a warning, then typing "stable"; `settings.stableImport`,
+      checked in Rust too). Add beatmaps gets an osu!lazer / osu!stable switch (one more warning a
+      session), Browse follows it; downloaded sets go into stable's Songs folder as `<set id>.osz`
+      (`stable_import.rs`: copied as `.fumen-part`, then renamed; never replaces a file), stable
+      imports them on its next start
 
 ## After 1.0
 

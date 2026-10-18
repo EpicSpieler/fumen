@@ -15,7 +15,8 @@ database first (see [Adding beatmaps](#adding-beatmaps)).
 
 - Imports the osu!lazer library: sets, difficulties, local scores and collections
 - …and osu!stable's, when it's installed (Settings can switch it off or pick its folder): its
-  osu!.db, the files in its Songs folder and its collection.db, read only. A difficulty that's in
+  osu!.db, the files in its Songs folder and its collection.db, read only (the one opt-in
+  exception: imports into osu!stable, below). A difficulty that's in
   both games shows once (lazer's); `game=stable` / `game=lazer` in the search tells them apart
 - Your own collections: make them with + in the sidebar, drag sets or difficulties onto them, or
   right-click › Add to collection; rename, delete, take maps out. lazer's collections show below
@@ -152,7 +153,8 @@ database first (see [Adding beatmaps](#adding-beatmaps)).
 - Companion window: a small window in the corner over the game (lazer in borderless or windowed
   mode) with this session (plays, time, accuracy, new bests), your last play, and a pool to work
   through: a collection whose difficulties are ticked off as you pass them, with your best accuracy
-  this session
+  this session. With the mouse over it, it fades and clicks go through to the game; hold Ctrl to
+  click it
 
 ## Adding beatmaps
 
@@ -172,6 +174,14 @@ guard, imports a test set into a fresh library and into a copy of yours (exactly
 nothing else changed, every file intact), writes collections into that copy (one new, one of
 yours changed, nothing else touched, no copy on writing again), and on success lists the version
 and pushes the file.
+
+**Into osu!stable (opt-in, the one exception).** Fumen never writes osu!stable's files, except
+here: in Settings › osu!stable, the ⋮ menu has "Import into osu!stable…", behind a warning and
+typing "stable". After that, Add beatmaps (and Browse) can send sets to osu!stable instead (it
+asks once more each session): each downloaded set goes into stable's Songs folder as
+`<set id>.osz` (copied under another name first, so stable never sees half a file), and stable
+imports it with its own code on its next start. Nothing in the Songs folder is ever replaced or
+removed. The library shows the sets once stable has imported them (`src-tauri/src/stable_import.rs`).
 
 ## osu! login and the site
 
