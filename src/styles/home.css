@@ -1,5 +1,5 @@
 /* ===========================================================================
-   Home — greeting, shelves (carousels), quick picks panel
+   Home — greeting over a bento of tiles (views/home.ts)
    =========================================================================== */
 
 .home-view { container-type: inline-size; padding-bottom: 56px; }
@@ -9,7 +9,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 56px 0 52px;
+  padding: 44px 0 36px;
   text-align: center;
 }
 .hero-icon { color: var(--accent); animation: hero-drop .6s var(--ease-out) both; }
@@ -27,20 +27,219 @@
 @keyframes hero-drop { from { opacity: 0; transform: translateY(-22px) scale(.8); } }
 @keyframes hero-rise { from { opacity: 0; transform: translateY(16px); } }
 
-/* ---------- Top block: two shelves beside the quick picks ---------- */
-.home-top {
+/* ---------- Bento: tiles of different sizes, one job each ----------
+   narrow: one column; medium: two; wide: a 12-column grid with the last play big at the top left */
+.bento {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 32px;
-  align-items: start;
+  grid-template-areas: "continue" "session" "progress" "played" "picks" "added" "collections" "most" "again";
+  gap: 14px;
 }
-@container (min-width: 1080px) {
-  .home-top { grid-template-columns: minmax(0, 1fr) 420px; gap: 28px; }
+@container (min-width: 720px) {
+  .bento {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-areas:
+      "continue continue"
+      "session progress"
+      "played played"
+      "picks added"
+      "picks collections"
+      "most again";
+  }
 }
-.home-top-shelves { display: flex; flex-direction: column; gap: 32px; min-width: 0; }
-.home-top-shelves .shelf { margin-top: 0; }
-.home-top + .shelf { margin-top: 36px; }
-.shelf + .shelf { margin-top: 32px; }
+@container (min-width: 980px) {
+  .bento {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    grid-template-areas:
+      "continue continue continue continue continue continue continue session session session session session"
+      "continue continue continue continue continue continue continue progress progress progress progress progress"
+      "played played played played played played played played played played played played"
+      "picks picks picks picks picks added added added added added added added"
+      "picks picks picks picks picks collections collections collections collections collections collections collections"
+      "most most most most most most again again again again again again";
+  }
+}
+.bt-continue { grid-area: continue; }
+.bt-session { grid-area: session; }
+.bt-progress { grid-area: progress; }
+.bt-played { grid-area: played; }
+.bt-picks { grid-area: picks; }
+.bt-added { grid-area: added; }
+.bt-collections { grid-area: collections; }
+.bt-most { grid-area: most; }
+.bt-again { grid-area: again; }
+
+.bt {
+  position: relative;
+  min-width: 0;
+  padding: 16px 18px;
+  border-radius: var(--r-2xl);
+  background: color-mix(in srgb, var(--bg-surface) 55%, transparent);
+  box-shadow: inset 0 0 0 1px var(--stroke-dim);
+  animation: bt-in .45s var(--ease-out) both;
+}
+.bento > :nth-child(2) { animation-delay: 40ms; }
+.bento > :nth-child(3) { animation-delay: 80ms; }
+.bento > :nth-child(4) { animation-delay: 120ms; }
+.bento > :nth-child(n + 5) { animation-delay: 160ms; }
+@keyframes bt-in { from { opacity: 0; transform: translateY(10px); } }
+@media (prefers-reduced-motion: reduce) { .bt { animation: none; } }
+
+.bt-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 24px; margin-bottom: 10px; }
+.bt-head .section-title { margin: 0; }
+.bt-link {
+  padding: 3px 8px;
+  margin-right: -8px;
+  border-radius: var(--r-full);
+  font-size: var(--fs-11);
+  color: var(--t3);
+  transition: color .15s var(--ease-std), background-color .15s var(--ease-std);
+}
+.bt-link:hover { color: var(--t1); background: var(--tint-hover); }
+.bt-hint { font-size: var(--fs-12); color: var(--t3); line-height: 1.5; }
+
+/* where you left off: the set's artwork under the whole tile */
+.bt-continue {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  min-height: 260px;
+  padding: 22px 24px;
+  overflow: hidden;
+  background: var(--bg-surface);
+  isolation: isolate;
+}
+.bt-cover { position: absolute; inset: 0; z-index: -1; background: var(--placeholder-gradient); }
+.bt-art {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transform: scale(1.03);
+  transition: opacity .5s var(--ease-std), transform 1.2s var(--ease-out);
+}
+.bt-art.loaded { opacity: 1; transform: none; }
+.bt-scrim {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(to top, rgba(0, 0, 0, .88) 0%, rgba(0, 0, 0, .55) 45%, rgba(0, 0, 0, .15) 100%),
+    linear-gradient(to right, rgba(0, 0, 0, .35), transparent 60%);
+}
+.bt-continue .label-caps { color: rgba(255, 255, 255, .7); }
+.bt-continue-row { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 10px 18px; margin-top: 6px; }
+.bt-continue-text { flex: 1 1 260px; }
+.bt-continue-text { min-width: 0; }
+.bt-title {
+  font-size: calc(var(--fs-hero) * .78);
+  font-weight: 700;
+  line-height: 1.12;
+  letter-spacing: -.015em;
+  color: #fff;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, .4);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.bt-sub { margin-top: 4px; font-size: var(--fs-13); color: rgba(255, 255, 255, .78); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bt-sub span { color: rgba(255, 255, 255, .55); }
+.bt-result { display: flex; align-items: flex-end; gap: 12px; flex: none; }
+.bt-grade { font-size: 46px; font-weight: 700; line-height: .9; color: var(--c); text-shadow: 0 2px 20px color-mix(in srgb, var(--c) 40%, transparent); }
+.bt-acc { display: flex; flex-direction: column; align-items: flex-end; }
+.bt-acc b { font-size: var(--fs-20); font-weight: 700; color: #fff; }
+.bt-acc span { font-size: var(--fs-11); color: rgba(255, 255, 255, .62); }
+.bt-acc span.up { color: var(--success); }
+.bt-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.bt-continue .btn:not(.btn-primary) { background: rgba(255, 255, 255, .12); color: #fff; }
+.bt-continue .btn:not(.btn-primary):hover { background: rgba(255, 255, 255, .2); }
+.bt-play .ic-pause { display: none; }
+.bt-play.playing:not(.paused) .ic-pause { display: block; }
+.bt-play.playing:not(.paused) .ic-play { display: none; }
+
+/* numbers in a small grid */
+.bt-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.bt-stats.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.bt-stats > div { display: flex; flex-direction: column; gap: 1px; padding: 8px 12px; border-radius: var(--r-lg); background: var(--fill-subtle); min-width: 0; }
+.bt-stats i { font-style: normal; font-size: var(--fs-11); color: var(--t3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bt-stats b { font-size: var(--fs-18); font-weight: 650; white-space: nowrap; }
+.bt-stats b.up { color: var(--success); }
+
+.bt-goals { display: flex; flex-direction: column; gap: 12px; }
+.bt-goal-top { display: flex; justify-content: space-between; gap: 10px; font-size: var(--fs-12); }
+.bt-goal-top b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bt-goal-top span { color: var(--t3); white-space: nowrap; }
+.bt-bar { height: 6px; margin-top: 6px; border-radius: var(--r-full); background: var(--fill-subtle); overflow: hidden; }
+.bt-bar i { display: block; height: 100%; min-width: 3px; border-radius: inherit; background: var(--accent); transition: width .6s var(--ease-out); }
+
+/* shelves in a tile: smaller cards */
+.bt.shelf .shelf-track { margin: 0 -18px -6px; padding: 8px 18px 8px; scroll-padding-inline: 18px; }
+.bt.shelf .shelf-head { margin-bottom: 0; }
+.bt .hcard { width: 168px; }
+.bt-added .hcard { width: 148px; }
+
+/* quick picks: the panel is the tile */
+.bt-picks.dial { padding: 16px 18px 12px; }
+
+/* collections: a mosaic of covers each */
+.bt-cols { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 10px; }
+.bt-col {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+  margin: -8px -8px 0;
+  border-radius: var(--r-xl);
+  text-align: left;
+  color: var(--t1);
+  transition: background-color .15s var(--ease-std);
+}
+.bt-col:hover { background: var(--tint-hover); }
+.bt-mosaic {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  aspect-ratio: 1;
+  margin-bottom: 6px;
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  background: var(--fill-subtle);
+  box-shadow: var(--elevation-1);
+  place-items: center;
+  color: var(--t3);
+}
+.bt-mosaic img { width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .3s var(--ease-std); }
+.bt-mosaic img.loaded { opacity: 1; }
+.bt-mosaic.n1 { grid-template-columns: 1fr; }
+.bt-mosaic.n1 img { grid-row: span 2; }
+.bt-mosaic.n2 img { grid-row: span 2; }
+.bt-mosaic.n3 img:first-child { grid-row: span 2; }
+.bt-mosaic.n0 .ic { width: 28px; height: 28px; grid-column: span 2; }
+.bt-col-name { font-size: var(--fs-13); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bt-col-n { font-size: var(--fs-11); color: var(--t3); }
+
+/* short lists: most played, haven't played in a while */
+.bt-rows { display: flex; flex-direction: column; gap: 2px; margin: 0 -8px; }
+.bt-row {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 8px;
+  border-radius: var(--r-lg);
+  cursor: pointer;
+  transition: background-color .15s var(--ease-std);
+}
+.bt-row:hover { background: var(--tint-hover); }
+.bt-row-art { width: 44px; height: 44px; aspect-ratio: 1; border-radius: var(--r-md); box-shadow: var(--elevation-1); }
+.bt-row:hover .bt-row-art { transform: none; box-shadow: var(--elevation-1); }
+.bt-row-art .card-play { inset: 0; margin: auto; width: 28px; height: 28px; transform: scale(.85); }
+.bt-row-art .card-play .ic { width: 13px; height: 13px; }
+.bt-row.playing .bt-row-text b { color: var(--accent-ink); }
+.bt-row-text { display: flex; flex-direction: column; min-width: 0; }
+.bt-row-text b, .bt-row-text span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bt-row-text b { font-size: var(--fs-13); font-weight: 600; }
+.bt-row-text span { font-size: var(--fs-12); color: var(--t3); }
+.bt-row-meta { font-size: var(--fs-11); color: var(--t3); white-space: nowrap; }
 
 /* ---------- Shelf ---------- */
 .shelf { min-width: 0; }
