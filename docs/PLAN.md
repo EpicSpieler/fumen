@@ -87,20 +87,18 @@ nothing), and Fumen trades the code (later the refresh token) for tokens at the 
 | 0.5 | Discover | **Mods in the playfield**; **similar maps**; **beatmap search on the mirrors** |
 | 0.6 | Practice | **Replays in the playfield** (lazer's, else your score on osu!); **practice mode** (A–B loop, rate ramp, metronome); **chart numbers for osu! / taiko / catch** |
 | 0.7 | Library care | **Duplicates, broken files, unplayed space hogs**; osu!stable's `scores.db` |
-| 1.0 | Release | Installer, auto-update (GitHub Releases), de/en, OLED/Light/High-contrast themes, website (macOS moved to 1.7) |
+| 1.0 | Release | Installer, auto-update (GitHub Releases), de/en, OLED/Light/High-contrast themes, website (macOS moved to Later) |
 | 1.1 | Play companion | **A score page after every pass** (where the accuracy went, timing, the replay, practise the worst part); **a companion window over the game** (the session, the last play, a pool to work through) |
-| 1.2 | Pools | Pool builder: NM/HD/HR/DT/FM/TB slots, mod-adjusted SR/BPM/length, look up maps you don't own via API, export to JSON/CSV/sheet + RPRO bot, pool showcase image (moved from 0.5) |
-| 1.3 | Tournament | Schedule, mp-link parsing + match results, OBS overlay served locally (moved from 0.6) |
-| 1.4 | Sessions | Plays grouped into sittings; a weekly report (time, skills that moved, goals closer), shareable as an image |
-| 1.5 | Skins | Skin browser on the same moment of a chart; two skins side by side; pieces of several skins mixed into one `.osk` |
-| 1.6 | Presence | Discord Rich Presence; share cards for pools, skills and goals |
-| 1.7 | Everywhere | Linux and macOS (moved from 1.0; lazer's library there too); goals, skills and pools on fumen.dertesti.dev for the phone |
-| 1.8 | Mapping lens | Difficulty spikes along a chart, a pattern heatmap per section, spread check across a set; the analyser's leftovers |
+| 1.2 | Tournament | Pool builder: NM/HD/HR/DT/FM/TB slots, mod-adjusted SR/BPM/length, maps you don't own looked up via API, similar maps to fill a slot, export to JSON/CSV/sheet + RPRO bot, a showcase image; schedule, mp-link parsing + match results, picks / bans and mod strengths per player, OBS overlay served locally (pools were 0.5, tournament 0.6) |
+| 1.3 | Progress | Skills reworked (the page open again); plays grouped into sittings and a weekly report (time, skills that moved, goals closer); share cards for the week, pools, skills and goals; Discord Rich Presence |
+| Later | Ideas, no version | Skins (browser on the same moment of a chart, side by side, mixing into one `.osk`); Linux and macOS (moved from 1.0); goals, skills and pools on fumen.dertesti.dev for the phone; mapping lens (spikes, pattern heatmap, spread check, the analyser's leftovers) |
 
 The public roadmap at https://fumen.dertesti.dev/roadmap (`site/public/roadmap.js`) shows this
 table; keep the two in step (and raise the `?v=` on roadmap.js / .css in roadmap.html, Cloudflare caches them). Before 1.0 is what serves the vision directly (understand a chart, organise, practise with intent);
 after 1.0 is what's nice to have around it. On 2026-10-13 the pool builder and the tournament
-tools moved after 1.0 (now 1.2, 1.3): they aren't needed before the release (the roadmap page says so). Within a version, the order of the
+tools moved after 1.0. On 2026-10-19 the versions after 1.1 were merged into fewer, bigger ones: the
+roadmap runs to 1.3 (1.2 Tournament, 1.3 Progress), the rest waits under Later without a number,
+so a minor version means a real step. Fumen is an alpha (website, README). Within a version, the order of the
 sections below is the order of the work.
 
 ## v0.1 — detailed scope
@@ -498,7 +496,7 @@ The accuracy from those counts matches lazer's own on 600 of 600 real scores (`l
 
 - Skills rework: since 1.0.0 the Skills page is greyed out under a note (`skills-rework` in
   views/skills.ts) until the numbers are reworked
-- macOS, moved from 1.0 to 1.7 (nobody can test it yet: the tester's Mac doesn't open unsigned apps).
+- macOS, moved from 1.0 to Later (nobody can test it yet: the tester's Mac doesn't open unsigned apps).
   The code side is in 0.7.3. lazer's app in /Applications or ~/Applications
   (`osu!.app/Contents/MacOS`: its assemblies, runtime and `sq.version`), its data in
   ~/Library/Application Support/osu, running = a process from an osu!.app (`ps`); the importer works
@@ -508,23 +506,22 @@ The accuracy from those counts matches lazer's own on 600 of 600 real scores (`l
   GitHub's Macs (`npm run mac`, by hand, with milestone releases), Apple
   Silicon tested against lazer's macOS release (from GitHub) first. Not signed by Apple, no
   self-update on macOS until the release
-- 1.2 Pools (moved from 0.5): the pool builder as in the roadmap table; similar maps fill or replace
-  a slot
-- 1.3 Tournament (moved from 0.6): schedule, mp-link parsing and match results, picks / bans and
-  mod strengths per player, an OBS overlay served from the PC
-- 1.4 Sessions: what was played when (lazer and osu! scores grouped into sittings), a weekly
-  report (plays, time, skills that moved, goals closer), shareable as an image
-- 1.5 Skins: every skin on the same moment of a chart, two side by side, and mixing pieces of
-  several skins into an `.osk` (osu! / mania / taiko / catch parts per skin)
-- 1.6 Presence: Discord Rich Presence ("listening to …", "practising Jacks 4.5★"; needs a Discord
-  application, its client id made by the user in Discord's developer portal); share cards for
-  pools, skills and goals
-- 1.7 Everywhere: Linux and macOS builds (Tauri, the .NET sidecar and lazer all run there; the
-  importer's host folder differs); a read-only view of goals, skills and pools on
-  fumen.dertesti.dev, synced from the app on request
-- 1.8 Mapping lens: difficulty spikes along a chart, a pattern heatmap per section, a spread check
-  across a set's difficulties; the analyser's leftovers (Azusa's marathon correction, Roxy /
-  Mixed estimators — v0.2)
+- 1.2 Tournament (pools were 0.5, the tournament tools 0.6): the pool builder as in the roadmap
+  table, similar maps fill or replace a slot; schedule, mp-link parsing and match results, picks /
+  bans and mod strengths per player, an OBS overlay served from the PC
+- 1.3 Progress: the skills rework (above); what was played when (lazer and osu! scores grouped into
+  sittings), a weekly report (plays, time, skills that moved, goals closer); share cards for the
+  week, pools, skills and goals; Discord Rich Presence ("listening to …", "practising Jacks 4.5★";
+  needs a Discord application, its client id made by the user in Discord's developer portal)
+- Later, no version yet:
+  - Skins: every skin on the same moment of a chart, two side by side, and mixing pieces of
+    several skins into an `.osk` (osu! / mania / taiko / catch parts per skin)
+  - Everywhere: Linux and macOS builds (Tauri, the .NET sidecar and lazer all run there; the
+    importer's host folder differs); a read-only view of goals, skills and pools on
+    fumen.dertesti.dev, synced from the app on request
+  - Mapping lens: difficulty spikes along a chart, a pattern heatmap per section, a spread check
+    across a set's difficulties; the analyser's leftovers (Azusa's marathon correction, Roxy /
+    Mixed estimators — v0.2)
 
 ## Workflow
 

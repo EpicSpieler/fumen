@@ -2,9 +2,12 @@
 
 譜面 (*fumen*): "chart" in Japanese rhythm-game slang.
 
+> **alpha:** Fumen is still young. Things change between versions and some may break; issues are welcome.
+
 Fumen is a desktop beatmap library for osu!. It reads your osu!lazer library and lets you browse,
 search, filter and preview all of it quickly, and shows what each osu!mania chart asks of you.
-Later versions add collections and tournament pool building (see [docs/PLAN.md](docs/PLAN.md)).
+Next come tournament pools and tools (1.2) and progress: reworked skills, sessions and sharing (1.3); see the
+[roadmap](https://fumen.dertesti.dev/roadmap) and [docs/PLAN.md](docs/PLAN.md).
 
 Fumen reads osu!'s data from a private copy of lazer's database. What it puts into lazer is beatmap
 sets you add through it and collections you send there, and that is done by lazer's own code, only
@@ -210,7 +213,7 @@ Installing restarts Fumen (Tauri's updater checks the signature first; not while
 going into lazer). The signing key is `~/.tauri/fumen-updater.key` on the machine that releases,
 never in the repo; without it, installed copies can't be updated, so keep a copy somewhere safe.
 
-`npm run mac` (not for now: macOS moved to 1.7, until someone can test it) builds the macOS app on GitHub's Macs (`.github/workflows/mac.yml`; a Mac app can't
+`npm run mac` (not for now: macOS moved to Later, until someone can test it) builds the macOS app on GitHub's Macs (`.github/workflows/mac.yml`; a Mac app can't
 be built on Windows) for Apple Silicon and Intel and puts the disk images on the site's updates
 folder (the commit in their names). The Apple Silicon build is tested first against osu!lazer's
 macOS release: lazer's own import into a fresh library, read back by Fumen's reader. The app isn't
