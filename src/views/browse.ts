@@ -52,6 +52,17 @@ const CHIPS = 6;
 /** a whole search added at once from this many sets asks first */
 const ASK_FROM = 10;
 
+/** about a row's height plus the list's gap: how far apart the placeholders sit */
+const GHOST_PITCH = 72;
+
+/** Placeholder rows shaped like the sets that come: art, the three lines (in their own line heights), chips, the action. */
+function ghostRows(n: number): string {
+  const line = (cls: string, w: number) => `<span class="${cls} br-ghost-line">&#8203;<i class="skeleton" style="width:${w}%"></i></span>`;
+  return Array.from({ length: n }, (_, i) =>
+    `<div class="br-row br-ghost" aria-hidden="true"><span class="skeleton br-ghost-art"></span><span class="br-text">${line("t-title", 46 + ((i * 37) % 30))}${line("t-sub", 26 + ((i * 23) % 22))}${line("meta-line br-meta", 34 + ((i * 29) % 18))}</span><span class="skeleton br-ghost-chips"></span><span class="br-act"><span class="skeleton br-ghost-btn"></span></span></div>`,
+  ).join("");
+}
+
 const cover = (set: number) => `https://assets.ppy.sh/beatmaps/${set}/covers/list.jpg`;
 const setUrl = (set: number) => `https://osu.ppy.sh/beatmapsets/${set}`;
 
@@ -339,8 +350,12 @@ export class BrowseView {
   private renderList(): void {
     const list = this.el.querySelector<HTMLElement>(".br-list")!;
     this.renderSummary();
+    // the first page's placeholders run to the bottom edge; the page doesn't scroll over them
+    const first = !this.sets.length && this.loading === "first";
+    this.el.classList.toggle("br-first", first);
+    if (first) this.el.scrollTop = 0;
     if (!this.sets.length) {
-      if (this.loading === "first") list.innerHTML = Array.from({ length: 6 }, () => `<div class="skeleton br-skel"></div>`).join("");
+      if (first) list.innerHTML = ghostRows(Math.ceil(window.innerHeight / GHOST_PITCH) + 1);
       else if (this.error) list.innerHTML = `<div class="empty-state br-empty">${icon("alert")}<div class="empty-title">${t("The mirrors couldn't search")}</div><div class="empty-sub">${esc(this.error)}</div><button class="btn btn-sm br-retry" type="button">${t("Try again")}</button></div>`;
       else list.innerHTML = `<div class="empty-state br-empty">${icon("search-duo")}<div class="empty-title">${t("Nothing on the mirrors matches")}</div><div class="empty-sub">${t("Fewer filters, or other words, find more.")}</div></div>`;
       return;
@@ -358,7 +373,7 @@ export class BrowseView {
 
   private renderFoot(): void {
     const foot = this.el.querySelector<HTMLElement>(".br-foot")!;
-    if (this.loading === "more") foot.innerHTML = `<div class="skeleton br-skel"></div><div class="skeleton br-skel"></div>`;
+    if (this.loading === "more") foot.innerHTML = `<div class="br-list br-ghosts">${ghostRows(2)}</div>`;
     else if (this.error && this.sets.length) foot.innerHTML = `<div class="br-foot-note">${icon("alert")}<span>${esc(this.error)}</span><button class="btn btn-ghost btn-sm br-retry" type="button">${t("Try again")}</button></div>`;
     else if (this.more) foot.innerHTML = `<button class="btn btn-ghost btn-sm br-more" type="button">${t("More")}</button>`;
     else foot.innerHTML = this.sets.length ? `<div class="br-foot-note">${t("That's every set the mirror found.")}</div>` : "";
