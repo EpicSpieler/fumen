@@ -19,14 +19,14 @@
 .br-search:hover { background: var(--fill-mod); }
 .br-search:focus-within { background: var(--fill-mod); box-shadow: inset 0 0 0 1px var(--accent-line); color: var(--t2); }
 .br-search .ic { width: 16px; height: 16px; flex: none; }
-.br-search input,
-.br-search input:hover:not(:focus),
-.br-search input:focus:not([type="checkbox"]) {
+/* the pill is the field: the input inside it stays bare in every state (as in the sidebar's search) */
+.br-search input {
   flex: 1;
   height: 100%;
   padding: 0;
-  background: none;
-  box-shadow: none;
+  background: transparent !important;
+  box-shadow: none !important;
+  border-radius: 0;
   font-size: var(--fs-13);
 }
 .br-search input::-webkit-search-cancel-button { -webkit-appearance: none; }
