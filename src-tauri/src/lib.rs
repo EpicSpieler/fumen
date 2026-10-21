@@ -1050,6 +1050,62 @@ async fn save_collection_db(app: AppHandle, title: String, filter: String, picks
     .map_err(|e| Error::known("internal", e.to_string()))?
 }
 
+/// "%E2%98%85" → "★" (what a header carries of a name).
+fn uri_decode(s: &str) -> String {
+    let b = s.as_bytes();
+    let mut out = Vec::with_capacity(b.len());
+    let mut i = 0;
+    while i < b.len() {
+        let hex = |c: u8| (c as char).to_digit(16);
+        if b[i] == b'%' && i + 2 < b.len() {
+            if let (Some(h), Some(l)) = (hex(b[i + 1]), hex(b[i + 2])) {
+                out.push((h * 16 + l) as u8);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(b[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+/// the most a window may save at once
+const SAVE_MAX: usize = 32 * 1024 * 1024;
+
+/// Saves what the window made (a pool as CSV or JSON, a showcase image) where the player picks in
+/// the system's save dialog: only there, and only as the kind it says. The bytes are the
+/// request's body; its headers (URI-encoded) say the rest: x-fumen-kind (csv, json, png),
+/// x-fumen-name (the file name offered), x-fumen-title and x-fumen-filter (the dialog's words).
+/// Returns the file's name, None when cancelled.
+#[tauri::command]
+async fn save_file(app: AppHandle, request: tauri::ipc::Request<'_>) -> Result<Option<String>> {
+    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else { return Err(Error::known("bad-file", "There's nothing to save.")) };
+    if bytes.is_empty() || bytes.len() > SAVE_MAX {
+        return Err(Error::known("bad-file", "There's nothing to save."));
+    }
+    let header = |k: &str| request.headers().get(k).and_then(|v| v.to_str().ok()).map(uri_decode).unwrap_or_default();
+    let ext: &'static str = match header("x-fumen-kind").as_str() {
+        "csv" => "csv",
+        "json" => "json",
+        "png" => "png",
+        _ => return Err(Error::known("bad-file", "There's nothing to save.")),
+    };
+    // a name, not a path
+    let name: String = header("x-fumen-name").chars().filter(|c| !matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|') && !c.is_control()).take(120).collect();
+    let (title, filter, bytes) = (header("x-fumen-title"), header("x-fumen-filter"), bytes.clone());
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri_plugin_dialog::DialogExt;
+        let picked = app.dialog().file().set_title(&title).set_file_name(&name).add_filter(&filter, &[ext]).blocking_save_file();
+        let Some(path) = picked.and_then(|p| p.into_path().ok()) else { return Ok(None) };
+        let path = if path.extension().is_some_and(|e| e.eq_ignore_ascii_case(ext)) { path } else { path.with_extension(ext) };
+        std::fs::write(&path, &bytes)?;
+        Ok(path.file_name().map(|n| n.to_string_lossy().into_owned()))
+    })
+    .await
+    .map_err(|e| Error::known("internal", e.to_string()))?
+}
+
 /// A Fumen copy of one of lazer's collections (Fumen's can be changed).
 #[tauri::command]
 fn copy_lazer_collection(state: State<AppState>, id: String, name: String) -> Result<String> {
@@ -1802,6 +1858,7 @@ pub fn run() {
             put_collections_into_lazer,
             delete_sets_in_lazer,
             save_collection_db,
+            save_file,
             send_ping,
             copy_lazer_collection,
             rename_collection,
@@ -1833,5 +1890,13 @@ mod tests {
         assert!(!ok("https://osu.ppy.sh/beatmapsets/1"));
         assert!(!ok("file:///C:/Windows/"));
         assert!(!ok("javascript:alert(1)"));
+    }
+
+    #[test]
+    fn names_from_headers() {
+        assert_eq!(super::uri_decode("RPRO%20Cup%20%E2%98%85.png"), "RPRO Cup ★.png");
+        // what isn't an escape stays
+        assert_eq!(super::uri_decode("100%"), "100%");
+        assert_eq!(super::uri_decode("%zz%4"), "%zz%4");
     }
 }

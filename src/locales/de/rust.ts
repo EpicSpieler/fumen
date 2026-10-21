@@ -19,6 +19,7 @@ export const rust: Record<string, string> = {
   "That isn't a link to a difficulty on osu!, or its number.": "Das ist kein Link zu einem Schwierigkeitsgrad auf osu! und auch keine Nummer davon.",
   "No mirror has this difficulty. Is the link right?": "Kein Mirror hat diesen Schwierigkeitsgrad. Stimmt der Link?",
   "That doesn't look like a chart.": "Das sieht nicht nach einem Chart aus.",
+  "There's nothing to save.": "Da ist nichts zum Speichern.",
   "Couldn't read this chart for pp.": "Dieses Chart ließ sich für pp nicht lesen.",
   "This chart is too unusual to work out pp for.": "Dieses Chart ist zu ungewöhnlich, um pp dafür zu berechnen.",
   "Couldn't work out pp for this chart.": "Für dieses Chart ließen sich keine pp berechnen.",
