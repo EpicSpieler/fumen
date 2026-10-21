@@ -26,6 +26,7 @@ mod paths;
 mod ping;
 mod secret;
 mod player;
+mod pp;
 mod protocol;
 mod settings;
 mod skins;
@@ -654,6 +655,18 @@ async fn get_dan(app: AppHandle, id: String, rate: f64) -> Result<Option<mma::da
     tauri::async_runtime::spawn_blocking(move || Ok(mma::dan::rate(&load_chart(&app, &id)?, rate.clamp(0.25, 4.0))))
         .await
         .map_err(|e| Error::known("internal", e.to_string()))?
+}
+
+/// pp for a library difficulty at some mods and a rate: a perfect play and each play asked about
+/// (see `pp.rs`).
+#[tauri::command]
+async fn get_pp(app: AppHandle, id: String, mods: Vec<String>, rate: f64, plays: Vec<pp::Hits>) -> Result<pp::Sheet> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let hash = chart_hash(&app, &id)?;
+        pp::sheet(&app.state::<AppState>().files(), &hash, &mods, rate, &plays)
+    })
+    .await
+    .map_err(|e| Error::known("internal", e.to_string()))?
 }
 
 /// An osu!mania difficulty's hitsounds, with its set's custom samples and storyboard samples
@@ -1672,6 +1685,7 @@ pub fn run() {
             get_library,
             get_chart,
             get_dan,
+            get_pp,
             get_hitsounds,
             get_skins,
             get_skin_files,

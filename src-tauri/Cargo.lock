@@ -1114,6 +1114,7 @@ dependencies = [
  "lzma-rs",
  "md-5",
  "notify",
+ "rosu-pp-gemini",
  "rusqlite",
  "serde",
  "serde_json",
@@ -3193,6 +3194,28 @@ dependencies = [
  "libc",
  "untrusted",
  "windows-sys 0.52.0",
+]
+
+[[package]]
+name = "rosu-map"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6b92ea634d8b3eaa4d7fba7bd12045dda1a50ce81401c96af0d9c851b0737544"
+
+[[package]]
+name = "rosu-mods"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cc58d42f8f2308b4b241de147827af84179d0a318de250495c7c5e47cb701cd9"
+
+[[package]]
+name = "rosu-pp-gemini"
+version = "5.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e54436e3b61f9fbe46507dc45e232023141454189f1256652d02c0248e21d088"
+dependencies = [
+ "rosu-map",
+ "rosu-mods",
 ]
 
 [[package]]
