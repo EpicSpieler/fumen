@@ -491,6 +491,15 @@ The accuracy from those counts matches lazer's own on 600 of 600 real scores (`l
       session), Browse follows it; downloaded sets go into stable's Songs folder as `<set id>.osz`
       (`stable_import.rs`: copied as `.fumen-part`, then renamed; never replaces a file), stable
       imports them on its next start
+- [x] pp for every difficulty (1.1.5): a Performance block in the chart panel (`src/views/pp.ts`,
+      `src/lib/pp.ts`, `src-tauri/src/pp.rs`). The most a play gives at the picked mods (EZ, NF,
+      HR, HD, FL; HT/DT are the player's rate) with the star rating, 99/98/97/95%, a play typed in
+      (osu!mania Great/Good/Ok/Meh/Miss, osu! Ok/Meh/Miss + combo, osu!taiko Ok/Miss, osu!catch
+      misses + tiny droplet misses) and a graph with a line per judgement through that play; a
+      drag along a line sets its count. The numbers come from rosu-pp-gemini 5.0.4 (MIT, a fork of
+      rosu-pp that follows osu!'s algorithms after rosu-pp 4.0.1, which is behind live for osu! and
+      osu!taiko): checked against 413 of the user's lazer scores with osu!'s pp, all within 0.1%
+      (`pp::tests::real_scores`). Back to rosu-pp once it catches up
 
 ## After 1.0
 

@@ -51,6 +51,9 @@ database first (see [Adding beatmaps](#adding-beatmaps)).
 - Every difficulty's `.osu` is analysed once in the background (all ~22k in a few seconds)
 - Chart panel on the set page: a notes-per-second graph (kiai and breaks marked) you can click to
   jump, peak / average density, longest burst
+- pp for every difficulty, as osu! works them out: the most a play gives with the mods you pick
+  (Half Time / Double Time at any rate), 99 / 98 / 97 / 95%, and any play you type in (Goods,
+  Misses and the rest, mixed as you like) with a graph of how each judgement costs pp
 - Fullscreen player (fills the app window), switchable at the top: a visualizer (the art and frequency bars from the song)
   or the playfield of any ruleset (osu!, osu!taiko, osu!catch, osu!mania) with the live numbers beside it (notes per second, the
   pattern of this second, BPM, notes so far, density graph). osu!mania scrolls at your lazer scroll
@@ -260,6 +263,8 @@ docs/PLAN.md      roadmap
 - Beatmap mirrors [osu.direct](https://osu.direct), [nekoha.moe](https://mirror.nekoha.moe),
   [catboy.best](https://catboy.best), [beatconnect.io](https://beatconnect.io),
   [sayobot.cn](https://osu.sayobot.cn) and [nerinyan.moe](https://nerinyan.moe) for the downloads
+- [rosu-pp](https://github.com/MaxOhn/rosu-pp) by MaxOhn (MIT), through its fork
+  [rosu-pp-gemini](https://github.com/Raregendary/rosu-pp-gemini) (MIT): star ratings and pp
 - [ManiaMapAnalyser](https://github.com/LeoBlackMT/osumania_map_analyser) by Leo_Black (MIT): the
   pattern report and dan estimators in `src-tauri/src/mma` (licence alongside), which build on
   [Interlude](https://github.com/YAVSRG/YAVSRG)'s pattern analysis,
