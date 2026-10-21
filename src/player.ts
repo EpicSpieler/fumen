@@ -49,6 +49,8 @@ class Player {
   private history: number[] = [];
   private startAt = 0;
   private fadeRaf = 0;
+  /** the volume, once it lives in Web Audio */
+  private gain: GainNode | null = null;
 
   constructor() {
     this.audio.preload = "auto";
@@ -205,19 +207,33 @@ class Player {
     cancelAnimationFrame(this.fadeRaf);
     const target = this.targetVolume();
     if (this.audio.currentTime < 0.05) {
-      this.audio.volume = target;
+      this.setOut(target);
       this.audio.play().catch(() => {});
       return;
     }
-    this.audio.volume = 0;
+    this.setOut(0);
     this.audio.play().catch(() => {});
     const t0 = performance.now();
     const step = (t: number) => {
       const k = Math.min(1, (t - t0) / 450);
-      this.audio.volume = target * k;
+      this.setOut(target * k);
       if (k < 1) this.fadeRaf = requestAnimationFrame(step);
     };
     this.fadeRaf = requestAnimationFrame(step);
+  }
+
+  /** Routes the volume through a gain in Web Audio (lib/eq, once the song plays through it), so the
+   * visualizer's analysers before it hear the song at full level. */
+  useGain(gain: GainNode): void {
+    const v = this.audio.volume;
+    this.gain = gain;
+    this.audio.volume = 1;
+    this.setOut(v);
+  }
+
+  private setOut(v: number): void {
+    if (this.gain) this.gain.gain.value = v;
+    else this.audio.volume = v;
   }
 
   /** Perceptual volume curve. */
@@ -255,7 +271,7 @@ class Player {
   setVolume(v: number): void {
     setPrefs({ volume: Math.max(0, Math.min(1, v)) });
     cancelAnimationFrame(this.fadeRaf);
-    this.audio.volume = this.targetVolume();
+    this.setOut(this.targetVolume());
   }
 
   setRate(r: number): void {

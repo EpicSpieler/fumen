@@ -1,36 +1,43 @@
-/* eq.ts — the song in Web Audio: frequency bars for the fullscreen visualizer, read from the
- * player's own audio, and the context the playfield's hitsounds play in (on the song's clock and
- * output path, so they line up with it).
+/* eq.ts — the song in Web Audio: the analysers the fullscreen visualizer reads (lib/vis/analysis),
+ * and the context the playfield's hitsounds play in (on the song's clock and output path, so they
+ * line up with it).
  *
  * The audio element is routed through Web Audio once, on first use (it must start from a user
  * gesture). The element loads with CORS ("anonymous"; fumen:// answers with
- * Access-Control-Allow-Origin), otherwise the analyser would only ever see silence.
+ * Access-Control-Allow-Origin), otherwise the analysers would only ever see silence. From then on
+ * the player's volume is a gain after the analysers, so they hear the song at full level however
+ * loud it's played.
  */
 import { player } from "../player";
 
 let ctx: AudioContext | null = null;
-let analyser: AnalyserNode | null = null;
-let bins: Uint8Array<ArrayBuffer> = new Uint8Array(0);
+let long: AnalyserNode | null = null;
+let short: AnalyserNode | null = null;
 
 /** The context the song plays through (set up on first use), or null without Web Audio. */
 export function audioContext(): AudioContext | null {
   return startAnalyser() ? ctx : null;
 }
 
-/** Starts (or resumes) the analyser; false when Web Audio isn't available. */
+/** Starts (or resumes) the analysers; false when Web Audio isn't available. */
 export function startAnalyser(): boolean {
   try {
     if (!ctx) {
       ctx = new AudioContext();
       const source = ctx.createMediaElementSource(player.audio);
-      analyser = ctx.createAnalyser();
-      analyser.fftSize = 4096;
-      analyser.smoothingTimeConstant = 0.7;
-      analyser.minDecibels = -88;
-      analyser.maxDecibels = -18;
-      source.connect(analyser);
-      analyser.connect(ctx.destination);
-      bins = new Uint8Array(analyser.frequencyBinCount);
+      // exact in the bass (an 85 ms window at 48 kHz), quick above it (43 ms); no smoothing of their own
+      long = ctx.createAnalyser();
+      long.fftSize = 4096;
+      long.smoothingTimeConstant = 0;
+      short = ctx.createAnalyser();
+      short.fftSize = 2048;
+      short.smoothingTimeConstant = 0;
+      const volume = ctx.createGain();
+      source.connect(long);
+      long.connect(short);
+      short.connect(volume);
+      volume.connect(ctx.destination);
+      player.useGain(volume);
     }
     if (ctx.state === "suspended") void ctx.resume();
     return true;
@@ -40,27 +47,12 @@ export function startAnalyser(): boolean {
   }
 }
 
-/**
- * Fills `out` with one level (0–1) per bar, log-spaced from 32 Hz to 16 kHz like a spectrum
- * analyser. Returns false when there's nothing to read.
- */
-export function readBars(out: Float32Array): boolean {
-  if (!analyser || !ctx) return false;
-  analyser.getByteFrequencyData(bins);
-  const n = out.length;
-  const hzPerBin = ctx.sampleRate / analyser.fftSize;
-  const lo = 32;
-  const hi = 16000;
-  for (let i = 0; i < n; i++) {
-    const f0 = lo * Math.pow(hi / lo, i / n);
-    const f1 = lo * Math.pow(hi / lo, (i + 1) / n);
-    const b0 = Math.max(1, Math.floor(f0 / hzPerBin));
-    const b1 = Math.max(b0 + 1, Math.ceil(f1 / hzPerBin));
-    let peak = 0;
-    for (let b = b0; b < b1 && b < bins.length; b++) peak = Math.max(peak, bins[b]);
-    // treble carries less energy; lift it a little so the right side isn't always flat
-    const tilt = 0.82 + 0.3 * (i / n);
-    out[i] = Math.min(1, (peak / 255) * tilt);
-  }
-  return true;
+/** The analysers, once the song runs through Web Audio. */
+export function analysers(): { ctx: AudioContext; long: AnalyserNode; short: AnalyserNode } | null {
+  return ctx && long && short && ctx.state === "running" ? { ctx, long, short } : null;
+}
+
+/** How far the sound you hear lags behind the context's clock, seconds. */
+export function outputLatency(): number {
+  return ctx ? (ctx.outputLatency || 0) + (ctx.baseLatency || 0) : 0;
 }
