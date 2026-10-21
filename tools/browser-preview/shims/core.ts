@@ -76,6 +76,19 @@ export async function invoke<T>(cmd: string, args: Record<string, unknown> = {},
       const chart = (await res.json()) as { dans?: Record<string, unknown> };
       return (chart.dans?.[(args.rate as number).toFixed(2)] ?? null) as T;
     }
+    case "get_matches":
+    case "create_match":
+    case "update_match":
+    case "delete_match":
+    case "set_match_room":
+    case "refresh_match":
+      return previewMatches(cmd, args) as T;
+    case "overlay_port":
+    case "overlay_stop":
+    case "overlay_state":
+      return null as T;
+    case "overlay_start":
+      return 24180 as T;
     case "get_pools":
     case "create_pool":
     case "update_pool":
@@ -693,6 +706,72 @@ async function previewPools(cmd: string, args: Record<string, unknown>): Promise
       if (s) s.note = String(args.note);
       save();
       return null;
+    }
+  }
+  return null;
+}
+
+// ── matches (localStorage "fumen-preview-matches"); a room's games made up from the pool's slots ──
+
+const MATCHES_KEY = "fumen-preview-matches";
+
+async function previewMatches(cmd: string, args: Record<string, unknown>): Promise<unknown> {
+  const all = JSON.parse(localStorage.getItem(MATCHES_KEY) ?? "[]") as Record<string, any>[];
+  const save = () => localStorage.setItem(MATCHES_KEY, JSON.stringify(all));
+  const m = all.find((x) => x.id === args.id);
+  const patch = (x: Record<string, any>, p: Record<string, any>) => {
+    for (const [k, v] of Object.entries(p)) {
+      if (v === undefined || v === null) continue;
+      if (k === "at") x.at = (v as number) > 0 ? v : undefined;
+      else if (k === "firstPick") x.firstPick = v || undefined;
+      else x[k] = v;
+    }
+    x.updated = Date.now();
+  };
+  switch (cmd) {
+    case "get_matches":
+      return all.sort((a, b) => (a.at ?? Infinity) - (b.at ?? Infinity));
+    case "create_match": {
+      const x = { id: Math.random().toString(16).slice(2), poolId: args.pool, red: "", blue: "", bestOf: 7, warmups: 0, bans: [], picks: [], note: "", created: Date.now(), updated: Date.now() };
+      patch(x, args.patch as Record<string, any>);
+      all.push(x);
+      save();
+      return x.id;
+    }
+    case "update_match":
+      patch(m!, args.patch as Record<string, any>);
+      save();
+      return null;
+    case "delete_match":
+      all.splice(all.indexOf(m!), 1);
+      save();
+      return null;
+    case "set_match_room": {
+      const id = Number(/(\d+)\s*$/.exec(String(args.link))?.[1] ?? 0);
+      if (String(args.link).trim() && !id) throw { code: "bad-room", message: "That isn't a link to a multiplayer room on osu!, or its number." };
+      if (m!.mpId !== id) m!.result = undefined;
+      m!.mpId = id || undefined;
+      save();
+      return null;
+    }
+    case "refresh_match": {
+      // a made-up room: the pool's maps in order, red winning the odd ones
+      const pools = JSON.parse(localStorage.getItem(POOLS_KEY) ?? "[]") as PreviewPool[];
+      const pool = pools.find((p) => p.id === m!.poolId);
+      const played = (localStorage.getItem("fumen-preview-played") ?? "4").split(",").map(Number)[0];
+      const ids = (pool?.slots ?? []).map((sl) => sl.onlineId).filter((x): x is number => !!x).slice(0, played + 1);
+      const t0 = Date.parse("2026-08-01T18:00:00Z");
+      const games = ids.map((b, i) => ({
+        id: 1000 + i, beatmapId: b, title: "", start: t0 + i * 300_000, end: i < played ? t0 + i * 300_000 + 200_000 : undefined, mode: 3, mods: [], scoring: "scorev2", teamType: "head-to-head",
+        scores: i < played ? [
+          { user: 1, score: 900_000 - (i % 2) * 120_000 + i * 3000, acc: 0.985 - (i % 2) * 0.02, combo: 1000, misses: i, team: "none", passed: true, mods: [] },
+          { user: 2, score: 860_000 + (i % 2) * 90_000, acc: 0.975 + (i % 2) * 0.01, combo: 900, misses: 2, team: "none", passed: true, mods: [] },
+        ] : [],
+      }));
+      m!.result = { id: m!.mpId, name: `RPRO: (${m!.red}) vs (${m!.blue})`, start: t0, users: [{ id: 1, name: m!.red || "Player 1" }, { id: 2, name: m!.blue || "Player 2" }], games };
+      m!.fetched = Date.now();
+      save();
+      return m;
     }
   }
   return null;
