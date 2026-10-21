@@ -67,6 +67,15 @@ export async function invoke<T>(cmd: string, args: Record<string, unknown> = {})
       const chart = (await res.json()) as { dans?: Record<string, unknown> };
       return (chart.dans?.[(args.rate as number).toFixed(2)] ?? null) as T;
     }
+    case "get_pools":
+    case "create_pool":
+    case "update_pool":
+    case "delete_pool":
+    case "set_pool_slot":
+    case "clear_pool_slot":
+    case "swap_pool_slots":
+    case "set_pool_slot_note":
+      return previewPools(cmd, args) as T;
     case "get_pp": {
       // osu!mania's pp formula on Fumen's star ratings (no Rust here); the other rulesets get a
       // made-up curve, enough to see the panel
@@ -572,4 +581,89 @@ async function previewPlays(): Promise<PreviewPlay[]> {
       bestBefore: i === 0 ? acc - 0.0042 : acc + 0.012,
     };
   });
+}
+
+// ── pools (src-tauri/src/pools.rs, kept in localStorage here) ──────────────────
+
+interface PreviewKind {
+  code: string;
+  count: number;
+  mods: string[];
+}
+interface PreviewPool {
+  id: string;
+  name: string;
+  mode: number;
+  keys?: number;
+  categories: PreviewKind[];
+  note: string;
+  created: number;
+  updated: number;
+  slots: { slot: string; map?: string; md5?: string; onlineId?: number; note: string }[];
+}
+
+const POOLS_KEY = "fumen-preview-pools";
+const slotCodes = (kinds: PreviewKind[]) => kinds.flatMap((k) => (k.count === 1 ? [k.code] : Array.from({ length: k.count }, (_, i) => `${k.code}${i + 1}`)));
+
+async function previewPools(cmd: string, args: Record<string, unknown>): Promise<unknown> {
+  const all = JSON.parse(localStorage.getItem(POOLS_KEY) ?? "[]") as PreviewPool[];
+  const save = () => localStorage.setItem(POOLS_KEY, JSON.stringify(all));
+  const pool = all.find((p) => p.id === args.id);
+  const order = (p: PreviewPool) => p.slots.sort((a, b) => slotCodes(p.categories).indexOf(a.slot) - slotCodes(p.categories).indexOf(b.slot));
+  const fail = (message: string) => {
+    throw { code: "preview", message };
+  };
+  switch (cmd) {
+    case "get_pools":
+      return all;
+    case "create_pool": {
+      const id = Math.random().toString(16).slice(2);
+      const kinds = (args.categories as PreviewKind[]).map((k) => ({ ...k, code: k.code.toUpperCase() }));
+      all.push({ id, name: String(args.name).trim(), mode: args.mode as number, keys: (args.keys as number) ?? undefined, categories: kinds, note: "", created: Date.now(), updated: Date.now(), slots: [] });
+      save();
+      return id;
+    }
+    case "update_pool": {
+      if (!pool) return fail("That pool doesn't exist any more.");
+      const patch = args.patch as Partial<PreviewPool>;
+      if (patch.name) pool.name = patch.name;
+      if (patch.categories) {
+        pool.categories = patch.categories;
+        const keep = slotCodes(pool.categories);
+        pool.slots = pool.slots.filter((s) => keep.includes(s.slot));
+      }
+      save();
+      return null;
+    }
+    case "delete_pool":
+      all.splice(all.indexOf(pool!), 1);
+      save();
+      return null;
+    case "set_pool_slot": {
+      if (!pool) return fail("That pool doesn't exist any more.");
+      const snap = (await (await fetch("/__fumen/snapshot")).json()) as { maps: { id: string; onlineId?: number }[] };
+      const m = snap.maps.find((x) => x.id === args.map);
+      pool.slots = pool.slots.filter((s) => s.map !== args.map && s.slot !== args.slot);
+      pool.slots.push({ slot: String(args.slot), map: String(args.map), md5: String(args.map), onlineId: m?.onlineId, note: "" });
+      order(pool);
+      save();
+      return null;
+    }
+    case "clear_pool_slot":
+      pool!.slots = pool!.slots.filter((s) => s.slot !== args.slot);
+      save();
+      return null;
+    case "swap_pool_slots":
+      for (const s of pool!.slots) s.slot = s.slot === args.a ? String(args.b) : s.slot === args.b ? String(args.a) : s.slot;
+      order(pool!);
+      save();
+      return null;
+    case "set_pool_slot_note": {
+      const s = pool?.slots.find((x) => x.slot === args.slot);
+      if (s) s.note = String(args.note);
+      save();
+      return null;
+    }
+  }
+  return null;
 }
