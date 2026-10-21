@@ -5,6 +5,7 @@ import type { Comparison } from "./compare";
 import type { Goal } from "./goals";
 import { fromRust } from "./i18n";
 import type { ChartMods } from "./mods";
+import type { Pool, PoolKind } from "./pools";
 import type {
   CareReport, ApiError,
   ChartData,
@@ -62,6 +63,14 @@ export const api = {
   },
   /** an osu!mania difficulty's dan at a clock rate */
   getDan: (id: string, rate: number) => invoke<DanRating | null>("get_dan", { id, rate }),
+  getPools: () => invoke<Pool[]>("get_pools"),
+  createPool: (name: string, mode: number, keys: number | null, categories: PoolKind[]) => invoke<string>("create_pool", { name, mode, keys, categories }),
+  updatePool: (id: string, patch: { name?: string; categories?: PoolKind[]; note?: string }) => invoke<void>("update_pool", { id, patch }),
+  deletePool: (id: string) => invoke<void>("delete_pool", { id }),
+  setPoolSlot: (id: string, slot: string, map: string) => invoke<void>("set_pool_slot", { id, slot, map }),
+  clearPoolSlot: (id: string, slot: string) => invoke<void>("clear_pool_slot", { id, slot }),
+  swapPoolSlots: (id: string, a: string, b: string) => invoke<void>("swap_pool_slots", { id, a, b }),
+  setPoolSlotNote: (id: string, slot: string, note: string) => invoke<void>("set_pool_slot_note", { id, slot, note }),
   /** pp at some mods and a rate: a perfect play and each of `plays` (pp.rs) */
   getPp: (id: string, mods: string[], rate: number, plays: PpHits[]) => invoke<PpSheet>("get_pp", { id, mods, rate, plays }),
   /** an osu!mania difficulty's hitsounds */

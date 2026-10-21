@@ -12,6 +12,7 @@ import { player } from "../player";
 import { openMenu, toast, uiConfirm, uiPrompt, type MenuEntry } from "../ui/controls";
 import type { PatternName } from "../lib/types";
 import { openDeleteWindow } from "./delete-window";
+import { poolPicker } from "./pool-picker";
 import { practiceChart } from "./fullscreen";
 import { t, tn } from "../lib/i18n";
 
@@ -64,6 +65,7 @@ export function setMenu(
   // a set: all its difficulties
   const picked = mapIdx !== undefined ? [mapIdx] : [...set.maps];
   entries.push("sep", { label: t("Add to collection…"), icon: "collection", action: () => collectionPicker(at, picked) });
+  if (mapIdx !== undefined && map && map.mode >= 0 && map.mode <= 3) entries.push({ label: t("Add to pool…"), icon: "flag", action: () => poolPicker(at, mapIdx) });
   if (opts.collection && fumenCollection(opts.collection) && !isSmart(fumenCollection(opts.collection))) {
     const id = opts.collection;
     entries.push({ label: map ? t("Remove from collection") : t("Remove set from collection"), icon: "x", action: () => void removeFromCollection(id, picked) });

@@ -17,8 +17,9 @@ import { history } from "./de/history";
 import { skills } from "./de/skills";
 import { manage } from "./de/manage";
 import { live } from "./de/live";
+import { pools } from "./de/pools";
 
 /** what Fumen's Rust side says, for fromRust() (apart: the code doesn't name these texts) */
 export { rust } from "./de/rust";
 
-export const de: Record<string, string> = { ...common, ...shell, ...settings, ...player, ...menus, ...home, ...library, ...set, ...chart, ...history, ...skills, ...manage, ...live };
+export const de: Record<string, string> = { ...common, ...shell, ...settings, ...player, ...menus, ...home, ...library, ...set, ...chart, ...history, ...skills, ...manage, ...live, ...pools };

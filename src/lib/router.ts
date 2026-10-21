@@ -8,6 +8,8 @@ export type Route =
   | { name: "skills" }
   | { name: "browse" }
   | { name: "care" }
+  /** id: one pool (else the list) */
+  | { name: "pools"; id?: string }
   /** similar: open the difficulty's similar maps */
   | { name: "set"; id: string; map?: string; similar?: boolean }
   | { name: "collection"; id: string }

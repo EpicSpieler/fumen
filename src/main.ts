@@ -13,6 +13,7 @@ import "./styles/welcome.css";
 import "./styles/import.css";
 import "./styles/history.css";
 import "./styles/care.css";
+import "./styles/pools.css";
 import "./styles/delete.css";
 import "./styles/skills.css";
 import "./styles/browse.css";
@@ -35,6 +36,8 @@ import { openFullscreen } from "./views/fullscreen";
 import { BrowseView } from "./views/browse";
 import { ScoreView } from "./views/score";
 import { CareView } from "./views/care";
+import { PoolsView } from "./views/pools";
+import { initPools } from "./lib/pools";
 import { importProgressText, isImporting, openImport } from "./views/import";
 import { readLinks } from "./lib/links";
 import { closeMenus, initControls, toast } from "./ui/controls";
@@ -87,6 +90,7 @@ app.innerHTML = `
       <button class="nav-item reveal" type="button" data-nav="history">${icon("clock")}<span class="nav-label">${t("History")}</span></button>
       <button class="nav-item reveal" type="button" data-nav="skills">${icon("radar")}<span class="nav-label">${t("Skills")}</span></button>
       <button class="nav-item reveal" type="button" data-nav="browse">${icon("compass")}<span class="nav-label">${t("Browse")}</span></button>
+      <button class="nav-item reveal" type="button" data-nav="pools">${icon("flag")}<span class="nav-label">${t("Pools")}</span></button>
       <button class="nav-item reveal" type="button" data-nav="care">${icon("drive")}<span class="nav-label">${t("Library care")}</span></button>
       <button class="nav-item reveal" type="button" data-act="import">${icon("download")}<span class="nav-label">${t("Add beatmaps")}</span></button>
     </div>
@@ -345,6 +349,10 @@ function show(route: Route): void {
     case "care":
       view = ensureCare();
       break;
+    case "pools":
+      view = new PoolsView(route.id);
+      content.appendChild(view.el);
+      break;
     case "collection":
       view = collectionView(route.id) ?? ensureLibrary();
       break;
@@ -476,7 +484,7 @@ app.querySelector(".nav")!.addEventListener("click", (e) => {
   const b = (e.target as Element).closest<HTMLElement>("[data-nav]");
   if (!b) return;
   if (!store.snap) return goSection({ name: "welcome" });
-  goSection({ name: b.dataset.nav as "home" | "library" | "history" | "skills" | "browse" | "care" });
+  goSection({ name: b.dataset.nav as "home" | "library" | "history" | "skills" | "browse" | "care" | "pools" });
 });
 $(".profile-settings").addEventListener("click", () => goSection({ name: "settings" }));
 sideList.addEventListener("click", (e) => {
@@ -895,6 +903,7 @@ async function boot(): Promise<void> {
   initUpdater();
   initGoals();
   initCollections();
+  initPools();
   initLivePlays();
   document.body.classList.add("ready");
   void startPing().catch((e) => console.warn("[ping]", asApiError(e).message));
