@@ -6,8 +6,8 @@
 
 Fumen is a desktop beatmap library for osu!. It reads your osu!lazer library and lets you browse,
 search, filter and preview all of it quickly, and shows what each osu!mania chart asks of you.
-Since 1.2 it builds tournament pools and follows their matches. Next comes progress: reworked skills,
-sessions and sharing (1.3); see the [roadmap](https://fumen.dertesti.dev/roadmap) and [docs/PLAN.md](docs/PLAN.md).
+Since 1.2 it builds tournament pools and follows their matches. Next comes a new visualizer (1.3),
+then progress: reworked skills, sessions and sharing (1.4); see the [roadmap](https://fumen.dertesti.dev/roadmap) and [docs/PLAN.md](docs/PLAN.md).
 
 Fumen reads osu!'s data from a private copy of lazer's database. What it puts into lazer is beatmap
 sets you add through it and collections you send there, and that is done by lazer's own code, only
