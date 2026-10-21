@@ -67,6 +67,31 @@ export async function invoke<T>(cmd: string, args: Record<string, unknown> = {})
       const chart = (await res.json()) as { dans?: Record<string, unknown> };
       return (chart.dans?.[(args.rate as number).toFixed(2)] ?? null) as T;
     }
+    case "get_pp": {
+      // osu!mania's pp formula on Fumen's star ratings (no Rust here); the other rulesets get a
+      // made-up curve, enough to see the panel
+      const res = await fetch(`/__fumen/chart/${args.id as string}`);
+      if (!res.ok) throw { code: "chart-missing", message: "This chart wasn't exported for the browser preview." };
+      const chart = (await res.json()) as { mode: number; stars: number[]; analysis: { notes: number; holds: number } };
+      const rate = args.rate as number;
+      const mods = args.mods as string[];
+      const mania = chart.mode === 3;
+      const sr = chart.stars[Math.round((rate - 0.5) / 0.05)] ?? 3;
+      const total = mania ? chart.analysis.notes + chart.analysis.holds : chart.analysis.notes;
+      const mult = (mods.includes("NF") ? 0.75 : 1) * (mods.includes("EZ") ? 0.5 : 1);
+      type Hits = { great?: number; good?: number; ok?: number; meh?: number; miss?: number; tinyMiss?: number; acc?: number };
+      const price = (h: Hits) => {
+        const acc =
+          h.acc !== undefined
+            ? h.acc / 100
+            : 1 - ((h.great ?? 0) * 20 + (h.good ?? 0) * 120 + (h.ok ?? 0) * 220 + (h.meh ?? 0) * 270 + (h.miss ?? 0) * 320) / (320 * Math.max(1, total));
+        const pp = mania
+          ? 8 * Math.max(sr - 0.15, 0.05) ** 2.2 * Math.max(0, 5 * acc - 4) * (1 + 0.1 * Math.min(1, total / 1500))
+          : 20 * (chart.mode === 1 ? 4.5 : 5) ** 2.4 * acc ** 6 * 0.96 ** (h.miss ?? 0);
+        return { pp: pp * mult, acc: Math.max(0, acc) };
+      };
+      return { mode: chart.mode, stars: sr, max: price({}).pp, maxCombo: total, total, tiny: chart.mode === 2 ? 200 : 0, plays: (args.plays as Hits[]).map(price) } as T;
+    }
     case "get_hitsounds": {
       // preview chart files carry their hitsounds (see preview_charts)
       const res = await fetch(`/__fumen/chart/${args.id as string}`);

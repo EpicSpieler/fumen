@@ -24,6 +24,17 @@ export const chart: Record<string, string> = {
   "of rows": "der Zeilen",
   Objects: "Objekte",
   "{n} with a length": "{n} mit Länge",
+  // pp
+  Performance: "Performance",
+  "Most you can get": "Maximal möglich",
+  "pp by judgement count": "pp nach Anzahl der Judgements",
+  "Back to a perfect play": "Zurück zum perfekten Play",
+  "osu! gives no pp on {status} maps; this is what a play would be worth if it were ranked.":
+    "osu! gibt auf {status}-Maps keine pp; so viel wäre ein Play wert, wenn die Map ranked wäre.",
+  "No mods": "Keine Mods",
+  "One more {judgement}: {pp} pp": "Ein {judgement} mehr: {pp} pp",
+  "Hide this line": "Linie ausblenden",
+  "Show this line": "Linie einblenden",
   "Star rating at {rate}×, calculated by Fumen": "Sternebewertung bei {rate}×, von Fumen berechnet",
   "Scroll speed changes for {s} s of the chart": "Scrollgeschwindigkeit wechselt über {s} s des Charts",
   Patterns: "Patterns",

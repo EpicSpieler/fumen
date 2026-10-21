@@ -270,6 +270,35 @@ export interface PatternReport {
   start?: number;
 }
 
+/** A play to price (src-tauri/src/pp.rs): the judgements below the best, which is the rest. */
+export interface PpHits {
+  great?: number;
+  good?: number;
+  ok?: number;
+  meh?: number;
+  miss?: number;
+  /** osu!catch: tiny droplets missed */
+  tinyMiss?: number;
+  /** osu!, osu!catch: the longest combo (the most the misses allow when left out) */
+  combo?: number;
+  /** an accuracy 0–100 to make the hits up for, in place of the counts */
+  acc?: number;
+}
+
+export interface PpSheet {
+  mode: number;
+  stars: number;
+  /** pp for a perfect play */
+  max: number;
+  maxCombo: number;
+  /** judgements a play has (osu!mania: hold notes twice; osu!catch: fruits and droplets) */
+  total: number;
+  /** osu!catch: tiny droplets */
+  tiny: number;
+  /** one per play asked about: pp, and accuracy 0–1 */
+  plays: { pp: number; acc: number }[];
+}
+
 export interface DanRating {
   /** rice reading, e.g. "Gamma mid", "Reform 7 high", "< Intro 1 low" */
   rc: string;

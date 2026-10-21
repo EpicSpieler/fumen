@@ -26,6 +26,7 @@ import { AccentColors, drawDensity, laneTone } from "../ui/playfield";
 import { rateClick, rateControlHtml, starsAtRate, syncRateControl } from "../ui/rate";
 import { openFullscreen } from "./fullscreen";
 import { MapPlays } from "./plays";
+import { PpPanel } from "./pp";
 import { SimilarMaps } from "./similar";
 import { t } from "../lib/i18n";
 
@@ -46,6 +47,7 @@ export class ChartPanel {
   private danHtml = "";
   private plays: MapPlays | null = null;
   private similar: SimilarMaps | null = null;
+  private pp: PpPanel | null = null;
   /** scroll to the similar maps once they're there */
   private wantSimilar: boolean;
 
@@ -158,6 +160,7 @@ export class ChartPanel {
         <div class="graph-axis num"><span>0:00</span><span class="graph-hint">${d.kiai.length ? t("Notes per second · kiai shaded") : t("Notes per second")}</span><span class="axis-end">${duration(this.total() / player.rate)}</span></div>
         <div class="chart-stats${mania ? " has-dan" : ""}">${this.statsHtml(d)}</div>
         ${mania ? this.maniaBlocks(d) : ""}
+        ${field ? `<div class="chart-pp-slot"></div>` : ""}
         <div class="chart-plays"></div>
         <div class="chart-similar"></div>
         <div class="chart-actions">
@@ -168,6 +171,11 @@ export class ChartPanel {
       </div>`;
 
     this.mountPlays();
+    const ppSlot = this.el.querySelector(".chart-pp-slot");
+    if (ppSlot) {
+      this.pp = new PpPanel(this.mapIdx);
+      ppSlot.replaceWith(this.pp.el);
+    }
     this.graph = this.el.querySelector(".graph-canvas");
     attachSegIndicator(this.el.querySelector(".rate-presets")!);
     this.renderRate();
@@ -420,6 +428,7 @@ export class ChartPanel {
     this.dead = true;
     this.plays?.destroy();
     this.similar?.destroy();
+    this.pp?.destroy();
     cancelAnimationFrame(this.raf);
     this.resize?.disconnect();
     this.offs.forEach((f) => f());

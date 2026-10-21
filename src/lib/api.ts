@@ -13,6 +13,7 @@ import type {
   ReplayData,
   ReplayEntry,
   DanRating,
+  PpHits, PpSheet,
   CollectionPick, FumenCollection,
   History,
   ImportProgress,
@@ -61,6 +62,8 @@ export const api = {
   },
   /** an osu!mania difficulty's dan at a clock rate */
   getDan: (id: string, rate: number) => invoke<DanRating | null>("get_dan", { id, rate }),
+  /** pp at some mods and a rate: a perfect play and each of `plays` (pp.rs) */
+  getPp: (id: string, mods: string[], rate: number, plays: PpHits[]) => invoke<PpSheet>("get_pp", { id, mods, rate, plays }),
   /** an osu!mania difficulty's hitsounds */
   getHitsounds: (id: string) => invoke<ChartSounds>("get_hitsounds", { id }),
   /** lazer's scores on a difficulty that come with a replay, best first */
