@@ -175,7 +175,7 @@ export function similarTo(
 const SAY = 0.6;
 
 /** What sets `b` apart from the chart it's like, the biggest first: "harder", "more jacks" … */
-export function differences(a: MapRow, b: MapRow, l: Likeness, max = 2): string[] {
+export function differences(a: Pick<MapRow, "mode" | "shares">, b: Pick<MapRow, "mode" | "shares">, l: Likeness, max = 2): string[] {
   const words: { units: number; text: string }[] = [];
   const say = (units: number | undefined, more: string, less: string) => {
     if (units === undefined || Math.abs(units) < SAY) return;

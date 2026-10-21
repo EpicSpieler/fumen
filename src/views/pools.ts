@@ -26,16 +26,11 @@ import { icon } from "../ui/icons";
 import { openSet } from "./actions";
 import { importSets, importTarget } from "./import";
 import { openPoolDialog } from "./pool-dialog";
-import { knownStars, openSlotPicker, suits } from "./pool-picker";
+import { chartStars, openSlotPicker, suits } from "./pool-picker";
 import { ppText } from "./pp";
 
 /** what a drag of a slot carries: its code */
 const SLOT_DRAG = "application/x-fumen-slot";
-
-/** A slot's star rating at its kind's mods as far as it's known without asking pp.rs. */
-function quickStars(c: SlotChart, mods: readonly string[]): number {
-  return c.mapIdx !== undefined ? knownStars(store.snap!.maps[c.mapIdx], mods) : c.online!.sr;
-}
 
 /** The art of a slot's difficulty: the library's background, else osu!'s cover of the set. */
 function artUrl(c: SlotChart, width: number): string | null {
@@ -103,7 +98,7 @@ export class PoolsView {
         const stars = charts
           .map(([s, c]) => {
             const k = kindOfSlot(p, s.slot);
-            return c && k ? quickStars(c, k.mods) : null;
+            return c && k ? chartStars(c, k.mods) : null;
           })
           .filter((v): v is number => v !== null);
         const range = stars.length ? `${fixed(Math.min(...stars), 2)}–${fixed(Math.max(...stars), 2)}★` : "";
@@ -209,7 +204,7 @@ export class PoolsView {
         <div class="t-sub">${esc(c.artist)} · ${esc(c.version)} · ${esc(c.creator)}</div>
       </div>
       <span class="pslot-facts num">${facts.join(" · ")}${fits === false ? ` <span class="pslot-warn" data-tip="${t("Doesn't look like {kind}", { kind: esc(kindInfo(k.code).name.toLowerCase()) })}">${icon("alert")}</span>` : ""}</span>
-      <span class="pslot-sr">${srChip(this.stars.get(code) ?? quickStars(c, k.mods))}</span>
+      <span class="pslot-sr">${srChip(this.stars.get(code) ?? chartStars(c, k.mods))}</span>
       <span class="pslot-pp num">${modText(k.mods) ? `<small>${modText(k.mods)}</small>` : ""}<b>–</b></span>
       ${action}
       <button class="icon-btn sm pslot-more" type="button" aria-label="${t("More")}">${icon("more-vert")}</button>
@@ -244,7 +239,7 @@ export class PoolsView {
     for (const s of p.slots) {
       const c = slotChart(s);
       const k = kindOfSlot(p, s.slot);
-      if (c && k) stars.set(s.slot, this.stars.get(s.slot) ?? quickStars(c, k.mods));
+      if (c && k) stars.set(s.slot, this.stars.get(s.slot) ?? chartStars(c, k.mods));
     }
     const vals = [...stars.values()];
     const lo = vals.length ? Math.min(...vals) : 0;
@@ -299,7 +294,7 @@ export class PoolsView {
       );
     }
     entries.push(
-      { label: t("Pick another map…"), icon: "refresh", action: () => openSlotPicker(p.id, code) },
+      { label: t("Something like it…"), icon: "similar", action: () => openSlotPicker(p.id, code) },
       { label: t("Move to…"), icon: "arrow-right", action: () => void setTimeout(() => this.moveMenu(at, p, code), 0) },
       {
         label: s.note ? t("Change the note…") : t("Add a note…"),
