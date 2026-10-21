@@ -241,6 +241,41 @@ export function strengths(list: { match: Match; pool: Pool; state: MatchState }[
   return out;
 }
 
+export interface Choices {
+  picks: number;
+  bans: number;
+}
+
+/** Who picks and bans what over some matches, by kind of slot: name → kind → choices. A side is
+ * its one osu! player in a head-to-head room, else the name it was given (a team picks as one).
+ * Picks: the games played (by hand or every other one from the first pick), and the ones set by
+ * hand that aren't played yet. */
+export function choices(list: { match: Match; pool: Pool; state: MatchState }[]): Map<string, Map<string, Choices>> {
+  const out = new Map<string, Map<string, Choices>>();
+  for (const { match, pool, state } of list) {
+    const name = (side: Side) => (state.players[side].length === 1 ? state.players[side][0].name : (side === "red" ? match.red : match.blue).trim());
+    const add = (side: Side, slot: string, what: keyof Choices) => {
+      const kind = kindOfSlot(pool, slot)?.code;
+      const who = name(side);
+      if (!kind || !who) return;
+      const kinds = out.get(who) ?? new Map<string, Choices>();
+      const c = kinds.get(kind) ?? { picks: 0, bans: 0 };
+      c[what]++;
+      kinds.set(kind, c);
+      out.set(who, kinds);
+    };
+    for (const b of match.bans) add(b.side, b.slot, "bans");
+    const played = new Set<string>();
+    for (const g of state.games) {
+      if (!g.slot) continue;
+      played.add(g.slot);
+      if (g.pickedBy) add(g.pickedBy, g.slot, "picks");
+    }
+    for (const p of match.picks) if (!played.has(p.slot)) add(p.side, p.slot, "picks");
+  }
+  return out;
+}
+
 // ── the list ────────────────────────────────────────────────────────────
 
 export const matchEvents = new Emitter<{ matches: Match[] }>();

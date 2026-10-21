@@ -49,10 +49,11 @@
 .pool-empty { padding-top: 36px; }
 
 .player-strengths { overflow-x: auto; padding-bottom: 32px; }
-.player-strengths table { border-collapse: separate; border-spacing: 0 2px; min-width: 100%; font-size: var(--fs-12); }
+.player-strengths table { border-collapse: separate; border-spacing: 0 2px; width: 100%; min-width: 640px; table-layout: fixed; font-size: var(--fs-12); }
+.player-strengths thead th:first-child { width: 168px; }
 .player-strengths th, .player-strengths td { padding: 8px 12px; text-align: center; white-space: nowrap; }
 .player-strengths thead th { font-weight: 600; color: var(--t3); }
-.player-strengths tbody th { text-align: left; font-size: var(--fs-13); font-weight: 650; color: var(--t1); }
+.player-strengths tbody th { overflow: hidden; text-overflow: ellipsis; text-align: left; font-size: var(--fs-13); font-weight: 650; color: var(--t1); }
 .player-strengths tbody tr { background: rgb(var(--ink) / .03); }
 .player-strengths tbody th:first-child { border-radius: var(--r-md) 0 0 var(--r-md); }
 .player-strengths tbody td:last-child { border-radius: 0 var(--r-md) var(--r-md) 0; }
@@ -60,6 +61,9 @@
 .player-strengths td small { display: block; margin-top: 1px; color: var(--t3); }
 .player-strengths .ps-none { color: var(--t4); }
 .player-strengths .ps-all { font-weight: 650; color: var(--t2); }
+.player-choices td b { color: var(--t1); }
+.player-choices td small { color: var(--t3); }
+.player-choices .ps-all b { color: var(--accent-ink); }
 
 /* ---------- one match ---------- */
 .match-head { align-items: flex-end; }

@@ -30,7 +30,7 @@ import { attachSegIndicator, openMenu, toast, uiConfirm, uiPrompt, type MenuEntr
 import { icon } from "../ui/icons";
 import { openSet } from "./actions";
 import { importSets, importTarget } from "./import";
-import { matchEvents, matches, matchesOf, matchState, slotOfBeatmap, strengths, type Match } from "../lib/matches";
+import { choices, matchEvents, matches, matchesOf, matchState, slotOfBeatmap, strengths, type Choices, type Match } from "../lib/matches";
 import { openMatchDialog } from "./match-dialog";
 import { matchLine, matchWhen, sideName } from "./match";
 import { onStream, openOverlayDialog, overlayEvents, overlayPort } from "./overlay";
@@ -236,9 +236,11 @@ export class PoolsView {
   private playersHtml(p: Pool): string {
     const list = matchesOf(p.id).map((m) => ({ match: m, pool: p, state: matchState(m, (b) => slotOfBeatmap(p, b)) }));
     const st = strengths(list);
-    if (!st.size)
+    const ch = choices(list);
+    if (!st.size && !ch.size)
       return `<div class="empty-state pool-empty">${icon("user")}<div class="empty-title">${t("Nothing played yet")}</div><div class="empty-sub">${t("Once this pool's matches have games, each player's wins and accuracy by kind of slot show here.")}</div></div>`;
     const kinds = p.categories.map((k) => k.code);
+    const head = `<thead><tr><th></th>${kinds.map((k) => `<th><span class="slot-code" style="--k:${kindInfo(k).color}">${esc(k)}</span></th>`).join("")}<th class="ps-all">${t("All")}</th></tr></thead>`;
     const total = (m: Map<string, { played: number }>) => [...m.values()].reduce((a, x) => a + x.played, 0);
     const rows = [...st]
       .sort((a, b) => total(b[1]) - total(a[1]) || a[0].localeCompare(b[0]))
@@ -255,11 +257,28 @@ export class PoolsView {
         return `<tr><th scope="row">${esc(name)}</th>${cells}<td class="ps-all num">${all.won}/${all.played}</td></tr>`;
       })
       .join("");
-    return `<p class="pool-tab-note">${t("Maps won of played, and the average accuracy, by kind of slot.")}</p>
-      <div class="player-strengths"><table>
-        <thead><tr><th></th>${kinds.map((k) => `<th><span class="slot-code" style="--k:${kindInfo(k).color}">${esc(k)}</span></th>`).join("")}<th class="ps-all">${t("All")}</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table></div>`;
+    const picksBans = (x: Choices | undefined) =>
+      x && (x.picks || x.bans)
+        ? `${x.picks ? `<b class="num">${tn(x.picks, "{n} pick", "{n} picks")}</b>` : ""}${x.bans ? `<small class="num">${tn(x.bans, "{n} ban", "{n} bans")}</small>` : ""}`
+        : "–";
+    const chosen = [...ch]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([name, by]) => {
+        const all = [...by.values()].reduce((a, x) => ({ picks: a.picks + x.picks, bans: a.bans + x.bans }), { picks: 0, bans: 0 });
+        return `<tr><th scope="row">${esc(name)}</th>${kinds.map((k) => `<td${by.get(k) ? "" : ` class="ps-none"`}>${picksBans(by.get(k))}</td>`).join("")}<td class="ps-all">${picksBans(all)}</td></tr>`;
+      })
+      .join("");
+    return `${
+      st.size
+        ? `<p class="pool-tab-note">${t("Maps won of played, and the average accuracy, by kind of slot.")}</p>
+      <div class="player-strengths"><table>${head}<tbody>${rows}</tbody></table></div>`
+        : ""
+    }${
+      ch.size
+        ? `<p class="pool-tab-note">${t("What each player picks and bans, by kind of slot.")}</p>
+      <div class="player-strengths player-choices"><table>${head}<tbody>${chosen}</tbody></table></div>`
+        : ""
+    }`;
   }
 
   private kindHtml(p: Pool, k: PoolKind): string {

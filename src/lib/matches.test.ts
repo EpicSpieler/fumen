@@ -6,7 +6,7 @@ vi.mock("./api", () => ({ api: {}, asApiError: (e: unknown) => e }));
 vi.mock("./store", () => ({ Emitter: class {}, events: { on: () => () => {} } }));
 vi.mock("../ui/controls", () => ({ toast: () => {} }));
 vi.mock("./i18n", () => ({ t: (s: string) => s }));
-const { matchState, strengths } = await import("./matches");
+const { choices, matchState, strengths } = await import("./matches");
 import type { Match, MatchGame, MatchScore } from "./matches";
 import type { Pool } from "./pools";
 
@@ -92,5 +92,24 @@ describe("strengths", () => {
     expect(alpha.get("RC")).toEqual({ played: 2, won: 2, acc: 0.9 + 0.95 });
     expect(alpha.get("LN")).toEqual({ played: 1, won: 0, acc: 0.7 });
     expect(st.get("Beta")!.get("LN")!.won).toBe(1);
+  });
+});
+
+describe("picks and bans", () => {
+  it("counts each side's picks and bans by kind", () => {
+    const pool = {} as Pool;
+    const a = match([game(1, [score(10, 900_000), score(20, 800_000)]), game(3, [score(10, 700_000), score(20, 800_000)])], {
+      firstPick: "red",
+      bans: [{ side: "red", slot: "HB1" }, { side: "blue", slot: "RC2" }],
+      // set by hand, not played yet
+      picks: [{ side: "blue", slot: "LN2" }],
+    });
+    const ch = choices([{ match: a, pool, state: matchState(a, slotOf) }]);
+    expect(Object.fromEntries(ch.get("alpha")!)).toEqual({ HB: { picks: 0, bans: 1 }, RC: { picks: 1, bans: 0 } });
+    expect(Object.fromEntries(ch.get("Beta")!)).toEqual({ RC: { picks: 0, bans: 1 }, LN: { picks: 2, bans: 0 } });
+    // teams pick as one, by the name they were given
+    const team = (user: number, s: number, side: "red" | "blue") => score(user, s, { team: side });
+    const b = match([game(1, [team(1, 1, "red"), team(2, 1, "red"), team(3, 2, "blue")], { teamType: "team-vs" })], { red: "Reds", firstPick: "red" });
+    expect([...choices([{ match: b, pool, state: matchState(b, slotOf) }]).keys()]).toEqual(["Reds"]);
   });
 });
