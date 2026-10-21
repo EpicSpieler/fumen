@@ -280,6 +280,31 @@ const MIGRATIONS: &[&str] = &[
     CREATE INDEX live_plays_date ON live_plays(date);
     CREATE INDEX live_plays_md5 ON live_plays(md5);
     "#,
+    // 18 — map pools (src/pools.rs): kinds of slot with their mods, and the maps in the slots,
+    // by MD5 like collections (and osu!'s id, for maps that aren't in the library)
+    r#"
+    CREATE TABLE pools (
+        id         TEXT PRIMARY KEY,
+        name       TEXT NOT NULL,
+        mode       INTEGER NOT NULL,
+        keys       INTEGER,
+        categories TEXT NOT NULL DEFAULT '[]',
+        note       TEXT NOT NULL DEFAULT '',
+        created    INTEGER NOT NULL,
+        updated    INTEGER NOT NULL,
+        position   INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE TABLE pool_maps (
+        pool_id   TEXT NOT NULL REFERENCES pools(id) ON DELETE CASCADE,
+        slot      TEXT NOT NULL,
+        md5       TEXT,
+        online_id INTEGER,
+        note      TEXT NOT NULL DEFAULT '',
+        meta      TEXT,
+        added     INTEGER NOT NULL,
+        PRIMARY KEY (pool_id, slot)
+    );
+    "#,
 ];
 
 pub fn open(path: &Path) -> Result<Connection> {

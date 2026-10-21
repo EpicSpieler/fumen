@@ -78,7 +78,7 @@ struct Kept {
 
 /// The last few difficulties worked out: the panel asks for one chart over and over.
 static KEPT: Mutex<Vec<Kept>> = Mutex::new(Vec::new());
-const KEEP: usize = 8;
+const KEEP: usize = 64;
 
 /// The panel's mods as rosu-pp's, with the rate as Double Time or Half Time.
 fn settings(mods: &[String], rate: f64) -> (String, Difficulty) {

@@ -26,6 +26,7 @@ mod paths;
 mod ping;
 mod secret;
 mod player;
+mod pools;
 mod pp;
 mod protocol;
 mod settings;
@@ -862,6 +863,48 @@ fn create_smart_collection(state: State<AppState>, name: String, query: String) 
 #[tauri::command]
 fn set_collection_query(state: State<AppState>, id: String, query: String) -> Result<()> {
     collections::set_query(&state.db(), &id, &query)
+}
+
+// ── pools ────────────────────────────────────────────────────────────────
+
+#[tauri::command]
+fn get_pools(state: State<AppState>) -> Result<Vec<pools::Pool>> {
+    pools::list(&state.db())
+}
+
+#[tauri::command]
+fn create_pool(state: State<AppState>, name: String, mode: i64, keys: Option<i64>, categories: Vec<pools::Category>) -> Result<String> {
+    pools::create(&state.db(), &name, mode, keys, &categories)
+}
+
+#[tauri::command]
+fn update_pool(state: State<AppState>, id: String, patch: pools::PoolPatch) -> Result<()> {
+    pools::update(&mut state.db(), &id, &patch)
+}
+
+#[tauri::command]
+fn delete_pool(state: State<AppState>, id: String) -> Result<()> {
+    pools::delete(&state.db(), &id)
+}
+
+#[tauri::command]
+fn set_pool_slot(state: State<AppState>, id: String, slot: String, map: String) -> Result<()> {
+    pools::set_slot(&mut state.db(), &id, &slot, &map)
+}
+
+#[tauri::command]
+fn clear_pool_slot(state: State<AppState>, id: String, slot: String) -> Result<()> {
+    pools::clear_slot(&state.db(), &id, &slot)
+}
+
+#[tauri::command]
+fn swap_pool_slots(state: State<AppState>, id: String, a: String, b: String) -> Result<()> {
+    pools::swap_slots(&mut state.db(), &id, &a, &b)
+}
+
+#[tauri::command]
+fn set_pool_slot_note(state: State<AppState>, id: String, slot: String, note: String) -> Result<()> {
+    pools::set_slot_note(&state.db(), &id, &slot, &note)
 }
 
 #[derive(Serialize)]
@@ -1716,6 +1759,14 @@ pub fn run() {
             osu_login,
             osu_login_cancel,
             get_collections,
+            get_pools,
+            create_pool,
+            update_pool,
+            delete_pool,
+            set_pool_slot,
+            clear_pool_slot,
+            swap_pool_slots,
+            set_pool_slot_note,
             create_collection,
             create_smart_collection,
             set_collection_query,
