@@ -1,4 +1,6 @@
-/* pools.ts — the Pools page: every pool as a card, and a pool with its kinds of slot, each slot's
+/* pools.ts — the Tournament page: the matches coming up (and on, and just over), every pool as a
+ * card, and a pool in three tabs: its slots, its matches (match.ts), and its players' strengths
+ * by kind of slot from those matches. The Slots tab: the kinds of slot, each slot's
  * difficulty and its numbers at the slot's mods (star rating and the most pp, from
  * src-tauri/src/pp.rs; length and BPM at the rate). The bars on top are the pool's star ratings
  * slot by slot, so a kind that doesn't climb or a slot that sticks out shows at a glance.
@@ -13,7 +15,7 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { api, asApiError, osuCoverUrl, osuMapUrl, thumbUrl } from "../lib/api";
 import { DRAG_TYPE } from "../lib/collections";
-import { bpm, duration, esc, fixed, num, srChip } from "../lib/format";
+import { bpm, duration, esc, fixed, num, pct, relativeTime, srChip } from "../lib/format";
 import { mapIndexOf } from "../lib/history";
 import { t, tn } from "../lib/i18n";
 import {
@@ -24,16 +26,37 @@ import {
 import { go } from "../lib/router";
 import { events, store } from "../lib/store";
 import { player } from "../player";
-import { openMenu, toast, uiConfirm, uiPrompt, type MenuEntry } from "../ui/controls";
+import { attachSegIndicator, openMenu, toast, uiConfirm, uiPrompt, type MenuEntry } from "../ui/controls";
 import { icon } from "../ui/icons";
 import { openSet } from "./actions";
 import { importSets, importTarget } from "./import";
+import { matchEvents, matches, matchesOf, matchState, slotOfBeatmap, strengths, type Match } from "../lib/matches";
+import { openMatchDialog } from "./match-dialog";
+import { matchLine, matchWhen, sideName } from "./match";
+import { onStream, openOverlayDialog, overlayEvents, overlayPort } from "./overlay";
 import { drawShowcase, pngBytes } from "./pool-showcase";
 import { exportRows, fileName, toCsv, toJson, toTsv } from "../lib/pool-export";
 import { getVersion } from "@tauri-apps/api/app";
 import { openPoolDialog } from "./pool-dialog";
 import { chartStars, openSlotPicker, suits } from "./pool-picker";
 import { ppText } from "./pp";
+
+export type PoolTab = "slots" | "matches" | "players";
+
+/** A match as a line: when (or what it's at), who plays, the points. */
+function matchRow(m: Match, pool: Pool, withPool: boolean): string {
+  const s = matchState(m, (b) => slotOfBeatmap(pool, b));
+  const pts = s.status === "upcoming" ? "" : `<b class="${s.winner === "red" ? "won" : ""}">${s.points.red}</b><i>–</i><b class="${s.winner === "blue" ? "won" : ""}">${s.points.blue}</b>`;
+  const when = m.at ? matchWhen(m.at) : t("No time yet");
+  const stream = onStream() === m.id && overlayPort() ? `<span class="mr-stream">${t("On stream")}</span>` : "";
+  return `<button class="match-row is-${s.status}" type="button" data-match="${esc(m.id)}">
+    <span class="mr-when num">${s.status === "live" ? `<span class="mr-live">${t("Live")}</span>` : esc(when)}</span>
+    <span class="mr-names"><span class="red">${esc(sideName(m, "red"))}</span><small>vs</small><span class="blue">${esc(sideName(m, "blue"))}</span>${stream}</span>
+    <span class="mr-sub">${esc([withPool ? pool.name : "", s.status === "upcoming" && m.at ? relativeTime(m.at) : s.status === "done" ? matchLine(m, s) : "", t("best of {n}", { n: m.bestOf })].filter(Boolean).join(" · "))}</span>
+    <span class="mr-points num">${pts}</span>
+    ${icon("chevron-right")}
+  </button>`;
+}
 
 /** what a drag of a slot carries: its code */
 const SLOT_DRAG = "application/x-fumen-slot";
@@ -49,12 +72,17 @@ export class PoolsView {
   /** exact star ratings at the slots' mods, as they come in */
   private stars = new Map<string, number>();
 
-  constructor(private id?: string) {
+  constructor(
+    private id?: string,
+    private tab: PoolTab = "slots",
+  ) {
     this.el = document.createElement("section");
     this.el.className = "view pools-view";
     this.offs.push(
       poolEvents.on("pools", () => this.render()),
       events.on("library", () => this.render()),
+      matchEvents.on("matches", () => this.render()),
+      overlayEvents.on("change", () => this.render()),
     );
     this.bind();
     if (poolsLoaded()) this.render();
@@ -78,10 +106,13 @@ export class PoolsView {
     const head = `
       <header class="view-head">
         <div>
-          <h1 class="view-title">${t("Pools")}</h1>
-          <div class="view-sub">${t("Map pools for a tournament: slots by kind, the numbers at their mods, and out to the RPRO bot.")}</div>
+          <h1 class="view-title">${t("Tournament")}</h1>
+          <div class="view-sub">${t("Map pools by slot, their matches from osu!'s multiplayer rooms, and an overlay for the stream.")}</div>
         </div>
-        <button class="btn btn-primary btn-sm" type="button" data-act="new">${icon("plus")}<span>${t("New pool")}</span></button>
+        <div class="pool-head-tools">
+          <button class="btn btn-sm" type="button" data-act="overlay">${icon("play")}<span>${overlayPort() ? t("Overlay is on") : t("Stream overlay")}</span></button>
+          <button class="btn btn-primary btn-sm" type="button" data-act="new">${icon("plus")}<span>${t("New pool")}</span></button>
+        </div>
       </header>`;
     if (!list.length) {
       this.el.innerHTML = `${head}
@@ -124,7 +155,24 @@ export class PoolsView {
         </button>`;
       })
       .join("");
-    this.el.innerHTML = `${head}<div class="pool-cards">${cards}</div>`;
+    this.el.innerHTML = `${head}${this.scheduleHtml()}<div class="label-caps pool-section">${t("Pools")}</div><div class="pool-cards">${cards}</div>`;
+  }
+
+  /** The matches that are on, coming up, and the last few over, across the pools. */
+  private scheduleHtml(): string {
+    const all = matches()
+      .map((m) => ({ m, pool: poolById(m.poolId)! }))
+      .filter((x) => x.pool)
+      .map((x) => ({ ...x, s: matchState(x.m, (b) => slotOfBeatmap(x.pool, b)) }));
+    if (!all.length) return "";
+    const live = all.filter((x) => x.s.status === "live");
+    const coming = all.filter((x) => x.s.status === "upcoming").sort((a, b) => (a.m.at ?? Infinity) - (b.m.at ?? Infinity));
+    const over = all
+      .filter((x) => x.s.status === "done")
+      .sort((a, b) => (b.m.result?.end ?? b.m.at ?? b.m.updated) - (a.m.result?.end ?? a.m.at ?? a.m.updated))
+      .slice(0, 4);
+    const rows = [...live, ...coming.slice(0, 8), ...over].map((x) => matchRow(x.m, x.pool, true)).join("");
+    return `<div class="label-caps pool-section">${t("Matches")}</div><div class="match-rows">${rows}</div>`;
   }
 
   // ── one pool ──────────────────────────────────────────────────────────
@@ -136,7 +184,7 @@ export class PoolsView {
     this.el.innerHTML = `
       <header class="view-head pool-head">
         <div class="pool-head-text">
-          <button class="pool-back" type="button">${icon("chevron-left")}<span>${t("Pools")}</span></button>
+          <button class="pool-back" type="button">${icon("chevron-left")}<span>${t("Tournament")}</span></button>
           <h1 class="view-title">${esc(p.name)}</h1>
           <div class="view-sub pool-sub num"></div>
         </div>
@@ -146,11 +194,72 @@ export class PoolsView {
           <button class="icon-btn" type="button" data-act="pool-menu" aria-label="${t("More")}" data-tip="${t("More")}">${icon("more-vert")}</button>
         </div>
       </header>
-      <div class="pool-curve" role="list" aria-label="${t("Star rating by slot")}">
-        ${codes.map((c) => `<button class="pc-bar${poolSlot(p, c) ? "" : " is-empty"}" type="button" role="listitem" data-slot="${esc(c)}" style="--k:${kindInfo(kindOfSlot(p, c)!.code).color}"><i></i><span>${esc(c)}</span></button>`).join("")}
+      <div class="seg-tabs pool-tabs" role="tablist" aria-label="${t("Pool")}">
+        <button type="button" role="tab" data-tab="slots">${t("Slots")}</button>
+        <button type="button" role="tab" data-tab="matches">${t("Matches")}${matchesOf(p.id).length ? ` <small class="num">${matchesOf(p.id).length}</small>` : ""}</button>
+        <button type="button" role="tab" data-tab="players">${t("Players")}</button>
       </div>
-      <div class="pool-kinds">${p.categories.map((k) => this.kindHtml(p, k)).join("")}</div>`;
-    this.refreshNumbers(p);
+      <div class="pool-body"></div>`;
+    const tabs = this.el.querySelector<HTMLElement>(".pool-tabs")!;
+    tabs.querySelectorAll<HTMLElement>("[data-tab]").forEach((b) => {
+      b.classList.toggle("active", b.dataset.tab === this.tab);
+      b.setAttribute("aria-selected", String(b.dataset.tab === this.tab));
+    });
+    attachSegIndicator(tabs);
+    const body = this.el.querySelector<HTMLElement>(".pool-body")!;
+    if (this.tab === "matches") body.innerHTML = this.matchesHtml(p);
+    else if (this.tab === "players") body.innerHTML = this.playersHtml(p);
+    else {
+      body.innerHTML = `
+        <div class="pool-curve" role="list" aria-label="${t("Star rating by slot")}">
+          ${codes.map((c) => `<button class="pc-bar${poolSlot(p, c) ? "" : " is-empty"}" type="button" role="listitem" data-slot="${esc(c)}" style="--k:${kindInfo(kindOfSlot(p, c)!.code).color}"><i></i><span>${esc(c)}</span></button>`).join("")}
+        </div>
+        <div class="pool-kinds">${p.categories.map((k) => this.kindHtml(p, k)).join("")}</div>`;
+      this.refreshNumbers(p);
+    }
+  }
+
+  private matchesHtml(p: Pool): string {
+    const list = matchesOf(p.id);
+    const add = `<button class="btn btn-sm" type="button" data-act="new-match">${icon("plus")}<span>${t("New match")}</span></button>`;
+    if (!list.length)
+      return `<div class="empty-state pool-empty">
+        ${icon("calendar")}
+        <div class="empty-title">${t("No matches yet")}</div>
+        <div class="empty-sub">${t("Add who plays and when; once the multiplayer room is open, its games come in from osu!.")}</div>
+        ${add}
+      </div>`;
+    return `<div class="pool-tab-tools">${add}</div><div class="match-rows">${list.map((m) => matchRow(m, p, false)).join("")}</div>`;
+  }
+
+  /** each player's games by kind of slot, from this pool's matches */
+  private playersHtml(p: Pool): string {
+    const list = matchesOf(p.id).map((m) => ({ match: m, pool: p, state: matchState(m, (b) => slotOfBeatmap(p, b)) }));
+    const st = strengths(list);
+    if (!st.size)
+      return `<div class="empty-state pool-empty">${icon("user")}<div class="empty-title">${t("Nothing played yet")}</div><div class="empty-sub">${t("Once this pool's matches have games, each player's wins and accuracy by kind of slot show here.")}</div></div>`;
+    const kinds = p.categories.map((k) => k.code);
+    const total = (m: Map<string, { played: number }>) => [...m.values()].reduce((a, x) => a + x.played, 0);
+    const rows = [...st]
+      .sort((a, b) => total(b[1]) - total(a[1]) || a[0].localeCompare(b[0]))
+      .map(([name, by]) => {
+        const cells = kinds
+          .map((k) => {
+            const x = by.get(k);
+            if (!x) return `<td class="ps-none">–</td>`;
+            const rate = x.won / x.played;
+            return `<td><b class="num" style="--w:${rate}">${x.won}/${x.played}</b><small class="num">${pct(x.acc / x.played)}</small></td>`;
+          })
+          .join("");
+        const all = [...by.values()].reduce((a, x) => ({ played: a.played + x.played, won: a.won + x.won }), { played: 0, won: 0 });
+        return `<tr><th scope="row">${esc(name)}</th>${cells}<td class="ps-all num">${all.won}/${all.played}</td></tr>`;
+      })
+      .join("");
+    return `<p class="pool-tab-note">${t("Maps won of played, and the average accuracy, by kind of slot.")}</p>
+      <div class="player-strengths"><table>
+        <thead><tr><th></th>${kinds.map((k) => `<th><span class="slot-code" style="--k:${kindInfo(k).color}">${esc(k)}</span></th>`).join("")}<th class="ps-all">${t("All")}</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>`;
   }
 
   private kindHtml(p: Pool, k: PoolKind): string {
@@ -482,8 +591,25 @@ export class PoolsView {
       const card = el.closest<HTMLElement>(".pool-card");
       if (card) return go({ name: "pools", id: card.dataset.pool! });
       if (el.closest(".pool-back")) return go({ name: "pools" });
+      if (el.closest('[data-act="overlay"]')) return openOverlayDialog();
+      const mrow = el.closest<HTMLElement>(".match-row");
+      if (mrow) {
+        const m = matches().find((x) => x.id === mrow.dataset.match);
+        if (m) go({ name: "pools", id: m.poolId, match: m.id });
+        return;
+      }
       const p = this.pool();
       if (!p) return;
+      const tab = el.closest<HTMLElement>(".pool-tabs [data-tab]");
+      if (tab) {
+        this.tab = tab.dataset.tab as PoolTab;
+        go({ name: "pools", id: p.id, tab: this.tab }, { replace: true });
+        return;
+      }
+      if (el.closest('[data-act="new-match"]')) {
+        void openMatchDialog(p.id).then((id) => id && go({ name: "pools", id: p.id, match: id }));
+        return;
+      }
       if (el.closest('[data-act="rpro"]')) return void this.copyRpro(p);
       const exportBtn = el.closest<HTMLElement>('[data-act="export"]');
       if (exportBtn) return this.exportMenu(exportBtn, p);

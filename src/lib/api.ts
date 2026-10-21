@@ -5,6 +5,7 @@ import type { Comparison } from "./compare";
 import type { Goal } from "./goals";
 import { fromRust } from "./i18n";
 import type { ChartMods } from "./mods";
+import type { Match, MatchPatch } from "./matches";
 import type { Pool, PoolKind } from "./pools";
 import type {
   CareReport, ApiError,
@@ -68,6 +69,14 @@ export const api = {
   updatePool: (id: string, patch: { name?: string; categories?: PoolKind[]; note?: string }) => invoke<void>("update_pool", { id, patch }),
   deletePool: (id: string) => invoke<void>("delete_pool", { id }),
   setPoolSlot: (id: string, slot: string, map: string) => invoke<void>("set_pool_slot", { id, slot, map }),
+  getMatches: () => invoke<Match[]>("get_matches"),
+  createMatch: (pool: string, patch: MatchPatch) => invoke<string>("create_match", { pool, patch }),
+  updateMatch: (id: string, patch: MatchPatch) => invoke<void>("update_match", { id, patch }),
+  deleteMatch: (id: string) => invoke<void>("delete_match", { id }),
+  /** a match's multiplayer room from a link to it or its number ("": none) */
+  setMatchRoom: (id: string, link: string) => invoke<void>("set_match_room", { id, link }),
+  /** the room's games as osu! has them now (needs the osu! login) */
+  refreshMatch: (id: string) => invoke<Match>("refresh_match", { id }),
   /** saves bytes where the player picks in the system's save dialog (only csv, json or png); the
    * file's name, null when cancelled */
   saveFile: (kind: "csv" | "json" | "png", name: string, data: Uint8Array, title: string, filter: string) =>

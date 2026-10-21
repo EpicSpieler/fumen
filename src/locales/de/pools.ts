@@ -9,8 +9,6 @@ export const pools: Record<string, string> = {
   // the page
   Pools: "Pools",
   "New pool": "Neuer Pool",
-  "Map pools for a tournament: slots by kind, the numbers at their mods, and out to the RPRO bot.":
-    "Mappools für ein Turnier: Slots nach Art, die Zahlen mit ihren Mods, und raus an den RPRO-Bot.",
   "No pools yet": "Noch keine Pools",
   "Make one, then fill its slots from your library.": "Mach einen und füll seine Slots aus deiner Bibliothek.",
   "{n} of {total}": "{n} von {total}",

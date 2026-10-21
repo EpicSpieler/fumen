@@ -14,6 +14,7 @@ import "./styles/import.css";
 import "./styles/history.css";
 import "./styles/care.css";
 import "./styles/pools.css";
+import "./styles/matches.css";
 import "./styles/delete.css";
 import "./styles/skills.css";
 import "./styles/browse.css";
@@ -37,6 +38,9 @@ import { BrowseView } from "./views/browse";
 import { ScoreView } from "./views/score";
 import { CareView } from "./views/care";
 import { PoolsView } from "./views/pools";
+import { MatchView } from "./views/match";
+import { initOverlay } from "./views/overlay";
+import { initMatches } from "./lib/matches";
 import { initPools } from "./lib/pools";
 import { importProgressText, isImporting, openImport } from "./views/import";
 import { readLinks } from "./lib/links";
@@ -90,7 +94,7 @@ app.innerHTML = `
       <button class="nav-item reveal" type="button" data-nav="history">${icon("clock")}<span class="nav-label">${t("History")}</span></button>
       <button class="nav-item reveal" type="button" data-nav="skills">${icon("radar")}<span class="nav-label">${t("Skills")}</span></button>
       <button class="nav-item reveal" type="button" data-nav="browse">${icon("compass")}<span class="nav-label">${t("Browse")}</span></button>
-      <button class="nav-item reveal" type="button" data-nav="pools">${icon("flag")}<span class="nav-label">${t("Pools")}</span></button>
+      <button class="nav-item reveal" type="button" data-nav="pools">${icon("flag")}<span class="nav-label">${t("Tournament")}</span></button>
       <button class="nav-item reveal" type="button" data-nav="care">${icon("drive")}<span class="nav-label">${t("Library care")}</span></button>
       <button class="nav-item reveal" type="button" data-act="import">${icon("download")}<span class="nav-label">${t("Add beatmaps")}</span></button>
     </div>
@@ -350,7 +354,7 @@ function show(route: Route): void {
       view = ensureCare();
       break;
     case "pools":
-      view = new PoolsView(route.id);
+      view = route.match ? new MatchView(route.match) : new PoolsView(route.id, route.tab);
       content.appendChild(view.el);
       break;
     case "collection":
@@ -904,6 +908,8 @@ async function boot(): Promise<void> {
   initGoals();
   initCollections();
   initPools();
+  initMatches();
+  initOverlay();
   initLivePlays();
   document.body.classList.add("ready");
   void startPing().catch((e) => console.warn("[ping]", asApiError(e).message));
