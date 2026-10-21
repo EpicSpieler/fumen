@@ -489,6 +489,8 @@ export interface UiPrefs {
   hitsoundVolume: number;
   /** fullscreen view used last */
   fullscreenMode: "visual" | "field";
+  /** the fullscreen visualizer's look (views/vis); saved ones may lack newer keys */
+  visualizer: VisPrefs;
   /** set once the first-run defaults (e.g. mode from play history) were applied */
   defaultsApplied: boolean;
   /** the one-time notice about the start ping was shown */
@@ -499,6 +501,32 @@ export interface UiPrefs {
   companion: boolean;
   /** the collection the companion window works through ("f:<id>" / "l:<id>") */
   companionPool: string | null;
+}
+
+export type VisStyle = "spectrum" | "ring" | "wave" | "stars" | "stage" | "hifi";
+
+export interface VisPrefs {
+  style: VisStyle;
+  /** from the cover, the app's accent, or one of the pairs in views/vis (`own`) */
+  colors: "cover" | "accent" | "own";
+  own: number;
+  /** 0 smooth … 1 fast */
+  reaction: number;
+  /** 0 calm … 1 strong */
+  sensitivity: number;
+  /** how much the beat pushes things, 0–1 */
+  pulse: number;
+  bars: number;
+  /** bass in the middle, highs to both sides */
+  mirror: boolean;
+  kiai: boolean;
+  flashes: "off" | "soft" | "full";
+  background: "blur" | "art" | "black";
+  /** 0–0.9 */
+  dim: number;
+  title: boolean;
+  /** ms added to the song's time for the beat (later = positive) */
+  offset: number;
 }
 
 /** A play as it happened, read from the replay lazer saved (src-tauri/src/live.rs). */

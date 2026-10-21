@@ -1,5 +1,5 @@
 /* ===========================================================================
-   Fullscreen player — visualizer (art + frequency bars) or the osu!mania playfield
+   Fullscreen player — the visualizer or the playfield
    =========================================================================== */
 
 .fs {
@@ -57,38 +57,63 @@
 .fs[data-mode="visual"] .fs-field, .fs[data-mode="field"] .fs-visual { display: none; }
 .fs-visual, .fs-field { animation: fade-in .3s var(--ease-std); }
 
-/* ---------- Visualizer ---------- */
-.fs-visual {
+/* ---------- Visualizer (views/vis): one canvas under everything, its settings on the right ---------- */
+.fs-vis { position: absolute; inset: 0; z-index: 0; display: block; width: 100%; height: 100%; }
+.fs[data-mode="field"] .fs-vis, .fs[data-mode="field"] .fs-vis-ctl { display: none; }
+/* the canvas draws its own background */
+.fs[data-mode="visual"] .fs-bg { display: none; }
+.fs-visual { pointer-events: none; }
+.fs-vis-ctl { display: flex; align-items: center; gap: 6px; }
+.fs-style, .vp-style { background: rgba(255, 255, 255, .08); }
+.vp-style { align-self: flex-start; }
+/* a narrow window has no room for it beside the views: it's in the panel too */
+@media (max-width: 900px) { .fs-vis-ctl > .fs-style { display: none; } }
+.fs-tune .ic { width: 20px; height: 20px; }
+.fs-tune[aria-expanded="true"] { background: rgba(255, 255, 255, .1); color: var(--t1); }
+.fs-vis-panel {
+  position: absolute;
+  top: 4px;
+  right: 24px;
+  bottom: 8px;
+  width: 320px;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 26px;
-  padding: 0 32px 21vh;
+  gap: 16px;
+  padding: 16px 18px 18px;
+  overflow-y: auto;
+  scrollbar-width: none;
+  border-radius: var(--r-2xl);
+  background: rgba(14, 14, 16, .74);
+  backdrop-filter: blur(24px) saturate(1.4);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, .45), inset 0 0 0 .5px rgba(255, 255, 255, .08);
+  pointer-events: auto;
+  animation: fade-in .2s var(--ease-std);
 }
-.fs-art {
-  position: relative;
-  width: min(56vw, calc(46vh * 16 / 9));
-  aspect-ratio: 16 / 9;
-  border-radius: 20px;
-  overflow: hidden;
-  background: var(--placeholder-gradient);
-  box-shadow: 0 30px 80px rgba(0, 0, 0, .55), 0 0 0 .5px rgba(255, 255, 255, .06);
-}
-.fs-art img { width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .4s var(--ease-std); }
-.fs-art img.loaded { opacity: 1; }
-.fs-meta { max-width: min(70vw, 900px); text-align: center; }
-.fs-title { font-size: clamp(22px, 2.4vw, 34px); font-weight: 700; line-height: 1.2; letter-spacing: -.01em; }
-.fs-artist { margin-top: 6px; font-size: clamp(14px, 1.3vw, 18px); color: var(--t2); }
-.fs-version { margin-top: 4px; font-size: var(--fs-13); color: var(--t3); }
-.fs-eq {
-  position: absolute;
-  left: 4vw;
-  right: 4vw;
-  bottom: 0;
-  width: 92vw;
-  height: 19vh;
-}
+.fs-vis-panel[hidden] { display: none; }
+.vp-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.vp-head b { font-size: var(--fs-16); font-weight: 650; }
+.vp-row { display: flex; flex-direction: column; gap: 8px; }
+.vp-seg { display: flex; }
+.vp-seg > button { flex: 1; padding: 0 8px; }
+.vp-range-top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.vp-range-top b { font-size: var(--fs-12); font-weight: 600; color: var(--t2); }
+.vp-range input { width: 100%; margin: 2px 0; }
+.vp-ends { display: flex; justify-content: space-between; margin-top: -4px; font-size: var(--fs-11); color: var(--t4); }
+.vp-swatches { display: flex; flex-wrap: wrap; gap: 8px; }
+.vp-swatches[hidden] { display: none; }
+.vp-swatch { width: 28px; height: 28px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .12); transition: box-shadow .12s var(--ease-std); }
+.vp-swatch.on { box-shadow: 0 0 0 2px #0e0e10, 0 0 0 4px var(--t1); }
+.vp-switches { display: flex; flex-direction: column; gap: 12px; }
+.vp-switch { display: flex; align-items: center; justify-content: space-between; gap: 12px; cursor: pointer; }
+.vp-switch > span { display: flex; flex-direction: column; min-width: 0; }
+.vp-switch b { font-size: var(--fs-13); font-weight: 600; }
+.vp-switch i { font-style: normal; font-size: var(--fs-12); color: var(--t3); }
+.vp-reset { align-self: flex-start; }
+
+/* cinema: while the visualizer plays untouched, the bars and the cursor go */
+.fs-top, .fs-bar { transition: opacity .4s var(--ease-std); }
+.fs.idle .fs-top, .fs.idle .fs-bar { opacity: 0; }
+.fs.idle { cursor: none; }
 
 /* ---------- Playfield ---------- */
 .fs-field {

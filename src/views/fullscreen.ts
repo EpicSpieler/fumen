@@ -17,16 +17,16 @@
  */
 import { thumbUrl } from "../lib/api";
 import { bpmAt, loadChart, lowerBound, PATTERNS, SCROLL_SPEED_MAX, SCROLL_SPEED_MIN, scrollSpeed, scrollTime, scrollUp } from "../lib/charts";
-import { readBars, startAnalyser } from "../lib/eq";
+import { startAnalyser } from "../lib/eq";
 import { hitsounds } from "../lib/hitsounds";
 import { bpm, displayArtist, displayTitle, duration, esc, fixed, keysOrMode, num, srChip, stars } from "../lib/format";
 import { currentSkin, loadSkin, loadSkinList, loadSkinSounds } from "../lib/skin/skins";
 import { activeMods, adjustDifficulty, chartMods, chartModsKey, MOD_NAMES, modEffect, modsFor, starsKnown, toggleMod, type Mod } from "../lib/mods";
 import { setPrefs, store } from "../lib/store";
-import type { ChartData, ReplayEntry, SkinList } from "../lib/types";
+import type { ChartData, ReplayEntry, SkinList, VisStyle } from "../lib/types";
 import type { Section } from "../lib/practice";
 import { dragSlider, player } from "../player";
-import { attachSegIndicator, openMenu, reduceMotion, type MenuEntry } from "../ui/controls";
+import { attachSegIndicator, createSelect, openMenu, reduceMotion, type MenuEntry, type SelectHandle } from "../ui/controls";
 import { icon } from "../ui/icons";
 import { ArgonRenderer } from "../ui/mania/argon";
 import { createRenderer, ManiaPlayfield } from "../ui/mania/playfield";
@@ -37,18 +37,18 @@ import { OsuPlayfield, type OsuRenderer } from "../ui/osu/playfield";
 import { createOsuRenderer } from "../ui/osu/renderers";
 import { CatchPlayfield, type CatchRenderer } from "../ui/catch/playfield";
 import { createCatchRenderer } from "../ui/catch/renderers";
-import { AccentColors, drawDensity, fitCanvas } from "../ui/playfield";
+import { AccentColors, drawDensity } from "../ui/playfield";
 import { rateClick, rateControlHtml, starsAtRate, syncRateControl } from "../ui/rate";
 import type { PatternName } from "../lib/types";
 import { PracticePanel } from "./practice";
 import { CORE_PATTERNS } from "../lib/dan";
 import type { CorePattern } from "../lib/types";
 import { ReplayPanel } from "./replay-panel";
+import { bindPanel, panelHtml } from "./vis/panel";
+import { setVis, STYLES, visPrefs, Visualizer } from "./vis/visualizer";
 import { t } from "../lib/i18n";
 
 export type FullscreenMode = "visual" | "field";
-
-const BARS = 72;
 
 /** the rulesets the playfield shows: all of them */
 const PLAYABLE = new Set([0, 1, 2, 3]);
@@ -71,9 +71,13 @@ class Fullscreen {
   private wcHome: HTMLElement | null = null;
 
   // visualizer
-  private levels = new Float32Array(BARS);
-  private shown = new Float32Array(BARS);
-  private eq = false;
+  private vis!: Visualizer;
+  /** the style dropdowns: the top bar's and the panel's */
+  private styleSelects: SelectHandle<VisStyle>[] = [];
+  /** shows the saved settings in the panel */
+  private renderPanel: () => void = () => {};
+  /** the bars hide after a while without the mouse (cinema) */
+  private idleTimer = 0;
 
   // playfield
   private mapId = "";
@@ -126,7 +130,7 @@ class Fullscreen {
       el.querySelector(".fs-top-r")!.append(wc);
     }
     requestAnimationFrame(() => el.classList.add("on"));
-    this.eq = startAnalyser();
+    startAnalyser();
     this.subscribe();
     this.onTrack();
     this.syncSounds();
@@ -142,7 +146,8 @@ class Fullscreen {
     this.offs.forEach((f) => f());
     this.offs = [];
     this.syncSounds();
-    el.classList.remove("on");
+    el.classList.remove("on", "idle");
+    clearTimeout(this.idleTimer);
     document.body.classList.remove("fs-open");
     setBehindInert(false);
     const wc = el.querySelector<HTMLElement>(".win-controls");
@@ -161,6 +166,7 @@ class Fullscreen {
     el.setAttribute("aria-label", t("Now playing, fullscreen"));
     el.innerHTML = `
       <div class="fs-bg" aria-hidden="true"><img alt="" /></div>
+      <canvas class="fs-vis" aria-hidden="true"></canvas>
       <header class="fs-top" data-tauri-drag-region>
         <div class="fs-now" data-tauri-drag-region><div class="fs-now-title" data-tauri-drag-region></div><div class="fs-now-sub" data-tauri-drag-region></div></div>
         <div class="seg-pill fs-modes" role="tablist" aria-label="${t("View")}">
@@ -168,18 +174,16 @@ class Fullscreen {
           <button type="button" role="tab" data-mode="field">${t("Playfield")}</button>
         </div>
         <div class="fs-top-r">
+          <div class="fs-vis-ctl">
+            <span class="fs-style-host"></span>
+            <button class="icon-btn fs-tune" type="button" data-tip="${t("Customize the visualizer")}" aria-label="${t("Customize the visualizer")}" aria-expanded="false">${icon("sliders")}</button>
+          </div>
           <button class="icon-btn fs-exit" type="button" data-tip="${t("Leave fullscreen")}" aria-label="${t("Leave fullscreen")}">${icon("fullscreen-exit")}</button>
         </div>
       </header>
       <main class="fs-body">
         <section class="fs-visual">
-          <div class="fs-art"><img alt="" /></div>
-          <div class="fs-meta">
-            <div class="fs-title"></div>
-            <div class="fs-artist"></div>
-            <div class="fs-version"></div>
-          </div>
-          <canvas class="fs-eq" aria-hidden="true"></canvas>
+          <aside class="fs-vis-panel" aria-label="${t("Visualizer settings")}" hidden>${panelHtml()}</aside>
         </section>
         <section class="fs-field">
           <div class="fs-stage">
@@ -264,6 +268,21 @@ class Fullscreen {
       img.addEventListener("load", () => img.classList.add("loaded"));
       img.addEventListener("error", () => img.classList.remove("loaded"));
     });
+    this.vis = new Visualizer(el.querySelector(".fs-vis")!, () => this.kick());
+    for (const host of el.querySelectorAll(".fs-style-host, .vp-style-host")) {
+      const sel = createSelect(
+        STYLES.map((s) => ({ value: s.id, label: s.name })),
+        visPrefs().style,
+        (v) => this.setStyle(v),
+        { className: host.classList.contains("fs-style-host") ? "fs-style" : "vp-style", tip: t("Visualizer style (V)") },
+      );
+      host.replaceWith(sel.el);
+      this.styleSelects.push(sel);
+    }
+    this.renderPanel = bindPanel(el.querySelector(".fs-vis-panel")!, () => {
+      this.vis.sync();
+      this.kick();
+    });
     this.bind();
   }
 
@@ -280,6 +299,7 @@ class Fullscreen {
     this.live.clear();
     if (mode === "field") this.loadField();
     this.syncSounds();
+    this.wake();
     this.kick();
   }
 
@@ -294,7 +314,10 @@ class Fullscreen {
       () => a.removeEventListener("durationchange", kick),
       () => window.removeEventListener("resize", kick),
       player.bus.on("track", () => this.onTrack()),
-      player.bus.on("state", () => this.kick()),
+      player.bus.on("state", () => {
+        this.wake();
+        this.kick();
+      }),
       player.bus.on("rate", () => this.onRate()),
       player.bus.on("mods", () => this.onMods()),
     );
@@ -317,16 +340,13 @@ class Fullscreen {
     const artist = displayArtist(set, unicode);
     el.querySelector(".fs-now-title")!.textContent = title;
     el.querySelector(".fs-now-sub")!.textContent = `${artist}${map ? ` · ${map.version}` : ""}`;
-    el.querySelector(".fs-title")!.textContent = title;
-    el.querySelector(".fs-artist")!.textContent = artist;
-    el.querySelector(".fs-version")!.textContent = map ? `${map.version} · mapped by ${set.creator}` : `mapped by ${set.creator}`;
-    for (const [sel, size] of [[".fs-bg img", 360], [".fs-art img", 1280]] as const) {
+    this.vis.setTrack({ bg: np.bg ?? null, mapId: map?.id ?? null, title, artist, version: map ? `${map.version} · mapped by ${set.creator}` : `mapped by ${set.creator}` });
+    for (const [sel, size] of [[".fs-bg img", 360]] as const) {
       const img = el.querySelector<HTMLImageElement>(sel)!;
       img.classList.remove("loaded");
       if (np.bg) img.src = thumbUrl(np.bg, size);
       else img.removeAttribute("src");
     }
-    el.querySelector(".fs-art")!.classList.toggle("img-missing", !np.bg);
     this.live.clear();
     this.graphDrawn = "";
     if (this.mode === "field") this.loadField();
@@ -670,7 +690,7 @@ class Fullscreen {
     const dt = this.lastFrame ? Math.min(0.1, (now - this.lastFrame) / 1000) : 1 / 60;
     let again = player.playing;
     this.transport();
-    if (this.mode === "visual") again = this.drawEq(dt) || again;
+    if (this.mode === "visual") again = this.drawVis(dt) || again;
     else this.drawField();
     if (again) {
       this.lastFrame = now;
@@ -715,34 +735,42 @@ class Fullscreen {
     this.set("rate", r === 1 ? "" : `${fixed(r, 2)}×`);
   }
 
-  private drawEq(dt: number): boolean {
-    const c = this.el!.querySelector<HTMLCanvasElement>(".fs-eq")!;
-    const fit = fitCanvas(c);
-    if (!fit) return false;
-    const { ctx, w, h } = fit;
-    if (!(player.playing && this.eq && readBars(this.levels))) this.levels.fill(0);
-    let moving = false;
-    for (let i = 0; i < BARS; i++) {
-      const target = this.levels[i];
-      const cur = this.shown[i];
-      // rise quickly, fall slowly, like a level meter
-      const next = target > cur ? cur + (target - cur) * Math.min(1, dt * 30) : Math.max(target, cur - dt * 1.4);
-      this.shown[i] = next;
-      if (next > 0.004) moving = true;
-    }
-    const slot = w / BARS;
-    const bw = Math.max(2, slot * 0.66);
-    ctx.fillStyle = this.colors.update().accent;
-    for (let i = 0; i < BARS; i++) {
-      const v = this.shown[i];
-      const bh = Math.max(3, v * h);
-      ctx.globalAlpha = 0.3 + 0.65 * v;
-      ctx.beginPath();
-      ctx.roundRect(i * slot + (slot - bw) / 2, h - bh, bw, bh, Math.min(bw / 2, 4));
-      ctx.fill();
-    }
-    ctx.globalAlpha = 1;
-    return moving;
+  private drawVis(dt: number): boolean {
+    const el = this.el!;
+    // the content keeps clear of the top bar and the transport, the picture runs under them
+    const top = el.querySelector<HTMLElement>(".fs-top")!.offsetHeight;
+    const bottom = el.querySelector<HTMLElement>(".fs-bar")!.offsetHeight;
+    return this.vis.frame(dt, { top, bottom });
+  }
+
+  private setStyle(style: VisStyle): void {
+    setVis({ style });
+    for (const s of this.styleSelects) s.value = style;
+    this.vis.sync();
+    this.kick();
+  }
+
+  private togglePanel(open?: boolean): void {
+    const el = this.el!;
+    const panel = el.querySelector<HTMLElement>(".fs-vis-panel")!;
+    const show = open ?? panel.hidden;
+    panel.hidden = !show;
+    el.querySelector(".fs-tune")!.setAttribute("aria-expanded", String(show));
+    if (show) this.renderPanel();
+    this.wake();
+  }
+
+  /** Shows the bars again; while the visualizer plays untouched they hide after 3 s. */
+  private wake(): void {
+    const el = this.el;
+    if (!el) return;
+    el.classList.remove("idle");
+    clearTimeout(this.idleTimer);
+    if (!this.isOpen) return;
+    this.idleTimer = window.setTimeout(() => {
+      const panel = el.querySelector<HTMLElement>(".fs-vis-panel")!;
+      if (this.isOpen && this.mode === "visual" && player.playing && panel.hidden && !document.querySelector(".menu")) el.classList.add("idle");
+    }, 3000);
   }
 
   private drawField(): void {
@@ -802,11 +830,15 @@ class Fullscreen {
 
   private bind(): void {
     const el = this.el!;
+    el.addEventListener("pointermove", () => this.wake());
+    el.addEventListener("keydown", () => this.wake());
     el.addEventListener("click", (e) => {
       const t = e.target as Element;
       const mode = t.closest<HTMLElement>(".fs-modes [data-mode]");
       if (mode) return this.setMode(mode.dataset.mode as FullscreenMode);
       if (t.closest(".fs-exit")) return this.hide();
+      if (t.closest(".fs-tune")) return this.togglePanel();
+      if (t.closest(".vp-close")) return this.togglePanel(false);
       if (t.closest(".fs-play")) return player.toggle();
       if (t.closest(".fs-prev")) return player.prev();
       if (t.closest(".fs-next")) return player.next();
@@ -895,6 +927,14 @@ class Fullscreen {
             e.stopPropagation();
             this.hide();
             break;
+          case "v":
+          case "V": {
+            if (this.mode !== "visual" || (e.target as Element).closest("input, textarea")) return;
+            e.preventDefault();
+            const i = STYLES.findIndex((s) => s.id === visPrefs().style);
+            this.setStyle(STYLES[(i + (e.shiftKey ? STYLES.length - 1 : 1)) % STYLES.length].id);
+            break;
+          }
           case "F3":
           case "F4":
             e.preventDefault();
