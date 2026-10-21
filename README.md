@@ -6,8 +6,8 @@
 
 Fumen is a desktop beatmap library for osu!. It reads your osu!lazer library and lets you browse,
 search, filter and preview all of it quickly, and shows what each osu!mania chart asks of you.
-Since 1.2 it builds tournament pools and follows their matches. Next comes a new visualizer (1.3),
-then progress: reworked skills, sessions and sharing (1.4); see the [roadmap](https://fumen.dertesti.dev/roadmap) and [docs/PLAN.md](docs/PLAN.md).
+Since 1.2 it builds tournament pools and follows their matches. Since 1.3 the fullscreen
+visualizer is new. Next comes progress: reworked skills, sessions and sharing (1.4); see the [roadmap](https://fumen.dertesti.dev/roadmap) and [docs/PLAN.md](docs/PLAN.md).
 
 Fumen reads osu!'s data from a private copy of lazer's database. What it puts into lazer is beatmap
 sets you add through it and collections you send there, and that is done by lazer's own code, only
@@ -54,8 +54,9 @@ database first (see [Adding beatmaps](#adding-beatmaps)).
 - pp for every difficulty, as osu! works them out: the most a play gives with the mods you pick
   (Half Time / Double Time at any rate), 99 / 98 / 97 / 95%, and any play you type in (Goods,
   Misses and the rest, mixed as you like) with a graph of how each judgement costs pp
-- Fullscreen player (fills the app window), switchable at the top: a visualizer (the art and frequency bars from the song)
-  or the playfield of any ruleset (osu!, osu!taiko, osu!catch, osu!mania) with the live numbers beside it (notes per second, the
+- Fullscreen player (fills the app window), switchable at the top: a visualizer in six styles
+  (Spektrum, Ring, Wave, Starfield, Stage, Hi-Fi) that reacts to the song and pulses on the beat
+  and kiai from the beatmap, in the cover's colours, every part of it adjustable; or the playfield of any ruleset (osu!, osu!taiko, osu!catch, osu!mania) with the live numbers beside it (notes per second, the
   pattern of this second, BPM, notes so far, density graph). osu!mania scrolls at your lazer scroll
   speed and direction (read from lazer's settings, rate mods included; F3 / F4 change it for Fumen
   only); osu!taiko scrolls the way the chart sets it, laid out like lazer's taiko playfield; osu!

@@ -90,7 +90,7 @@ nothing), and Fumen trades the code (later the refresh token) for tokens at the 
 | 1.0 | Release | Installer, auto-update (GitHub Releases), de/en, OLED/Light/High-contrast themes, website (macOS moved to Later) |
 | 1.1 | Play companion | **A score page after every pass** (where the accuracy went, timing, the replay, practise the worst part); **a companion window over the game** (the session, the last play, a pool to work through) |
 | 1.2 | Tournament | **Pool builder**: slots by kind (RC/LN/HB/SV/EX/TB for osu!mania, NM/HD/HR/DT/FM/TB elsewhere), SR/pp/BPM/length at the slot's mods, maps you don't own from osu! (charts off the mirrors), similar maps to fill or replace a slot, export to JSON/CSV/sheet + RPRO bot, a showcase image; **matches**: schedule, mp-link parsing + match results, picks / bans and mod strengths per player, OBS overlay served locally (pools were 0.5, tournament 0.6) |
-| 1.3 | Visualizer | **The fullscreen visualizer anew**: an analysis that reacts at once and follows each song's level, the beat and kiai from the beatmap's timing, styles to pick from, colours from the cover, everything adjustable and kept |
+| 1.3 | Visualizer | **The fullscreen visualizer anew**: an analysis that reacts at once and follows each song's level, the beat and kiai from the beatmap's timing, six styles (Spektrum, Ring, Wave, Starfield, Stage, Hi-Fi), colours from the cover, everything adjustable and kept |
 | 1.4 | Progress | Skills reworked (the page open again); plays grouped into sittings and a weekly report (time, skills that moved, goals closer); share cards for the week, pools, skills and goals; Discord Rich Presence |
 | Later | Ideas, no version | Skins (browser on the same moment of a chart, side by side, mixing into one `.osk`); Linux and macOS (moved from 1.0); goals, skills and pools on fumen.dertesti.dev for the phone; mapping lens (spikes, pattern heatmap, spread check, the analyser's leftovers) |
 
@@ -563,58 +563,50 @@ along the bottom edge. Why it feels slow and flat:
   beatmap's timing points and kiai.
 - One look, one colour, no settings.
 
-Drafts to choose from: https://claude.ai/artifact/1TueN1j8Edk9HzRKwYxDsA (private; eight styles
-live on a synthesised demo track with beatmap-like timing and kiai, every setting below, and
-"Analysis: as today" to feed any style with 1.2's analysis). Candidates: Spektrum (bars in the
-cover's colours, falling peaks, a reflection, the art breathing on the beat), Ring (round art, the
-spectrum around it, a wave per beat, sparks in kiai), Welle (three soft shapes for bass, mids and
-highs, the waveform through them), Sternenfeld (a flight through stars, speed from loudness, a
-push per beat), Bühne (the art full-bleed, zooming on the beat, a big title, a bar counter, a strip
-of light), Hi-Fi (LED segments with peak hold, beat and kiai lamps), Noten (the difficulty's notes
-flying in on lanes, sparks on the line).
+Drafts: https://claude.ai/artifact/1TueN1j8Edk9HzRKwYxDsA (private; eight styles live on a
+synthesised demo track). Chosen on 2026-10-21: all but Noten (for the sake of choice), picked from a
+dropdown without previews; 1.2's look goes (Spektrum is its successor). The quick win as a 1.2
+patch was skipped: it all came at once.
 
-Work, in this order:
-
-- [ ] Analysis (`lib/vis/analysis.ts`, in place of `readBars`): two analysers without the
-      browser's smoothing (4096 for the bass below ~400 Hz, 2048 above), float dB data, 128
-      log-spaced bands 30 Hz–16 kHz with +3 dB per octave to even out the treble; a level that
-      follows the song (up at once, down ~5 dB/s) with a sensitivity range on top; attack and
-      release of our own, per frame time, from the Reaction setting; onsets by spectral flux
-      against an adaptive threshold (kick 40–140 Hz, snare and hats 1.8–9 kHz); bass, mid and high
-      energy; the waveform. The volume moves behind the analysers: a GainNode carries the player's
-      volume once Web Audio is up (the element stays at 1, fades go through the gain), so what the
-      visualizer sees no longer depends on how loud you listen
-- [ ] Beat clock (`lib/vis/beat.ts`): the playing difficulty's uninherited timing points (time,
-      beat length, meter) and kiai sections. `ChartData.beats` / `kiai` have them; a light
-      `chart_timing` command reads only `[TimingPoints]` (cached per map) so the visualizer needn't
-      build the whole chart. Per frame: beat index and phase, place in the bar, BPM, kiai (eased in
-      and out). Song time is the player's, minus `AudioContext.outputLatency`, plus a visual offset
-      setting. A map without usable timing falls back to the onsets
-- [ ] Frame and styles (`views/vis/`): one frame per animation frame (bands resampled per style,
-      energies, onsets, beat, pulse, kiai, flash, the notes ahead, the palette) and styles as
-      modules with `draw(ctx, w, h, frame, options)`. The Visualizer tab hosts the chosen one on a
-      single canvas (device pixel ratio capped, a render scale for slow machines) and stops while
-      paused or hidden, as now. Canvas 2D; WebGL only if a chosen style needs it after a
-      measurement (aim: under 4 ms a frame at 1440p on integrated graphics). 1.2's look goes.
-      A quick win before that: the analysis and the beat clock under today's bars, as a 1.2 patch
-- [ ] Colours from the cover (`lib/vis/palette.ts`): k-means over a 48 × 27 copy of the background
-      thumbnail, the two strongest colours apart in hue, lifted to read on a dark stage; cached per
-      set, gliding on a track change. Colours: from the cover (default), the accent, or two of your
-      own
-- [ ] The styles chosen from the drafts, one at a time. Noten takes the playing difficulty's
-      notes (`loadChart`, cached for the playfield already): osu!mania by column, the other
-      rulesets on four lanes by position (osu!, catch) or by don/kat (taiko)
-- [ ] Settings (a side panel in the Visualizer tab like the playfield's, hidden with the mouse
-      after 3 s; prefs `visualizer`): style, colours, reaction, sensitivity, beat pulse, bars,
-      mirrored (bass in the middle), kiai effects, flashes (off / soft / full), background (blurred
-      art / art / black, dim), title on or off, visual offset; per style where it differs; reset
-- [ ] Polish: art and palette crossfade between tracks, styles crossfade; a quiet paused state;
-      cinema mode (panel, top bar and cursor hide); keys to switch style; reduced motion (no zoom,
-      no flashes, a smaller pulse); flashes at most once a bar and never faster than 3 a second
-- [ ] Tests: beat clock (phase, bar, meter and BPM changes, kiai, rate), level following and
-      sensitivity, band mapping, onsets on synthetic signals, palette on fixed pixels; a demo song
-      in the browser preview's shims; a screenshot of every style
-- [ ] Docs, website, release 1.3.0
+- [x] Analysis (`lib/vis/analysis.ts`, in place of `readBars`): two analysers without the
+      browser's smoothing (`lib/eq.ts`: 4096 for the bass below 400 Hz, 2048 above), float dB data,
+      128 log-spaced bands 30 Hz–16 kHz with +3 dB per octave. The level follows the song (up at
+      once, down 5 dB/s) with the sensitivity as the range; a band's steady sound fills at most
+      half the height, what rises above its own last second (a kick, a snare, a new note) fills the
+      rest, so a dense master isn't a wall. Rise and fall from the Reaction setting, per frame time.
+      Onsets by spectral flux against an adaptive threshold (kick 40–140 Hz, snare and hats
+      1.8–9 kHz); bass, mid and high; the waveform. The player's volume is a GainNode behind the
+      analysers once Web Audio is up (`player.useGain`; the element stays at 1, fades go through
+      the gain), so how loud you listen no longer changes the picture
+- [x] Beat clock (`lib/vis/beat.ts`): the playing difficulty's uninherited timing points and kiai
+      from `loadChart` (cached, the playfield shares it; no extra command needed): beat key and
+      phase, place in the bar (every timing point starts a bar, as in osu!), BPM; kiai eased in and
+      out. Song time is the player's minus `AudioContext.outputLatency` (at the rate), plus the
+      Beat offset setting. Without timing the kicks drive the pulse
+- [x] Frame and styles (`views/vis/`): `visualizer.ts` builds a frame per animation frame (the
+      analysis, beat, pulse, kiai, flash, colours, the cover and the one before it) and draws the
+      chosen style on one canvas under the whole fullscreen view (device pixel ratio up to 2);
+      content keeps clear of the top bar and the transport. Styles are modules
+      (`views/vis/styles/`), `draw(frame)` returns whether something still moves, so the loop
+      stops once a paused picture has settled. Canvas 2D
+- [x] Colours from the cover (`lib/vis/palette.ts`): k-means over a 48 × 27 copy of the background,
+      the two strongest colours apart in hue, lifted for a dark stage; they glide on a track change
+      while the old cover fades out under the new one. Or the accent, or one of six pairs
+- [x] Styles: Spektrum, Ring, Welle (Wave), Sternenfeld (Starfield), Bühne (Stage), Hi-Fi. A
+      dropdown in the top bar (hidden below 900 px) and at the top of the panel; V / Shift+V step
+      through them, crossfading
+- [x] Settings (`views/vis/panel.ts`, the sliders button in the top bar; prefs `visualizer`,
+      defaults filled in for older saves): colours, reaction, sensitivity, beat pulse, bars,
+      flashes in kiai (off / soft / full), background (blurred / cover / black) and its dimming,
+      kiai effects, mirrored (bass in the middle), title, beat offset, reset
+- [x] Polish: cinema (top bar, transport and cursor fade after 3 s untouched while the visualizer
+      plays and the panel is closed); reduced motion (a third of the pulse, no flashes, no
+      crossfades); flashes at most once a bar (on its first beat in kiai), twice a second at most
+      on kicks without a beatmap
+- [x] Tests: beat clock (beat, bar, meter and BPM changes, before the first point, kiai), levels
+      (loud and quiet alike, room above a steady sound, reaction), onsets, band reading and
+      resampling, palette; every style looked at in the browser preview on a real song
+- [x] Docs, website, release 1.3.0
 
 Later, not in 1.3: the beatmap's video behind the visualizer; the visualizer as an OBS source
 through the overlay server; a small visualizer in the player bar. Storyboards: no.
