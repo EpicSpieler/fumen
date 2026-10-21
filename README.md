@@ -6,8 +6,8 @@
 
 Fumen is a desktop beatmap library for osu!. It reads your osu!lazer library and lets you browse,
 search, filter and preview all of it quickly, and shows what each osu!mania chart asks of you.
-Next come tournament pools and tools (1.2) and progress: reworked skills, sessions and sharing (1.3); see the
-[roadmap](https://fumen.dertesti.dev/roadmap) and [docs/PLAN.md](docs/PLAN.md).
+Since 1.2 it builds tournament pools and follows their matches. Next comes progress: reworked skills,
+sessions and sharing (1.3); see the [roadmap](https://fumen.dertesti.dev/roadmap) and [docs/PLAN.md](docs/PLAN.md).
 
 Fumen reads osu!'s data from a private copy of lazer's database. What it puts into lazer is beatmap
 sets you add through it and collections you send there, and that is done by lazer's own code, only
@@ -161,6 +161,23 @@ database first (see [Adding beatmaps](#adding-beatmaps)).
   through: a collection whose difficulties are ticked off as you pass them, with your best accuracy
   this session. With the mouse over it, it fades and clicks go through to the game; hold Ctrl to
   click it
+
+**Tournament (v1.2)**
+- Map pools on the Tournament page: kinds of slot with their mods (RC, LN, HB, SV, EX and TB for
+  osu!mania tournaments, NM, HD, HR, DT, FM and TB for the others, or your own), each slot's star
+  rating, most pp, length and BPM at its mods, and the pool's star ratings slot by slot at a
+  glance. A slot is filled from the library (drag a difficulty in, or "Add to pool…" in its menu)
+  or from osu! by search or link; a map you don't have comes as its chart off the mirrors, never
+  from osu!'s servers. What's like the slot's map, or like the other maps of its kind, comes first
+- Out of Fumen: a sheet (copied; it pastes as columns), CSV, JSON, the RPRO bot's Test match lines,
+  and a showcase picture to post
+- Matches: who plays whom and when, best of, warm-ups and first pick. With the multiplayer room's
+  link the games come in from osu! as they're played (through your osu! login), each in its slot
+  with the scores, the winner and the points; bans and picks per match. Per player: maps won,
+  accuracy, picks and bans by kind of slot
+- Stream overlay: a page for an OBS browser source (1920 × 1080, transparent) with the names and
+  points, the map being played and every slot's ban, pick or win, served by Fumen on 127.0.0.1
+  only, and only while it's switched on
 
 ## Adding beatmaps
 

@@ -89,7 +89,7 @@ nothing), and Fumen trades the code (later the refresh token) for tokens at the 
 | 0.7 | Library care | **Duplicates, broken files, unplayed space hogs**; osu!stable's `scores.db` |
 | 1.0 | Release | Installer, auto-update (GitHub Releases), de/en, OLED/Light/High-contrast themes, website (macOS moved to Later) |
 | 1.1 | Play companion | **A score page after every pass** (where the accuracy went, timing, the replay, practise the worst part); **a companion window over the game** (the session, the last play, a pool to work through) |
-| 1.2 | Tournament | Pool builder: NM/HD/HR/DT/FM/TB slots, mod-adjusted SR/BPM/length, maps you don't own looked up via API, similar maps to fill a slot, export to JSON/CSV/sheet + RPRO bot, a showcase image; schedule, mp-link parsing + match results, picks / bans and mod strengths per player, OBS overlay served locally (pools were 0.5, tournament 0.6) |
+| 1.2 | Tournament | **Pool builder**: slots by kind (RC/LN/HB/SV/EX/TB for osu!mania, NM/HD/HR/DT/FM/TB elsewhere), SR/pp/BPM/length at the slot's mods, maps you don't own from osu! (charts off the mirrors), similar maps to fill or replace a slot, export to JSON/CSV/sheet + RPRO bot, a showcase image; **matches**: schedule, mp-link parsing + match results, picks / bans and mod strengths per player, OBS overlay served locally (pools were 0.5, tournament 0.6) |
 | 1.3 | Progress | Skills reworked (the page open again); plays grouped into sittings and a weekly report (time, skills that moved, goals closer); share cards for the week, pools, skills and goals; Discord Rich Presence |
 | Later | Ideas, no version | Skins (browser on the same moment of a chart, side by side, mixing into one `.osk`); Linux and macOS (moved from 1.0); goals, skills and pools on fumen.dertesti.dev for the phone; mapping lens (spikes, pattern heatmap, spread check, the analyser's leftovers) |
 
@@ -501,6 +501,48 @@ The accuracy from those counts matches lazer's own on 600 of 600 real scores (`l
       osu!taiko): checked against 413 of the user's lazer scores with osu!'s pp, all within 0.1%
       (`pp::tests::real_scores`). Back to rosu-pp once it catches up
 
+## v1.2 — Tournament
+
+A tournament from Fumen: the pool built slot by slot, its matches read from osu!'s multiplayer
+rooms, and an overlay for the stream. The Tournament page (`views/pools.ts`, "Tournament" in the
+sidebar) lists the matches coming up, on and just over, and every pool as a card; a pool has three
+tabs: Slots, Matches, Players.
+
+- [x] Pools (`src-tauri/src/pools.rs`, migration 18; `lib/pools.ts`): kinds of slot, each with a
+      count and the mods it's played with: RC LN HB SV EX TB for osu!mania (the RPRO bot's kinds),
+      NM HD HR DT FM TB elsewhere, or one's own (up to 12 kinds of up to 16 slots). Slots keep a
+      difficulty by MD5 and osu!'s beatmap id. Each slot's star rating and most pp at its mods
+      (pp.rs), length and BPM at the rate; bars on top show the star ratings slot by slot. A
+      difficulty dragged in from the library, two slots swapped by dragging one onto the other, a
+      note per slot, "Add to pool…" in a difficulty's menu
+- [x] The picker (`views/pool-picker.ts`): the library, or osu! through the mirrors' search, or a
+      pasted link; what suits the slot first (in osu!mania the kind's character and a star rating
+      near the slot's place in its kind), and with lib/similar.ts what's like the slot's map (to
+      replace it) or like the other maps of its kind (to fill it). A difficulty that isn't in the
+      library comes as its chart off the mirrors (never osu!'s servers; `pool-charts` in the cache):
+      the slot keeps what the chart says and shows the library's once the set is imported
+- [x] Out of Fumen: the RPRO bot's Test match lines ("SLOT link"; only for osu!mania pools of its
+      kinds), a sheet as tab-separated text (copied), CSV (UTF-8 with a BOM) and JSON
+      (`lib/pool-export.ts`), and a showcase picture drawn on a canvas in the dark look
+      (`views/pool-showcase.ts`), copied or saved through the system's dialog (`save_file`)
+- [x] Matches (`src-tauri/src/matches.rs`, migration 19 `pool_matches`; `lib/matches.ts`,
+      `views/match.ts`): red and blue (two players or two teams), when, best of, warm-ups, first
+      pick; bans and picks from a slot's menu (the tiebreaker is nobody's). The multiplayer room
+      from its link (`…/community/matches/…`, `…/mp/…`) or number; osu!'s API gives its games with
+      the user's login (`matches/{id}`, page by page), asked again every 15 s while the match's page
+      is open or it's on stream. Each game goes in its slot with each side's score (a team adds up;
+      accuracy and combo rooms go by the side's best), the winner and the points; picks are every
+      other one from the first pick unless set by hand, the tiebreaker at match point for both.
+      Head-to-head players are found by name, else in the order they first played
+- [x] Players tab: maps won of played and the mean accuracy per kind of slot, and picks and bans
+      per kind, over the pool's matches
+- [x] Stream overlay (`src-tauri/src/overlay.rs`, `src-tauri/overlay/overlay.html`,
+      `views/overlay.ts`): switched on from the Tournament page, served at
+      http://127.0.0.1:<the first free port of 24180–24189>/ for an OBS browser source at
+      1920 × 1080 (transparent). Only this computer, only GET and HEAD, only pages that name it as
+      their host. The names and points, the map being played (or picked next, or played last),
+      every slot's ban, pick or win; `?only=bar|map|slots` for one part, `?scale=` to size it
+
 ## After 1.0
 
 - Skills rework: since 1.0.0 the Skills page is greyed out under a note (`skills-rework` in
@@ -515,9 +557,6 @@ The accuracy from those counts matches lazer's own on 600 of 600 real scores (`l
   GitHub's Macs (`npm run mac`, by hand, with milestone releases), Apple
   Silicon tested against lazer's macOS release (from GitHub) first. Not signed by Apple, no
   self-update on macOS until the release
-- 1.2 Tournament (pools were 0.5, the tournament tools 0.6): the pool builder as in the roadmap
-  table, similar maps fill or replace a slot; schedule, mp-link parsing and match results, picks /
-  bans and mod strengths per player, an OBS overlay served from the PC
 - 1.3 Progress: the skills rework (above); what was played when (lazer and osu! scores grouped into
   sittings), a weekly report (plays, time, skills that moved, goals closer); share cards for the
   week, pools, skills and goals; Discord Rich Presence ("listening to …", "practising Jacks 4.5★";
