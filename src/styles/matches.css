@@ -181,4 +181,4 @@
 .ov-urls { display: flex; flex-direction: column; gap: 4px; margin-top: 12px; }
 .ov-url { display: grid; grid-template-columns: 96px minmax(0, 1fr) 28px; align-items: center; gap: 10px; min-height: 36px; padding: 0 4px 0 12px; border-radius: var(--r-md); background: var(--fill-subtle); }
 .ov-url-label { font-size: var(--fs-12); font-weight: 600; color: var(--t3); }
-.ov-url code { font-size: var(--fs-12); color: var(--t1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; user-select: all; }
+.ov-url code { font-family: inherit; font-variant-numeric: tabular-nums; font-size: var(--fs-12); font-weight: 550; color: var(--t1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; user-select: all; }
