@@ -6,9 +6,12 @@
  * Slots take a difficulty from the picker (pool-picker.ts: the library, or osu! by search or
  * link), from a difficulty's menu ("Add to pool…"), or dragged in from the library; dragging one
  * slot onto another swaps them. One that isn't in the library shows what its chart says, with its
- * set to download. */
+ * set to download.
+ *
+ * Out of Fumen: the RPRO bot's lines, a sheet (copied), CSV and JSON files (lib/pool-export.ts),
+ * and a showcase picture (pool-showcase.ts), copied or saved. */
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { api, osuCoverUrl, osuMapUrl, thumbUrl } from "../lib/api";
+import { api, asApiError, osuCoverUrl, osuMapUrl, thumbUrl } from "../lib/api";
 import { DRAG_TYPE } from "../lib/collections";
 import { bpm, duration, esc, fixed, num, srChip } from "../lib/format";
 import { mapIndexOf } from "../lib/history";
@@ -25,6 +28,9 @@ import { openMenu, toast, uiConfirm, uiPrompt, type MenuEntry } from "../ui/cont
 import { icon } from "../ui/icons";
 import { openSet } from "./actions";
 import { importSets, importTarget } from "./import";
+import { drawShowcase, pngBytes } from "./pool-showcase";
+import { exportRows, fileName, toCsv, toJson, toTsv } from "../lib/pool-export";
+import { getVersion } from "@tauri-apps/api/app";
 import { openPoolDialog } from "./pool-dialog";
 import { chartStars, openSlotPicker, suits } from "./pool-picker";
 import { ppText } from "./pp";
@@ -136,6 +142,7 @@ export class PoolsView {
         </div>
         <div class="pool-head-tools">
           <button class="btn btn-sm" type="button" data-act="rpro" data-tip="${t("One line per slot, like the RPRO bot's Test match takes them")}">${icon("copy")}<span>${t("Copy for the RPRO bot")}</span></button>
+          <button class="btn btn-sm" type="button" data-act="export">${icon("download")}<span>${t("Export")}</span></button>
           <button class="icon-btn" type="button" data-act="pool-menu" aria-label="${t("More")}" data-tip="${t("More")}">${icon("more-vert")}</button>
         </div>
       </header>
@@ -369,6 +376,68 @@ export class PoolsView {
     go({ name: "pools" }, { replace: true });
   }
 
+  private exportMenu(at: Element, p: Pool): void {
+    openMenu(
+      at,
+      [
+        { label: t("Copy as a sheet"), icon: "copy", hint: "Sheets, Excel", action: () => void this.copySheet(p) },
+        { label: t("Save as CSV…"), icon: "download", action: () => void this.saveText(p, "csv") },
+        { label: t("Save as JSON…"), icon: "download", action: () => void this.saveText(p, "json") },
+        "sep",
+        { label: t("Copy showcase image"), icon: "copy", action: () => void this.showcase(p, "copy") },
+        { label: t("Save showcase image…"), icon: "download", action: () => void this.showcase(p, "save") },
+      ],
+      { minWidth: 230 },
+    );
+  }
+
+  /** the slots' numbers for an export (the ones on the page where pp.rs can't) */
+  private rows(p: Pool) {
+    return exportRows(p, (slot) => {
+      const known = this.stars.get(slot);
+      if (known !== undefined) return known;
+      const c = slotChart(poolSlot(p, slot));
+      const k = kindOfSlot(p, slot);
+      return c && k ? chartStars(c, k.mods) : undefined;
+    });
+  }
+
+  private async copySheet(p: Pool): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(toTsv(await this.rows(p)));
+      toast(t("Copied: paste it into a sheet"), { kind: "success", timeout: 2600 });
+    } catch {
+      toast(t("Couldn't access the clipboard"), { kind: "danger" });
+    }
+  }
+
+  private async saveText(p: Pool, kind: "csv" | "json"): Promise<void> {
+    try {
+      const rows = await this.rows(p);
+      const text = kind === "csv" ? toCsv(rows) : toJson(p, rows, `Fumen ${await getVersion().catch(() => "")}`.trim());
+      const saved = await api.saveFile(kind, fileName(p.name, kind), new TextEncoder().encode(text), t("Export pool"), kind === "csv" ? t("CSV table") : "JSON");
+      if (saved) toast(t("Saved as {file}", { file: saved }), { kind: "success", timeout: 2600 });
+    } catch (e) {
+      toast(`${t("Couldn't save the file.")} ${asApiError(e).message}`, { kind: "danger" });
+    }
+  }
+
+  private async showcase(p: Pool, how: "copy" | "save"): Promise<void> {
+    try {
+      const canvas = await drawShowcase(p, await this.rows(p));
+      const png = await pngBytes(canvas);
+      if (how === "copy") {
+        await navigator.clipboard.write([new ClipboardItem({ "image/png": new Blob([png as Uint8Array<ArrayBuffer>], { type: "image/png" }) })]);
+        toast(t("Showcase image copied"), { kind: "success", timeout: 2600 });
+        return;
+      }
+      const saved = await api.saveFile("png", fileName(p.name, "png"), png, t("Save showcase image"), t("PNG image"));
+      if (saved) toast(t("Saved as {file}", { file: saved }), { kind: "success", timeout: 2600 });
+    } catch (e) {
+      toast(`${t("Couldn't make the image.")} ${asApiError(e).message}`, { kind: "danger" });
+    }
+  }
+
   /** Downloads a slot's set (not in the library) the way Browse does: into osu!lazer, or stable. */
   private async download(s: PoolSlot): Promise<void> {
     const o = s.online;
@@ -416,6 +485,8 @@ export class PoolsView {
       const p = this.pool();
       if (!p) return;
       if (el.closest('[data-act="rpro"]')) return void this.copyRpro(p);
+      const exportBtn = el.closest<HTMLElement>('[data-act="export"]');
+      if (exportBtn) return this.exportMenu(exportBtn, p);
       const menuBtn = el.closest<HTMLElement>('[data-act="pool-menu"]');
       if (menuBtn) return this.poolMenu(menuBtn, p);
       const bar = el.closest<HTMLElement>(".pc-bar");

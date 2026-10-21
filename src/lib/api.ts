@@ -68,6 +68,12 @@ export const api = {
   updatePool: (id: string, patch: { name?: string; categories?: PoolKind[]; note?: string }) => invoke<void>("update_pool", { id, patch }),
   deletePool: (id: string) => invoke<void>("delete_pool", { id }),
   setPoolSlot: (id: string, slot: string, map: string) => invoke<void>("set_pool_slot", { id, slot, map }),
+  /** saves bytes where the player picks in the system's save dialog (only csv, json or png); the
+   * file's name, null when cancelled */
+  saveFile: (kind: "csv" | "json" | "png", name: string, data: Uint8Array, title: string, filter: string) =>
+    invoke<string | null>("save_file", data, {
+      headers: { "x-fumen-kind": kind, "x-fumen-name": encodeURIComponent(name), "x-fumen-title": encodeURIComponent(title), "x-fumen-filter": encodeURIComponent(filter) },
+    }),
   /** osu!'s difficulty by link or number into a slot: the library's, else its chart from the mirrors */
   setPoolSlotOnline: (id: string, slot: string, link: string) => invoke<void>("set_pool_slot_online", { id, slot, link }),
   clearPoolSlot: (id: string, slot: string) => invoke<void>("clear_pool_slot", { id, slot }),

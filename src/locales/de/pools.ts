@@ -94,4 +94,21 @@ export const pools: Record<string, string> = {
   "Download the set": "Set herunterladen",
   "Open on osu!": "Auf osu! öffnen",
   "Downloading {title}…": "Lade {title} herunter…",
+
+  // out of Fumen
+  "Export": "Exportieren",
+  "Copy as a sheet": "Als Tabelle kopieren",
+  "Save as CSV…": "Als CSV speichern…",
+  "Save as JSON…": "Als JSON speichern…",
+  "Copy showcase image": "Showcase-Bild kopieren",
+  "Save showcase image…": "Showcase-Bild speichern…",
+  "Copied: paste it into a sheet": "Kopiert: füg es in eine Tabelle ein",
+  "Export pool": "Pool exportieren",
+  "CSV table": "CSV-Tabelle",
+  "Saved as {file}": "Gespeichert als {file}",
+  "Couldn't save the file.": "Die Datei ließ sich nicht speichern.",
+  "Showcase image copied": "Showcase-Bild kopiert",
+  "Save showcase image": "Showcase-Bild speichern",
+  "PNG image": "PNG-Bild",
+  "Couldn't make the image.": "Das Bild ließ sich nicht erstellen.",
 };

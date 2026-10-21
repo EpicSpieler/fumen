@@ -17,8 +17,17 @@ let previewLoginCancelled = false;
 let previewImportCancel = false;
 let previewCompareCancel = false;
 
-export async function invoke<T>(cmd: string, args: Record<string, unknown> = {}): Promise<T> {
+export async function invoke<T>(cmd: string, args: Record<string, unknown> = {}, options?: { headers?: Record<string, string> }): Promise<T> {
   switch (cmd) {
+    case "save_file": {
+      // the browser's download in place of the save dialog
+      const name = decodeURIComponent(options?.headers?.["x-fumen-name"] ?? "fumen");
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([args as unknown as Uint8Array<ArrayBuffer>]));
+      a.download = name;
+      a.click();
+      return name as T;
+    }
     case "get_settings":
       return settings() as T;
     case "update_settings": {
