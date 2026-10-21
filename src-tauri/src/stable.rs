@@ -315,7 +315,7 @@ pub struct OsuDb {
 }
 
 /// The beat length that lasts longest (to the next uninherited point, the last one to `end`).
-fn main_bpm(points: &[(f64, f64)], end: f64) -> f64 {
+pub(crate) fn main_bpm(points: &[(f64, f64)], end: f64) -> f64 {
     let mut lengths: Vec<(f64, f64)> = Vec::new();
     for (i, &(beat, start)) in points.iter().enumerate() {
         if !(beat.is_finite() && beat > 0.0) {

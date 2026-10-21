@@ -341,7 +341,7 @@ fn tidy_cache(dir: &Path) {
 }
 
 /// The `[Metadata]` lines of a chart file.
-fn metadata(text: &str) -> HashMap<String, String> {
+pub(crate) fn metadata(text: &str) -> HashMap<String, String> {
     let mut out = HashMap::new();
     let mut inside = false;
     for line in text.lines() {

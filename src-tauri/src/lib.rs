@@ -663,8 +663,15 @@ async fn get_dan(app: AppHandle, id: String, rate: f64) -> Result<Option<mma::da
 #[tauri::command]
 async fn get_pp(app: AppHandle, id: String, mods: Vec<String>, rate: f64, plays: Vec<pp::Hits>) -> Result<pp::Sheet> {
     tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        // "o<osu!'s id>": a pool's difficulty that isn't in the library, its chart in the cache
+        if let Some(beatmap) = id.strip_prefix('o').and_then(|b| b.parse::<i64>().ok()) {
+            let md5 = pools::online_md5(&state.db(), beatmap)?;
+            let (text, md5) = pools::online_chart(&state.cache_dir.join("pool-charts"), beatmap, md5.as_deref())?;
+            return pp::sheet_with(|| Ok(text.into_bytes()), &md5, &mods, rate, &plays);
+        }
         let hash = chart_hash(&app, &id)?;
-        pp::sheet(&app.state::<AppState>().files(), &hash, &mods, rate, &plays)
+        pp::sheet(&state.files(), &hash, &mods, rate, &plays)
     })
     .await
     .map_err(|e| Error::known("internal", e.to_string()))?
@@ -890,6 +897,27 @@ fn delete_pool(state: State<AppState>, id: String) -> Result<()> {
 #[tauri::command]
 fn set_pool_slot(state: State<AppState>, id: String, slot: String, map: String) -> Result<()> {
     pools::set_slot(&mut state.db(), &id, &slot, &map)
+}
+
+/// Puts osu!'s difficulty (a link to it, or its number) into a slot: the library's when it has
+/// it, else its chart from the mirrors.
+#[tauri::command]
+async fn set_pool_slot_online(app: AppHandle, id: String, slot: String, link: String) -> Result<()> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let beatmap = pools::beatmap_of(&link).ok_or_else(|| Error::known("bad-link", "That isn't a link to a difficulty on osu!, or its number."))?;
+        pools::known_slot(&state.db(), &id, &slot)?;
+        let own: Option<String> = state.db().query_row("SELECT id FROM maps WHERE online_id = ?1 LIMIT 1", [beatmap], |r| r.get(0)).optional()?;
+        if let Some(map) = own {
+            return pools::set_slot(&mut state.db(), &id, &slot, &map);
+        }
+        let (text, _) = pools::online_chart(&state.cache_dir.join("pool-charts"), beatmap, None)?;
+        let (md5, online) = pools::describe(beatmap, &text)?;
+        let done = pools::set_online(&mut state.db(), &id, &slot, &md5, &online);
+        done
+    })
+    .await
+    .map_err(|e| Error::known("internal", e.to_string()))?
 }
 
 #[tauri::command]
@@ -1764,6 +1792,7 @@ pub fn run() {
             update_pool,
             delete_pool,
             set_pool_slot,
+            set_pool_slot_online,
             clear_pool_slot,
             swap_pool_slots,
             set_pool_slot_note,

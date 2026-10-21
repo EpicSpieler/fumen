@@ -4,7 +4,12 @@
 //! ("RC2", or "TB" when its kind has one) holds one difficulty.
 //!
 //! Like collections, slots keep difficulties by MD5, so they survive rescans; they keep osu!'s
-//! beatmap id too, which exports need (and which maps that aren't in the library have instead).
+//! beatmap id too, which exports need. A difficulty that isn't in the library comes as its chart
+//! off the mirrors (never osu!'s servers): the slot keeps what the chart says ([`Online`]), the
+//! file stays in Fumen's cache for its pp, and once the set is in the library the slot finds it by
+//! its MD5 like any other.
+use std::path::{Path, PathBuf};
+
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 
@@ -38,6 +43,40 @@ pub struct Slot {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub online_id: Option<i64>,
     pub note: String,
+    /// a difficulty that isn't in the library: what its chart says
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub online: Option<Online>,
+}
+
+/// A difficulty that isn't in the library, as its slot keeps it (from its chart file).
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct Online {
+    pub beatmap_id: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub set_id: Option<i64>,
+    pub title: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub title_unicode: String,
+    pub artist: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub artist_unicode: String,
+    pub creator: String,
+    pub version: String,
+    pub mode: i64,
+    /// osu!mania: the key count
+    pub keys: i64,
+    /// ms, first note to the end of the last
+    pub length: f64,
+    pub bpm: f64,
+    pub objects: u32,
+    /// osu!mania: long notes
+    pub holds: u32,
+    /// without mods (rosu-pp's, osu!'s within a hair)
+    pub sr: f64,
+    /// osu!mania: Fumen's pattern category ("Jumpstream", "… SV")
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub category: Option<String>,
 }
 
 #[derive(Serialize, Debug, PartialEq)]
@@ -152,7 +191,8 @@ fn touch(conn: &Connection, id: &str) -> Result<()> {
     Ok(())
 }
 
-fn known_slot(conn: &Connection, pool: &str, slot: &str) -> Result<i64> {
+/// The pool's ruleset, when it has the slot.
+pub fn known_slot(conn: &Connection, pool: &str, slot: &str) -> Result<i64> {
     let (mode, kinds) = kinds_of(conn, pool)?;
     if !slot_codes(&kinds).iter().any(|s| s == slot) {
         return Err(Error::known("no-slot", "That pool has no such slot."));
@@ -169,7 +209,8 @@ pub fn list(conn: &Connection) -> Result<Vec<Pool>> {
     // a difficulty can sit in two sets (the same .osu imported twice): lazer's first
     let mut slots = conn.prepare(
         "SELECT pm.slot, pm.md5, pm.online_id, pm.note,
-                (SELECT m.id FROM maps m JOIN sets s ON s.id = m.set_id WHERE m.md5 = pm.md5 ORDER BY s.source = 'stable' LIMIT 1)
+                (SELECT m.id FROM maps m JOIN sets s ON s.id = m.set_id WHERE m.md5 = pm.md5 ORDER BY s.source = 'stable' LIMIT 1),
+                pm.meta
          FROM pool_maps pm WHERE pm.pool_id = ?1",
     )?;
     let mut out = Vec::with_capacity(rows.len());
@@ -177,7 +218,12 @@ pub fn list(conn: &Connection) -> Result<Vec<Pool>> {
         let categories: Vec<Category> = serde_json::from_str(&categories).unwrap_or_default();
         let order = slot_codes(&categories);
         let mut filled: Vec<Slot> = slots
-            .query_map([&id], |r| Ok(Slot { slot: r.get(0)?, md5: r.get(1)?, online_id: r.get(2)?, note: r.get(3)?, map: r.get(4)? }))?
+            .query_map([&id], |r| {
+                let map: Option<String> = r.get(4)?;
+                // what the chart said, while the library doesn't have it
+                let online = if map.is_none() { r.get::<_, Option<String>>(5)?.and_then(|j| serde_json::from_str(&j).ok()) } else { None };
+                Ok(Slot { slot: r.get(0)?, md5: r.get(1)?, online_id: r.get(2)?, note: r.get(3)?, map, online })
+            })?
             .collect::<Result<_, _>>()?;
         filled.sort_by_key(|s| order.iter().position(|o| *o == s.slot).unwrap_or(usize::MAX));
         out.push(Pool { id, name, mode, keys, categories, note, created, updated, slots: filled });
@@ -250,7 +296,7 @@ pub fn set_slot(conn: &mut Connection, pool: &str, slot: &str, map_id: &str) -> 
     let tx = conn.transaction()?;
     tx.execute("DELETE FROM pool_maps WHERE pool_id = ?1 AND md5 = ?2", params![pool, md5])?;
     tx.execute(
-        "INSERT OR REPLACE INTO pool_maps (pool_id, slot, md5, online_id, note, added) VALUES (?1, ?2, ?3, ?4, '', ?5)",
+        "INSERT OR REPLACE INTO pool_maps (pool_id, slot, md5, online_id, note, meta, added) VALUES (?1, ?2, ?3, ?4, '', NULL, ?5)",
         params![pool, slot, md5, online_id.filter(|i| *i > 0), now_ms()],
     )?;
     touch(&tx, pool)?;
@@ -284,6 +330,121 @@ pub fn set_slot_note(conn: &Connection, pool: &str, slot: &str, note: &str) -> R
         return Err(Error::known("no-slot", "That pool has no such slot."));
     }
     touch(conn, pool)
+}
+
+// ── maps that aren't in the library ─────────────────────────────────────
+
+/// The difficulty a pasted line names: a link to it (`…/beatmapsets/1#mania/2`, `/b/2`,
+/// `/beatmaps/2`, `osu://b/2`) or its number. A set link without a difficulty names none.
+pub fn beatmap_of(line: &str) -> Option<i64> {
+    let s = line.trim().trim_matches(|c| c == '<' || c == '>' || c == '"');
+    if let Ok(id) = s.parse::<i64>() {
+        return (id > 0).then_some(id);
+    }
+    // a set link with the difficulty after the #
+    if s.to_ascii_lowercase().contains("/beatmapsets/") {
+        let id = s.split_once('#')?.1.rsplit('/').next()?.trim().parse::<i64>().ok()?;
+        return (id > 0).then_some(id);
+    }
+    match crate::downloads::parse_link(s)? {
+        crate::downloads::Target::Beatmap(id) => Some(id as i64),
+        crate::downloads::Target::Set(_) => None,
+    }
+}
+
+fn md5_of(text: &str) -> String {
+    use md5::Digest;
+    md5::Md5::digest(text.as_bytes()).iter().map(|b| format!("{b:02x}")).collect()
+}
+
+fn cache_path(dir: &Path, beatmap: i64) -> PathBuf {
+    dir.join(format!("{beatmap}.osu"))
+}
+
+/// The chart of osu!'s difficulty `beatmap`: from `dir` (Fumen's cache), else from the mirrors
+/// (and kept there). With `md5`, a kept file that isn't that one is fetched again. Returns the
+/// text and its MD5.
+pub fn online_chart(dir: &Path, beatmap: i64, md5: Option<&str>) -> Result<(String, String)> {
+    let path = cache_path(dir, beatmap);
+    if let Ok(text) = std::fs::read_to_string(&path) {
+        let got = md5_of(&text);
+        if md5.is_none_or(|want| want.eq_ignore_ascii_case(&got)) {
+            return Ok((text, got));
+        }
+    }
+    let agent = crate::downloads::chart_agent();
+    let text = crate::downloads::download_chart(&agent, beatmap, 0)?
+        .ok_or_else(|| Error::known("not-on-mirrors", "No mirror has this difficulty. Is the link right?"))?;
+    std::fs::create_dir_all(dir)?;
+    std::fs::write(&path, &text)?;
+    let got = md5_of(&text);
+    Ok((text, got))
+}
+
+/// What a slot keeps of a chart that isn't in the library, and its MD5.
+pub fn describe(beatmap: i64, text: &str) -> Result<(String, Online)> {
+    let md5 = md5_of(text);
+    let chart = crate::chart::parse(text);
+    if chart.objects.is_empty() {
+        return Err(Error::known("not-a-chart", "That doesn't look like a chart."));
+    }
+    let meta = crate::player::metadata(text);
+    let m = |k: &str| meta.get(k).cloned().unwrap_or_default();
+    let first = chart.objects.iter().map(|o| o.time).min().unwrap_or(0);
+    let last = chart.objects.iter().map(|o| o.end.max(o.time)).max().unwrap_or(0);
+    let points: Vec<(f64, f64)> = chart.timing.iter().filter(|p| p.uninherited).map(|p| (p.beat_len, p.time)).collect();
+    let stars = crate::pp::sheet_with(|| Ok(text.as_bytes().to_vec()), &md5, &[], 1.0, &[])?.stars;
+    // the pattern analysis on a chart from anywhere: one that breaks it just has no category
+    let category = std::panic::catch_unwind(|| crate::mma::patterns::report(&chart))
+        .ok()
+        .flatten()
+        .map(|r| if r.sv() { format!("{} SV", r.category) } else { r.category });
+    let online = Online {
+        beatmap_id: beatmap,
+        set_id: m("BeatmapSetID").parse().ok().filter(|v: &i64| *v > 0),
+        title: m("Title"),
+        title_unicode: m("TitleUnicode"),
+        artist: m("Artist"),
+        artist_unicode: m("ArtistUnicode"),
+        creator: m("Creator"),
+        version: m("Version"),
+        mode: chart.mode as i64,
+        keys: chart.keys as i64,
+        length: (last - first).max(0) as f64,
+        bpm: crate::stable::main_bpm(&points, last as f64),
+        objects: chart.objects.len() as u32,
+        holds: chart.objects.iter().filter(|o| matches!(o.kind, crate::chart::Kind::Hold)).count() as u32,
+        sr: (stars * 100.0).round() / 100.0,
+        category,
+    };
+    Ok((md5, online))
+}
+
+/// Puts a difficulty that isn't in the library into a slot (`md5` and `online` from
+/// [`describe`]); from another slot, it moves.
+pub fn set_online(conn: &mut Connection, pool: &str, slot: &str, md5: &str, online: &Online) -> Result<()> {
+    let mode = known_slot(conn, pool, slot)?;
+    if online.mode != mode {
+        return Err(Error::known("wrong-ruleset", "This difficulty is for another ruleset than the pool."));
+    }
+    let keys: Option<i64> = conn.query_row("SELECT keys FROM pools WHERE id = ?1", [pool], |r| r.get(0))?;
+    if mode == 3 && keys.is_some_and(|k| k != online.keys) {
+        return Err(Error::known("wrong-keys", "This difficulty has another key count than the pool."));
+    }
+    let tx = conn.transaction()?;
+    tx.execute("DELETE FROM pool_maps WHERE pool_id = ?1 AND md5 = ?2", params![pool, md5])?;
+    tx.execute(
+        "INSERT OR REPLACE INTO pool_maps (pool_id, slot, md5, online_id, note, meta, added) VALUES (?1, ?2, ?3, ?4, '', ?5, ?6)",
+        params![pool, slot, md5, online.beatmap_id, serde_json::to_string(online).unwrap_or_default(), now_ms()],
+    )?;
+    touch(&tx, pool)?;
+    tx.commit()?;
+    Ok(())
+}
+
+/// The MD5 a pool keeps for osu!'s difficulty `beatmap` (which chart file its pp is from).
+pub fn online_md5(conn: &Connection, beatmap: i64) -> Result<Option<String>> {
+    Ok(conn.query_row("SELECT md5 FROM pool_maps WHERE online_id = ?1 AND meta IS NOT NULL LIMIT 1", [beatmap], |r| r.get(0)).optional()?.flatten())
 }
 
 #[cfg(test)]
@@ -352,6 +513,73 @@ mod tests {
         delete(&conn, &id).unwrap();
         assert!(list(&conn).unwrap().is_empty());
         assert_eq!(conn.query_row("SELECT COUNT(*) FROM pool_maps", [], |r| r.get::<_, i64>(0)).unwrap(), 0);
+    }
+
+    /// A 4K chart of 200 notes, every fourth a hold, at 240 BPM.
+    fn chart_text(keys: u32) -> String {
+        let mut t = format!(
+            "osu file format v14\n[General]\nMode: 3\n[Metadata]\nTitle:Song\nTitleUnicode:曲\nArtist:Someone\nCreator:Mapper\nVersion:Hard\nBeatmapID:555\nBeatmapSetID:77\n[Difficulty]\nCircleSize:{keys}\nOverallDifficulty:8\n[TimingPoints]\n0,250,4,1,0,100,1,0\n[HitObjects]\n"
+        );
+        for i in 0..200 {
+            let (x, at) = (64 + (i % 4) * 128, 1000 + i * 125);
+            if i % 4 == 0 {
+                t += &format!("{x},192,{at},128,0,{}:0:0:0:0:\n", at + 100);
+            } else {
+                t += &format!("{x},192,{at},1,0,0:0:0:0:\n");
+            }
+        }
+        t
+    }
+
+    #[test]
+    fn links_to_difficulties() {
+        assert_eq!(beatmap_of(" 2547774 "), Some(2547774));
+        assert_eq!(beatmap_of("https://osu.ppy.sh/beatmapsets/1210406#mania/2547774"), Some(2547774));
+        assert_eq!(beatmap_of("https://osu.ppy.sh/b/2547774"), Some(2547774));
+        assert_eq!(beatmap_of("https://osu.ppy.sh/beatmaps/2547774?mode=mania"), Some(2547774));
+        assert_eq!(beatmap_of("osu://b/2547774"), Some(2547774));
+        // a whole set, or nothing of osu!'s
+        assert_eq!(beatmap_of("https://osu.ppy.sh/beatmapsets/1210406"), None);
+        assert_eq!(beatmap_of("https://example.com/b/1"), None);
+        assert_eq!(beatmap_of("0"), None);
+    }
+
+    #[test]
+    fn maps_not_in_the_library() {
+        let mut conn = db();
+        let dir = std::env::temp_dir().join(format!("fumen-pool-charts-{}-{}", std::process::id(), new_id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let text = chart_text(4);
+        // in the cache already: nothing is downloaded
+        std::fs::write(dir.join("555.osu"), &text).unwrap();
+        let (got, md5) = online_chart(&dir, 555, None).unwrap();
+        assert_eq!(got, text);
+        let (md5b, online) = describe(555, &text).unwrap();
+        assert_eq!(md5, md5b);
+        assert_eq!((online.title.as_str(), online.title_unicode.as_str(), online.version.as_str(), online.set_id), ("Song", "曲", "Hard", Some(77)));
+        assert_eq!((online.mode, online.keys, online.objects, online.holds), (3, 4, 200, 50));
+        assert_eq!((online.bpm.round(), online.length), (240.0, (199 * 125) as f64));
+        assert!(online.sr > 0.5, "{online:?}");
+
+        let id = create(&conn, "Cup", 3, Some(4), &kinds()).unwrap();
+        set_online(&mut conn, &id, "RC1", &md5, &online).unwrap();
+        // a 7K chart doesn't go into a 4K pool, an osu! one into none for osu!mania
+        let (md5_7, seven) = describe(556, &chart_text(7)).unwrap();
+        assert_eq!(set_online(&mut conn, &id, "RC2", &md5_7, &seven).unwrap_err().code(), "wrong-keys");
+        assert_eq!(set_online(&mut conn, &id, "RC2", &md5, &Online { mode: 0, ..online.clone() }).unwrap_err().code(), "wrong-ruleset");
+        let s = &list(&conn).unwrap()[0].slots[0];
+        assert_eq!((s.slot.as_str(), s.map.as_deref(), s.online_id), ("RC1", None, Some(555)));
+        assert_eq!(s.online.as_ref(), Some(&online));
+        assert_eq!(online_md5(&conn, 555).unwrap().as_deref(), Some(md5.as_str()));
+        // its pp, from the kept file
+        let sheet = crate::pp::sheet_with(|| Ok(text.as_bytes().to_vec()), &md5, &[], 1.5, &[]).unwrap();
+        assert!(sheet.stars > online.sr);
+
+        // the set comes into the library: the slot finds it by its MD5
+        conn.execute("INSERT INTO maps (id, set_id, md5, online_id, ruleset_id) VALUES ('n', 's1', ?1, 555, 3)", [&md5]).unwrap();
+        let s = &list(&conn).unwrap()[0].slots[0];
+        assert_eq!((s.map.as_deref(), s.online.as_ref()), (Some("n"), None));
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]

@@ -93,12 +93,13 @@ fn settings(mods: &[String], rate: f64) -> (String, Difficulty) {
     (key, difficulty)
 }
 
-fn attributes(files: &paths::Files, hash: &str, key: &str, rate: f64, difficulty: &Difficulty) -> Result<DifficultyAttributes> {
+/// `read` gets the chart file when it isn't kept already (`hash` names it).
+fn attributes(read: impl FnOnce() -> Result<Vec<u8>>, hash: &str, key: &str, rate: f64, difficulty: &Difficulty) -> Result<DifficultyAttributes> {
     let bits = rate.to_bits();
     if let Some(k) = KEPT.lock().unwrap().iter().find(|k| k.hash == hash && k.mods == key && k.rate == bits) {
         return Ok(k.attrs.clone());
     }
-    let bytes = files.read(hash).ok_or_else(|| Error::known("chart-missing", "This difficulty's .osu file is missing."))?;
+    let bytes = read()?;
     let map = Beatmap::from_bytes(&bytes).map_err(|_| Error::known("pp-unreadable", "Couldn't read this chart for pp."))?;
     // osu! gives up on such charts too (they'd take ages); rosu-pp leaves the check to us
     map.check_suspicion().map_err(|_| Error::known("pp-suspicious", "This chart is too unusual to work out pp for."))?;
@@ -122,9 +123,16 @@ impl Budget {
 
 /// pp at the panel's mods and rate: a perfect play, and each play asked about.
 pub fn sheet(files: &paths::Files, hash: &str, mods: &[String], rate: f64, plays: &[Hits]) -> Result<Sheet> {
+    let read = || files.read(hash).ok_or_else(|| Error::known("chart-missing", "This difficulty's .osu file is missing."));
+    sheet_with(read, hash, mods, rate, plays)
+}
+
+/// The same for a chart that isn't in the library (a pool's, off the mirrors): `read` gets its
+/// file, `hash` (its MD5) keeps it apart from the rest.
+pub fn sheet_with(read: impl FnOnce() -> Result<Vec<u8>>, hash: &str, mods: &[String], rate: f64, plays: &[Hits]) -> Result<Sheet> {
     let rate = rate.clamp(0.5, 2.0);
     let (key, difficulty) = settings(mods, rate);
-    let attrs = attributes(files, hash, &key, rate, &difficulty)?;
+    let attrs = attributes(read, hash, &key, rate, &difficulty)?;
     let failed = |_| Error::known("pp-failed", "Couldn't work out pp for this chart.");
 
     Ok(match attrs {

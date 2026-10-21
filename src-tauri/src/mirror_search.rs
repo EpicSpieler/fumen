@@ -64,6 +64,9 @@ pub struct FoundMap {
     pub bpm: f64,
     /// seconds
     pub length: u32,
+    /// notes and, in osu!mania, long notes (0 and 0: the mirror didn't say)
+    pub circles: u32,
+    pub sliders: u32,
     /// one the search asks for
     pub matches: bool,
 }
@@ -275,6 +278,8 @@ fn found(s: &Value, q: &Query) -> Option<FoundSet> {
                 od: b["accuracy"].as_f64().unwrap_or(0.0),
                 bpm: b["bpm"].as_f64().unwrap_or(0.0),
                 length: b["total_length"].as_u64().unwrap_or(0) as u32,
+                circles: b["count_circles"].as_u64().unwrap_or(0) as u32,
+                sliders: b["count_sliders"].as_u64().unwrap_or(0) as u32,
                 matches: false,
             })
         })
