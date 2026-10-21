@@ -72,6 +72,7 @@ export async function invoke<T>(cmd: string, args: Record<string, unknown> = {})
     case "update_pool":
     case "delete_pool":
     case "set_pool_slot":
+    case "set_pool_slot_online":
     case "clear_pool_slot":
     case "swap_pool_slots":
     case "set_pool_slot_note":
@@ -386,7 +387,7 @@ export async function invoke<T>(cmd: string, args: Record<string, unknown> = {})
         if (q.status.length && !q.status.includes(status)) return [];
         const maps = (s.beatmaps as Record<string, any>[])
           .filter((b) => q.mode === null || b.mode_int === q.mode)
-          .map((b) => ({ id: b.id, mode: b.mode_int, version: b.version, sr: b.difficulty_rating, cs: b.cs, ar: b.ar, od: b.accuracy, bpm: b.bpm, length: b.total_length,
+          .map((b) => ({ id: b.id, mode: b.mode_int, version: b.version, sr: b.difficulty_rating, cs: b.cs, ar: b.ar, od: b.accuracy, bpm: b.bpm, length: b.total_length, circles: b.count_circles ?? 0, sliders: b.count_sliders ?? 0,
             matches: (!keysApply || (b.mode_int === 3 && q.keys.includes(Math.round(b.cs)))) && (q.srMin === null || b.difficulty_rating >= q.srMin - 0.005) && (q.srMax === null || b.difficulty_rating <= q.srMax + 0.005) }))
           .sort((x, y) => x.mode - y.mode || x.sr - y.sr);
         if (!maps.some((m) => m.matches)) return [];
@@ -599,7 +600,7 @@ interface PreviewPool {
   note: string;
   created: number;
   updated: number;
-  slots: { slot: string; map?: string; md5?: string; onlineId?: number; note: string }[];
+  slots: { slot: string; map?: string; md5?: string; onlineId?: number; note: string; online?: Record<string, unknown> }[];
 }
 
 const POOLS_KEY = "fumen-preview-pools";
@@ -645,6 +646,26 @@ async function previewPools(cmd: string, args: Record<string, unknown>): Promise
       const m = snap.maps.find((x) => x.id === args.map);
       pool.slots = pool.slots.filter((s) => s.map !== args.map && s.slot !== args.slot);
       pool.slots.push({ slot: String(args.slot), map: String(args.map), md5: String(args.map), onlineId: m?.onlineId, note: "" });
+      order(pool);
+      save();
+      return null;
+    }
+    case "set_pool_slot_online": {
+      // osu.direct's beatmap lookup from the page, in place of the chart off the mirrors
+      if (!pool) return fail("That pool doesn't exist any more.");
+      const link = String(args.link).trim();
+      const id = Number(/^\d+$/.test(link) ? link : (/#\w+\/(\d+)/.exec(link) ?? /\/(?:b|beatmaps)\/(\d+)/.exec(link))?.[1]);
+      if (!id) return fail("That isn't a link to a difficulty on osu!, or its number.");
+      const res = await fetch(`https://osu.direct/api/v2/b/${id}`);
+      if (!res.ok) return fail("No mirror has this difficulty. Is the link right?");
+      const b = (await res.json()) as Record<string, any>;
+      const set = (b.beatmapset ?? (await fetch(`https://osu.direct/api/v2/s/${b.beatmapset_id}`).then((r) => (r.ok ? r.json() : {})))) as Record<string, any>;
+      if (b.mode_int !== pool.mode) return fail("This difficulty is for another ruleset than the pool.");
+      if (pool.mode === 3 && pool.keys && Math.round(b.cs) !== pool.keys) return fail("This difficulty has another key count than the pool.");
+      const online = { beatmapId: id, setId: b.beatmapset_id, title: set.title ?? "?", artist: set.artist ?? "?", creator: set.creator ?? "?", version: b.version, mode: b.mode_int,
+        keys: Math.round(b.cs), length: (b.total_length ?? 0) * 1000, bpm: b.bpm ?? 0, objects: (b.count_circles ?? 0) + (b.count_sliders ?? 0), holds: b.count_sliders ?? 0, sr: b.difficulty_rating ?? 0 };
+      pool.slots = pool.slots.filter((s) => s.onlineId !== id && s.slot !== args.slot);
+      pool.slots.push({ slot: String(args.slot), md5: b.checksum, onlineId: id, note: "", online });
       order(pool);
       save();
       return null;

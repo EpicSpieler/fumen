@@ -762,6 +762,9 @@ export interface FoundMap {
   bpm: number;
   /** seconds */
   length: number;
+  /** notes and, in osu!mania, long notes (0 and 0: the mirror didn't say) */
+  circles: number;
+  sliders: number;
   /** one the search asks for */
   matches: boolean;
 }

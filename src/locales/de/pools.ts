@@ -78,4 +78,18 @@ export const pools: Record<string, string> = {
   "Nothing in your library fits this pool.": "Nichts in deiner Bibliothek passt in diesen Pool.",
   "in {slot}": "in {slot}",
   "Without mods; the pool shows it with them": "Ohne Mods; der Pool zeigt sie mit",
+  "Where to look": "Wo suchen",
+  "Search osu!, or paste a link to a difficulty": "Auf osu! suchen oder Link zu einem Schwierigkeitsgrad einfügen",
+  "Look on osu!": "Auf osu! suchen",
+  "Searching osu!…": "Suche auf osu!…",
+  "Nothing on osu! matches. Paste a link to a difficulty, or search for something else.":
+    "Auf osu! passt nichts. Füg einen Link zu einem Schwierigkeitsgrad ein oder such nach etwas anderem.",
+  "Getting its chart from the mirrors…": "Hole das Chart von den Mirrors…",
+  "Not in your library: its chart comes from the mirrors": "Nicht in deiner Bibliothek: das Chart kommt von den Mirrors",
+
+  // a map that isn't in the library
+  "Not in your library any more": "Nicht mehr in deiner Bibliothek",
+  "Download the set": "Set herunterladen",
+  "Open on osu!": "Auf osu! öffnen",
+  "Downloading {title}…": "Lade {title} herunter…",
 };

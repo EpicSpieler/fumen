@@ -209,3 +209,25 @@
 .pick-empty { padding: 28px 8px; text-align: center; font-size: var(--fs-12); color: var(--t3); }
 .pick-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 12px; }
 .pick-count { font-size: var(--fs-12); color: var(--t3); }
+.pick-source { flex: none; }
+.pick-source > button { padding: 0 12px; }
+.pick-link-ic { display: grid; place-items: center; background: var(--fill-subtle); color: var(--t2); }
+.pick-link-ic .ic { width: 18px; height: 18px; }
+.pick-row.is-busy { cursor: progress; }
+.pick-row.is-busy .pick-link-ic .ic { animation: spin 1s linear infinite; }
+.pick-row.is-busy .t-sub { color: var(--accent); }
+.pick-empty { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.pick-more { display: flex; justify-content: center; padding: 10px 0 4px; }
+
+/* a slot's difficulty that isn't in the library */
+.pslot-away {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: var(--r-full);
+  background: var(--fill-subtle);
+  color: var(--t3);
+  font-size: var(--fs-10);
+  font-weight: 600;
+  vertical-align: 1px;
+}

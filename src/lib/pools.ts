@@ -2,8 +2,13 @@
  * with, the slots ("RC2", "TB"), and the difficulties in them. Presets for osu!mania tournaments
  * (RC LN HB SV EX TB, the RPRO bot's kinds) and the other rulesets (NM HD HR DT FM TB); the
  * player can make their own. A slot's numbers (star rating, pp) come from src-tauri/src/pp.rs at
- * the slot's mods. */
+ * the slot's mods.
+ *
+ * A slot can hold a difficulty that isn't in the library: its chart comes off the mirrors, the
+ * slot keeps what it says (PoolOnline), and once the set is in the library the slot shows the
+ * library's. */
 import { api, asApiError } from "./api";
+import { displayArtist, displayTitle } from "./format";
 import { t } from "./i18n";
 import { mapIndexOf } from "./history";
 import { Emitter, events, store } from "./store";
@@ -23,6 +28,30 @@ export interface PoolSlot {
   md5?: string;
   onlineId?: number;
   note: string;
+  /** not in the library: what its chart says */
+  online?: PoolOnline;
+}
+
+/** A difficulty that isn't in the library, as its slot keeps it (src-tauri/src/pools.rs). */
+export interface PoolOnline {
+  beatmapId: number;
+  setId?: number;
+  title: string;
+  titleUnicode?: string;
+  artist: string;
+  artistUnicode?: string;
+  creator: string;
+  version: string;
+  mode: number;
+  keys: number;
+  /** ms */
+  length: number;
+  bpm: number;
+  objects: number;
+  holds: number;
+  /** without mods */
+  sr: number;
+  category?: string;
 }
 
 export interface Pool {
@@ -109,6 +138,77 @@ export const poolSlot = (pool: Pool, slot: string): PoolSlot | undefined => pool
 /** A slot's difficulty as a snapshot index (when it's in the library). */
 export function slotMapIdx(s: PoolSlot | undefined): number | undefined {
   return s?.map ? mapIndexOf(s.map) : undefined;
+}
+
+/** A slot's difficulty the same way, in the library or not. */
+export interface SlotChart {
+  /** the library's difficulty (snapshot index) */
+  mapIdx?: number;
+  /** not in the library */
+  online?: PoolOnline;
+  /** what pp.rs takes: the library's id, or "o" and osu!'s */
+  ppId: string;
+  title: string;
+  artist: string;
+  version: string;
+  creator: string;
+  /** a library background (for thumbUrl), else osu!'s set for its cover */
+  bg?: string;
+  setId?: number;
+  beatmapId?: number;
+  mode: number;
+  /** ms, at 1× */
+  length: number;
+  bpm: number;
+  objects: number;
+  holds: number;
+  category?: string;
+}
+
+export function slotChart(s: PoolSlot | undefined): SlotChart | undefined {
+  if (!s) return undefined;
+  const snap = store.snap;
+  const i = slotMapIdx(s);
+  if (i !== undefined && snap) {
+    const m = snap.maps[i];
+    const set = snap.sets[m.set];
+    return {
+      mapIdx: i,
+      ppId: m.id,
+      title: displayTitle(set, store.prefs.unicode),
+      artist: displayArtist(set, store.prefs.unicode),
+      version: m.version,
+      creator: set.creator,
+      bg: m.bg ?? set.bg,
+      setId: set.onlineId ?? undefined,
+      beatmapId: m.onlineId ?? s.onlineId,
+      mode: m.mode,
+      length: m.length,
+      bpm: m.bpm,
+      objects: m.objects,
+      holds: m.holds,
+      category: m.category,
+    };
+  }
+  const o = s.online;
+  if (!o) return undefined;
+  const uni = store.prefs.unicode;
+  return {
+    online: o,
+    ppId: `o${o.beatmapId}`,
+    title: (uni && o.titleUnicode) || o.title,
+    artist: (uni && o.artistUnicode) || o.artist,
+    version: o.version,
+    creator: o.creator,
+    setId: o.setId,
+    beatmapId: o.beatmapId,
+    mode: o.mode,
+    length: o.length,
+    bpm: o.bpm,
+    objects: o.objects,
+    holds: o.holds,
+    category: o.category,
+  };
 }
 
 /** "osu!mania 4K", "osu!" */
@@ -216,6 +316,15 @@ export const updatePool = (id: string, patch: { name?: string; categories?: Pool
 export const deletePool = (id: string) => change(() => api.deletePool(id), t("Couldn't delete the pool."));
 export const setPoolSlot = (id: string, slot: string, mapIdx: number) =>
   change(() => api.setPoolSlot(id, slot, store.snap!.maps[mapIdx].id), t("Couldn't put the map into the pool."));
+/** osu!'s difficulty by link or number: the library's, or its chart off the mirrors. Throws (the
+ * picker says why). */
+export async function setPoolSlotOnline(id: string, slot: string, link: string): Promise<void> {
+  try {
+    await api.setPoolSlotOnline(id, slot, link);
+  } finally {
+    await loadPools();
+  }
+}
 export const clearPoolSlot = (id: string, slot: string) => change(() => api.clearPoolSlot(id, slot), t("Couldn't take the map out."));
 export const swapPoolSlots = (id: string, a: string, b: string) => change(() => api.swapPoolSlots(id, a, b), t("Couldn't move the map."));
 export const setPoolSlotNote = (id: string, slot: string, note: string) => change(() => api.setPoolSlotNote(id, slot, note), t("Couldn't save the note."));

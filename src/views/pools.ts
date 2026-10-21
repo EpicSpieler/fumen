@@ -3,17 +3,20 @@
  * src-tauri/src/pp.rs; length and BPM at the rate). The bars on top are the pool's star ratings
  * slot by slot, so a kind that doesn't climb or a slot that sticks out shows at a glance.
  *
- * Slots take a difficulty from the picker (pool-picker.ts), from a difficulty's menu ("Add to
- * pool…"), or dragged in from the library; dragging one slot onto another swaps them. */
-import { thumbUrl } from "../lib/api";
+ * Slots take a difficulty from the picker (pool-picker.ts: the library, or osu! by search or
+ * link), from a difficulty's menu ("Add to pool…"), or dragged in from the library; dragging one
+ * slot onto another swaps them. One that isn't in the library shows what its chart says, with its
+ * set to download. */
+import { openUrl } from "@tauri-apps/plugin-opener";
+import { api, osuCoverUrl, osuMapUrl, thumbUrl } from "../lib/api";
 import { DRAG_TYPE } from "../lib/collections";
-import { bpm, displayArtist, displayTitle, duration, esc, fixed, num, srChip } from "../lib/format";
+import { bpm, duration, esc, fixed, num, srChip } from "../lib/format";
 import { mapIndexOf } from "../lib/history";
 import { t, tn } from "../lib/i18n";
 import {
   clearPoolSlot, deletePool, fitsPool, kindInfo, kindOfSlot, loadPools, modText, poolById, poolEvents, poolRuleset, pools, poolsLoaded,
-  poolSlot, rateOf, rproText, setPoolSlot, setPoolSlotNote, slotCodes, slotMapIdx, slotNumbers, swapPoolSlots, updatePool,
-  type Pool, type PoolKind,
+  poolSlot, rateOf, rproText, setPoolSlot, setPoolSlotNote, slotChart, slotCodes, slotMapIdx, slotNumbers, swapPoolSlots, updatePool,
+  type Pool, type PoolKind, type PoolSlot, type SlotChart,
 } from "../lib/pools";
 import { go } from "../lib/router";
 import { events, store } from "../lib/store";
@@ -21,12 +24,23 @@ import { player } from "../player";
 import { openMenu, toast, uiConfirm, uiPrompt, type MenuEntry } from "../ui/controls";
 import { icon } from "../ui/icons";
 import { openSet } from "./actions";
+import { importSets, importTarget } from "./import";
 import { openPoolDialog } from "./pool-dialog";
 import { knownStars, openSlotPicker, suits } from "./pool-picker";
 import { ppText } from "./pp";
 
 /** what a drag of a slot carries: its code */
 const SLOT_DRAG = "application/x-fumen-slot";
+
+/** A slot's star rating at its kind's mods as far as it's known without asking pp.rs. */
+function quickStars(c: SlotChart, mods: readonly string[]): number {
+  return c.mapIdx !== undefined ? knownStars(store.snap!.maps[c.mapIdx], mods) : c.online!.sr;
+}
+
+/** The art of a slot's difficulty: the library's background, else osu!'s cover of the set. */
+function artUrl(c: SlotChart, width: number): string | null {
+  return c.bg ? thumbUrl(c.bg, width) : c.setId && c.online ? osuCoverUrl(c.setId) : null;
+}
 
 export class PoolsView {
   readonly el: HTMLElement;
@@ -60,7 +74,6 @@ export class PoolsView {
 
   private renderList(): void {
     const list = pools();
-    const snap = store.snap;
     const head = `
       <header class="view-head">
         <div>
@@ -82,17 +95,15 @@ export class PoolsView {
     const cards = list
       .map((p) => {
         const codes = slotCodes(p.categories);
-        const covers = p.slots
-          .map((s) => slotMapIdx(s))
-          .filter((i): i is number => i !== undefined)
-          .map((i) => snap!.maps[i].bg ?? snap!.sets[snap!.maps[i].set].bg)
-          .filter((b): b is string => !!b)
+        const charts = p.slots.map((s) => [s, slotChart(s)] as const);
+        const covers = charts
+          .map(([, c]) => (c ? artUrl(c, 320) : null))
+          .filter((u): u is string => !!u)
           .slice(0, 3);
-        const stars = p.slots
-          .map((s) => {
-            const i = slotMapIdx(s);
+        const stars = charts
+          .map(([s, c]) => {
             const k = kindOfSlot(p, s.slot);
-            return i !== undefined && k ? knownStars(snap!.maps[i], k.mods) : null;
+            return c && k ? quickStars(c, k.mods) : null;
           })
           .filter((v): v is number => v !== null);
         const range = stars.length ? `${fixed(Math.min(...stars), 2)}–${fixed(Math.max(...stars), 2)}★` : "";
@@ -103,7 +114,7 @@ export class PoolsView {
           })
           .join("");
         return `<button class="pool-card" type="button" data-pool="${esc(p.id)}">
-          <span class="pool-card-art">${covers.length ? covers.map((b) => `<img src="${thumbUrl(b, 320)}" alt="" loading="lazy" decoding="async">`).join("") : icon("flag")}</span>
+          <span class="pool-card-art">${covers.length ? covers.map((u) => `<img src="${u}" alt="" loading="lazy" decoding="async">`).join("") : icon("flag")}</span>
           <span class="pool-card-body">
             <span class="pool-card-name">${esc(p.name)}</span>
             <span class="pool-card-sub num">${[esc(poolRuleset(p)), t("{n} of {total}", { n: num(p.slots.length), total: num(codes.length) }), range].filter(Boolean).join(" · ")}</span>
@@ -155,7 +166,6 @@ export class PoolsView {
   }
 
   private slotHtml(p: Pool, k: PoolKind, code: string): string {
-    const snap = store.snap!;
     const info = kindInfo(k.code);
     const s = poolSlot(p, code);
     const chip = `<span class="slot-code" style="--k:${info.color}">${esc(code)}</span>`;
@@ -167,53 +177,54 @@ export class PoolsView {
       </div>`;
     }
     const note = s.note ? `<div class="pslot-note">${esc(s.note)}</div>` : "";
-    const mi = slotMapIdx(s);
-    if (mi === undefined) {
+    const c = slotChart(s);
+    if (!c) {
+      // gone from the library, and nothing kept about it
       return `<div class="pslot is-missing" data-slot="${esc(code)}" draggable="true">
         ${chip}
         <span class="t-art img-missing"></span>
-        <div class="pslot-text"><div class="t-title">${t("Not in your library")}</div><div class="t-sub num">${s.onlineId ? t("osu! beatmap {id}", { id: s.onlineId }) : esc(s.md5 ?? "")}</div></div>
+        <div class="pslot-text"><div class="t-title">${t("Not in your library any more")}</div><div class="t-sub num">${s.onlineId ? t("osu! beatmap {id}", { id: s.onlineId }) : esc(s.md5 ?? "")}</div></div>
         <span class="pslot-facts"></span><span class="pslot-sr"></span><span class="pslot-pp"></span><span></span>
         <button class="icon-btn sm pslot-more" type="button" aria-label="${t("More")}">${icon("more-vert")}</button>
       </div>${note}`;
     }
-    const m = snap.maps[mi];
-    const set = snap.sets[m.set];
-    const bg = m.bg ?? set.bg;
     const r = rateOf(k.mods);
-    const facts = [duration(m.length / r), `${bpm(m.bpm * r)} BPM`];
-    if (m.mode === 3) {
-      facts.push(`LN ${Math.round((m.objects ? m.holds / m.objects : 0) * 100)}%`);
-      if (m.category) facts.push(esc(m.category));
+    const facts = [duration(c.length / r), `${bpm(c.bpm * r)} BPM`];
+    if (c.mode === 3) {
+      facts.push(`LN ${Math.round((c.objects ? c.holds / c.objects : 0) * 100)}%`);
+      if (c.category) facts.push(esc(c.category));
     }
-    const fits = suits(k.code, m);
-    const playing = player.isCurrent(m.set) && player.playing;
-    return `<div class="pslot" data-slot="${esc(code)}" data-map="${mi}" draggable="true">
+    const fits = suits(k.code, c);
+    const art = artUrl(c, 160);
+    const away = c.mapIdx === undefined;
+    const playing = !away && player.isCurrent(store.snap!.maps[c.mapIdx!].set) && player.playing;
+    const action = away
+      ? `<button class="icon-btn sm pslot-get" type="button" aria-label="${t("Download the set")}" data-tip="${t("Download the set")}">${icon("download")}</button>`
+      : `<button class="icon-btn sm pslot-play" type="button" aria-label="${playing ? t("Pause") : t("Play")}">${icon(playing ? "pause" : "play")}</button>`;
+    return `<div class="pslot${away ? " is-away" : ""}" data-slot="${esc(code)}"${away ? "" : ` data-map="${c.mapIdx}"`} draggable="true">
       ${chip}
-      <span class="t-art${bg ? "" : " img-missing"}">${bg ? `<img src="${thumbUrl(bg, 160)}" alt="" loading="lazy" decoding="async">` : ""}</span>
+      <span class="t-art${art ? "" : " img-missing"}">${art ? `<img src="${art}" alt="" loading="lazy" decoding="async">` : ""}</span>
       <div class="pslot-text">
-        <div class="t-title">${esc(displayTitle(set, store.prefs.unicode))}</div>
-        <div class="t-sub">${esc(displayArtist(set, store.prefs.unicode))} · ${esc(m.version)} · ${esc(set.creator)}</div>
+        <div class="t-title">${esc(c.title)}${away ? ` <span class="pslot-away">${t("not in your library")}</span>` : ""}</div>
+        <div class="t-sub">${esc(c.artist)} · ${esc(c.version)} · ${esc(c.creator)}</div>
       </div>
       <span class="pslot-facts num">${facts.join(" · ")}${fits === false ? ` <span class="pslot-warn" data-tip="${t("Doesn't look like {kind}", { kind: esc(kindInfo(k.code).name.toLowerCase()) })}">${icon("alert")}</span>` : ""}</span>
-      <span class="pslot-sr">${srChip(this.stars.get(code) ?? knownStars(m, k.mods))}</span>
+      <span class="pslot-sr">${srChip(this.stars.get(code) ?? quickStars(c, k.mods))}</span>
       <span class="pslot-pp num">${modText(k.mods) ? `<small>${modText(k.mods)}</small>` : ""}<b>–</b></span>
-      <button class="icon-btn sm pslot-play" type="button" aria-label="${playing ? t("Pause") : t("Play")}">${icon(playing ? "pause" : "play")}</button>
+      ${action}
       <button class="icon-btn sm pslot-more" type="button" aria-label="${t("More")}">${icon("more-vert")}</button>
     </div>${note}`;
   }
 
   /** Asks for the exact numbers of every filled slot, and fills them in as they come. */
   private refreshNumbers(p: Pool): void {
-    const snap = store.snap!;
     let length = 0;
     for (const s of p.slots) {
-      const mi = slotMapIdx(s);
+      const c = slotChart(s);
       const k = kindOfSlot(p, s.slot);
-      if (mi === undefined || !k) continue;
-      const m = snap.maps[mi];
-      length += m.length / rateOf(k.mods);
-      void slotNumbers(m.id, k.mods).then((n) => {
+      if (!c || !k) continue;
+      length += c.length / rateOf(k.mods);
+      void slotNumbers(c.ppId, k.mods).then((n) => {
         if (!n || this.pool() !== p) return;
         this.stars.set(s.slot, n.stars);
         const row = this.el.querySelector<HTMLElement>(`.pslot[data-slot="${CSS.escape(s.slot)}"]`);
@@ -229,12 +240,11 @@ export class PoolsView {
 
   /** The bars and the star ranges, from what's known so far. */
   private drawCurve(p: Pool, length?: number): void {
-    const snap = store.snap!;
     const stars = new Map<string, number>();
     for (const s of p.slots) {
-      const mi = slotMapIdx(s);
+      const c = slotChart(s);
       const k = kindOfSlot(p, s.slot);
-      if (mi !== undefined && k) stars.set(s.slot, this.stars.get(s.slot) ?? knownStars(snap.maps[mi], k.mods));
+      if (c && k) stars.set(s.slot, this.stars.get(s.slot) ?? quickStars(c, k.mods));
     }
     const vals = [...stars.values()];
     const lo = vals.length ? Math.min(...vals) : 0;
@@ -272,14 +282,20 @@ export class PoolsView {
   private slotMenu(at: Element | { x: number; y: number }, p: Pool, code: string): void {
     const s = poolSlot(p, code);
     if (!s) return openSlotPicker(p.id, code);
-    const mi = slotMapIdx(s);
-    const snap = store.snap!;
+    const c = slotChart(s);
     const entries: MenuEntry[] = [];
-    if (mi !== undefined) {
-      const m = snap.maps[mi];
+    if (c?.mapIdx !== undefined) {
+      const mi = c.mapIdx;
+      const m = store.snap!.maps[mi];
       entries.push(
         { label: t("Play"), icon: "play", action: () => player.playSet(m.set, mi) },
         { label: t("Open beatmap set"), icon: "library", action: () => openSet(m.set, mi) },
+      );
+    } else if (c?.online?.setId) {
+      const o = c.online;
+      entries.push(
+        { label: t("Download the set"), icon: "download", action: () => void this.download(s) },
+        { label: t("Open on osu!"), icon: "external", action: () => void openUrl(osuMapUrl(o.setId!, o.beatmapId, o.mode)) },
       );
     }
     entries.push(
@@ -309,15 +325,14 @@ export class PoolsView {
 
   /** The other slots, to move a map to (swapping with what's there). */
   private moveMenu(at: Element | { x: number; y: number }, p: Pool, code: string): void {
-    const snap = store.snap!;
     const entries: MenuEntry[] = [{ group: t("Move {slot} to", { slot: code }) }];
     for (const c of slotCodes(p.categories)) {
       if (c === code) continue;
       const s = poolSlot(p, c);
-      const i = slotMapIdx(s);
+      const there = slotChart(s);
       entries.push({
         label: c,
-        hint: s ? (i !== undefined ? t("swap with {title}", { title: snap.sets[snap.maps[i].set].title }) : t("swap")) : t("empty"),
+        hint: s ? (there ? t("swap with {title}", { title: there.title }) : t("swap")) : t("empty"),
         action: () => void swapPoolSlots(p.id, code, c),
       });
     }
@@ -357,6 +372,22 @@ export class PoolsView {
     if (!ok) return;
     await deletePool(p.id);
     go({ name: "pools" }, { replace: true });
+  }
+
+  /** Downloads a slot's set (not in the library) the way Browse does: into osu!lazer, or stable. */
+  private async download(s: PoolSlot): Promise<void> {
+    const o = s.online;
+    if (!o?.setId) return;
+    if (importTarget() !== "stable") {
+      const st = await api.lazerImportStatus().catch(() => null);
+      if (!st?.ready) {
+        toast(st?.reason === "running" ? t("Close osu!lazer to add sets") : (st?.message ?? t("osu!lazer can't take sets right now")), { kind: "danger", timeout: 3500 });
+        return;
+      }
+    }
+    const how = importSets([{ id: o.setId, title: `${o.artist} - ${o.title}` }]);
+    if (how === "queued") toast(t("Added after the import that's running"), { timeout: 2600 });
+    else if (how === "started") toast(t("Downloading {title}…", { title: o.title }), { timeout: 2600 });
   }
 
   private async copyRpro(p: Pool): Promise<void> {
@@ -407,6 +438,16 @@ export class PoolsView {
       if (row.classList.contains("is-empty")) return openSlotPicker(p.id, code);
       const more = el.closest<HTMLElement>(".pslot-more");
       if (more) return this.slotMenu(more, p, code);
+      if (el.closest(".pslot-get")) {
+        const s = poolSlot(p, code);
+        if (s) void this.download(s);
+        return;
+      }
+      if (row.classList.contains("is-away")) {
+        const o = poolSlot(p, code)?.online;
+        if (o?.setId) void openUrl(osuMapUrl(o.setId, o.beatmapId, o.mode));
+        return;
+      }
       const mi = row.dataset.map !== undefined ? +row.dataset.map : undefined;
       if (mi === undefined) return;
       const m = store.snap!.maps[mi];

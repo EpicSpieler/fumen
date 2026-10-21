@@ -68,6 +68,8 @@ export const api = {
   updatePool: (id: string, patch: { name?: string; categories?: PoolKind[]; note?: string }) => invoke<void>("update_pool", { id, patch }),
   deletePool: (id: string) => invoke<void>("delete_pool", { id }),
   setPoolSlot: (id: string, slot: string, map: string) => invoke<void>("set_pool_slot", { id, slot, map }),
+  /** osu!'s difficulty by link or number into a slot: the library's, else its chart from the mirrors */
+  setPoolSlotOnline: (id: string, slot: string, link: string) => invoke<void>("set_pool_slot_online", { id, slot, link }),
   clearPoolSlot: (id: string, slot: string) => invoke<void>("clear_pool_slot", { id, slot }),
   swapPoolSlots: (id: string, a: string, b: string) => invoke<void>("swap_pool_slots", { id, a, b }),
   setPoolSlotNote: (id: string, slot: string, note: string) => invoke<void>("set_pool_slot_note", { id, slot, note }),
