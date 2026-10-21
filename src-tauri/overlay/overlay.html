@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fumen overlay</title>
+<!--
+  Fumen's stream overlay, for OBS's browser source (1920 × 1080, transparent). Served by Fumen
+  (src/overlay.rs) while it's switched on; asks /state every second.
+  ?only=bar | map | slots shows one part (for a source of its own), ?scale=0.75 makes it smaller.
+-->
+<style>
+  @font-face { font-family: "Instrument Sans"; src: url(/fonts/instrument-sans-latin.woff2) format("woff2"); font-weight: 400 700; unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+20AC, U+2122, U+2212; }
+  @font-face { font-family: "Instrument Sans"; src: url(/fonts/instrument-sans-latin-ext.woff2) format("woff2"); font-weight: 400 700; unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+1E00-1E9F, U+2C60-2C7F, U+A720-A7FF; }
+  :root {
+    --red: #ff6b7a; --blue: #6ea8fe;
+    --panel: rgba(16, 16, 20, 0.86); --panel-2: rgba(255, 255, 255, 0.06);
+    --t1: #f3f3f6; --t2: rgba(255, 255, 255, 0.72); --t3: rgba(255, 255, 255, 0.5);
+    --font: "Instrument Sans", "Segoe UI Variable Text", "Segoe UI", "Yu Gothic UI", "Meiryo", sans-serif;
+    --scale: 1;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1920px; height: 1080px; overflow: hidden; background: transparent; }
+  body { font-family: var(--font); color: var(--t1); -webkit-font-smoothing: antialiased; }
+  .stage { position: absolute; inset: 0; transform: scale(var(--scale)); transform-origin: top left; width: 1920px; height: 1080px; }
+  .hidden { display: none !important; }
+  .num { font-variant-numeric: tabular-nums; }
+  .fade { transition: opacity .4s ease; }
+
+  /* ---------- the score ---------- */
+  .bar { position: absolute; top: 24px; left: 50%; transform: translateX(-50%); display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 18px; width: 1160px; height: 88px; padding: 0 22px; border-radius: 22px; background: var(--panel); }
+  .side { display: flex; align-items: center; gap: 16px; min-width: 0; }
+  .side.blue { flex-direction: row-reverse; text-align: right; }
+  .name { min-width: 0; }
+  .name b { display: block; font-size: 30px; font-weight: 700; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .name small { display: block; margin-top: 2px; font-size: 15px; font-weight: 500; color: var(--t3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .points { flex: none; display: grid; place-items: center; width: 64px; height: 64px; border-radius: 18px; font-size: 38px; font-weight: 700; }
+  .red .points { background: color-mix(in srgb, var(--red) 22%, transparent); color: var(--red); }
+  .blue .points { background: color-mix(in srgb, var(--blue) 22%, transparent); color: var(--blue); }
+  .pips { display: flex; gap: 5px; margin-top: 8px; }
+  .blue .pips { justify-content: flex-end; }
+  .pips i { width: 22px; height: 6px; border-radius: 3px; background: rgba(255, 255, 255, .12); }
+  .red .pips i.on { background: var(--red); }
+  .blue .pips i.on { background: var(--blue); }
+  .side.won .points { box-shadow: 0 0 0 2px currentColor inset; }
+  .mid { text-align: center; white-space: nowrap; }
+  .mid b { display: block; font-size: 13px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--t2); }
+  .mid small { display: block; margin-top: 4px; font-size: 14px; font-weight: 500; color: var(--t3); max-width: 280px; overflow: hidden; text-overflow: ellipsis; }
+
+  /* ---------- the map ---------- */
+  .map { position: absolute; left: 40px; bottom: 36px; display: flex; width: 640px; height: 132px; overflow: hidden; border-radius: 22px; background: var(--panel); }
+  .map-art { flex: none; width: 210px; height: 100%; background: var(--panel-2) center / cover no-repeat; }
+  .map-text { display: flex; flex-direction: column; justify-content: center; gap: 5px; min-width: 0; padding: 0 22px; }
+  .map-label { display: flex; align-items: center; gap: 10px; font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--t3); }
+  .code { display: inline-grid; place-items: center; min-width: 44px; height: 24px; padding: 0 9px; border-radius: 8px; font-size: 13px; font-weight: 700; letter-spacing: .04em; color: var(--k); background: color-mix(in srgb, var(--k) 18%, transparent); }
+  .map-title { font-size: 22px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .map-sub { font-size: 15px; font-weight: 500; color: var(--t2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .map-facts { display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 600; color: var(--t3); }
+  .sr { display: inline-grid; place-items: center; height: 22px; padding: 0 9px; border-radius: 11px; font-size: 13px; font-weight: 700; }
+  .map.playing .map-label span:first-child { color: var(--t1); }
+
+  /* ---------- the slots ---------- */
+  .slots { position: absolute; right: 40px; bottom: 36px; display: flex; flex-wrap: wrap; justify-content: flex-end; align-content: flex-end; gap: 8px; max-width: 1180px; padding: 16px; border-radius: 22px; background: var(--panel); }
+  .slot { position: relative; display: grid; place-items: center; min-width: 64px; height: 42px; padding: 0 12px; border-radius: 12px; font-size: 16px; font-weight: 700; letter-spacing: .04em; color: var(--k); background: color-mix(in srgb, var(--k) 14%, transparent); transition: opacity .3s, background .3s; }
+  .slot.banned { opacity: .35; text-decoration: line-through; text-decoration-thickness: 2px; }
+  .slot.banned::after, .slot.picked::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: 5px; height: 3px; border-radius: 2px; background: var(--s); }
+  .slot.won { color: #111; background: var(--s); }
+  .slot.playing { box-shadow: 0 0 0 2px var(--k) inset; animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 50% { box-shadow: 0 0 0 2px transparent inset; } }
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="bar fade hidden">
+    <div class="side red"><span class="points num"></span><span class="name"><b></b><small></small><span class="pips"></span></span></div>
+    <div class="mid"><b></b><small></small></div>
+    <div class="side blue"><span class="points num"></span><span class="name"><b></b><small></small><span class="pips"></span></span></div>
+  </div>
+  <div class="map fade hidden">
+    <div class="map-art"></div>
+    <div class="map-text">
+      <div class="map-label"><span></span><span class="code"></span></div>
+      <div class="map-title"></div>
+      <div class="map-sub"></div>
+      <div class="map-facts num"></div>
+    </div>
+  </div>
+  <div class="slots fade hidden"></div>
+</div>
+<script>
+  "use strict";
+  const params = new URLSearchParams(location.search);
+  const only = params.get("only");
+  const scale = Number(params.get("scale"));
+  if (scale > 0 && scale <= 2) document.documentElement.style.setProperty("--scale", String(scale));
+  const $ = (s) => document.querySelector(s);
+  const shown = (part) => !only || only === part;
+
+  const text = (el, v) => { if (el.textContent !== v) el.textContent = v; };
+
+  function side(el, s, firstTo) {
+    el.classList.toggle("won", !!s.won);
+    text(el.querySelector(".points"), String(s.points));
+    text(el.querySelector(".name b"), s.name);
+    text(el.querySelector(".name small"), s.players || "");
+    const pips = el.querySelector(".pips");
+    const want = Array.from({ length: firstTo }, (_, i) => `<i class="${i < s.points ? "on" : ""}"></i>`).join("");
+    if (pips.innerHTML !== want) pips.innerHTML = want;
+  }
+
+  let last = "";
+  function draw(st) {
+    const on = !!st.on;
+    $(".bar").classList.toggle("hidden", !on || !shown("bar"));
+    $(".map").classList.toggle("hidden", !on || !st.current || !shown("map"));
+    $(".slots").classList.toggle("hidden", !on || !(st.slots || []).length || !shown("slots"));
+    if (!on) return;
+    side($(".side.red"), st.red, st.firstTo);
+    side($(".side.blue"), st.blue, st.firstTo);
+    text($(".mid b"), st.labels.bestOf);
+    text($(".mid small"), st.title || "");
+
+    const c = st.current;
+    if (c) {
+      $(".map").classList.toggle("playing", c.state === "playing");
+      text($(".map-label span:first-child"), c.label);
+      const code = $(".map-label .code");
+      text(code, c.slot);
+      code.style.setProperty("--k", c.color);
+      const art = $(".map-art");
+      const bg = c.art ? `url("${c.art.replace(/"/g, "")}")` : "none";
+      if (art.style.backgroundImage !== bg) art.style.backgroundImage = bg;
+      text($(".map-title"), c.title);
+      text($(".map-sub"), c.sub);
+      const facts = $(".map-facts");
+      const want = (c.starsText ? `<span class="sr" style="background:${c.starsBg};color:${c.starsInk}">${c.starsText}</span>` : "") + `<span>${c.facts.map((f) => f.replace(/[<>&]/g, "")).join(" · ")}</span>`;
+      if (facts.innerHTML !== want) facts.innerHTML = want;
+    }
+
+    const slots = $(".slots");
+    const want = (st.slots || [])
+      .map((s) => `<span class="slot ${s.state}" style="--k:${s.color};--s:${s.side ? `var(--${s.side})` : "transparent"}">${String(s.slot).replace(/[<>&]/g, "")}</span>`)
+      .join("");
+    if (slots.innerHTML !== want) slots.innerHTML = want;
+  }
+
+  async function tick() {
+    try {
+      const res = await fetch("/state", { cache: "no-store" });
+      const body = await res.text();
+      if (body !== last) {
+        last = body;
+        draw(JSON.parse(body));
+      }
+    } catch {
+      /* Fumen closed or the overlay switched off: keep what's shown */
+    }
+    setTimeout(tick, 1000);
+  }
+  tick();
+</script>
+</body>
+</html>

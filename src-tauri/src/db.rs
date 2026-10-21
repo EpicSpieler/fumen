@@ -305,6 +305,29 @@ const MIGRATIONS: &[&str] = &[
         PRIMARY KEY (pool_id, slot)
     );
     "#,
+    // 19 — a pool's matches (src/matches.rs): who plays, when, the bans and picks, and the
+    // multiplayer room's games as osu! had them when last asked
+    r#"
+    CREATE TABLE pool_matches (
+        id         TEXT PRIMARY KEY,
+        pool_id    TEXT NOT NULL REFERENCES pools(id) ON DELETE CASCADE,
+        red        TEXT NOT NULL DEFAULT '',
+        blue       TEXT NOT NULL DEFAULT '',
+        at         INTEGER,
+        best_of    INTEGER NOT NULL DEFAULT 7,
+        mp_id      INTEGER,
+        warmups    INTEGER NOT NULL DEFAULT 0,
+        first_pick TEXT,
+        bans       TEXT NOT NULL DEFAULT '[]',
+        picks      TEXT NOT NULL DEFAULT '[]',
+        result     TEXT,
+        fetched    INTEGER,
+        note       TEXT NOT NULL DEFAULT '',
+        created    INTEGER NOT NULL,
+        updated    INTEGER NOT NULL
+    );
+    CREATE INDEX pool_matches_pool ON pool_matches(pool_id);
+    "#,
 ];
 
 pub fn open(path: &Path) -> Result<Connection> {

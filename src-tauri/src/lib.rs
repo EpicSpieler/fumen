@@ -14,12 +14,14 @@ mod goals;
 mod hitsounds;
 mod lazer;
 mod lazer_import;
+mod matches;
 mod mirror_search;
 mod mma;
 mod mods;
 mod osu;
 mod osu_auth;
 mod osu_scores;
+mod overlay;
 mod library;
 mod live;
 mod paths;
@@ -918,6 +920,85 @@ async fn set_pool_slot_online(app: AppHandle, id: String, slot: String, link: St
     })
     .await
     .map_err(|e| Error::known("internal", e.to_string()))?
+}
+
+// ── matches ──────────────────────────────────────────────────────────────
+
+#[tauri::command]
+fn get_matches(state: State<AppState>) -> Result<Vec<matches::Match>> {
+    matches::list(&state.db())
+}
+
+#[tauri::command]
+fn create_match(state: State<AppState>, pool: String, patch: matches::MatchPatch) -> Result<String> {
+    matches::create(&state.db(), &pool, &patch)
+}
+
+#[tauri::command]
+fn update_match(state: State<AppState>, id: String, patch: matches::MatchPatch) -> Result<()> {
+    matches::update(&state.db(), &id, &patch)
+}
+
+#[tauri::command]
+fn delete_match(state: State<AppState>, id: String) -> Result<()> {
+    matches::delete(&state.db(), &id)
+}
+
+/// Sets a match's multiplayer room from a link to it (or its number; "" takes it away).
+#[tauri::command]
+fn set_match_room(state: State<AppState>, id: String, link: String) -> Result<()> {
+    let mp = if link.trim().is_empty() {
+        0
+    } else {
+        matches::mp_of(&link).ok_or_else(|| Error::known("bad-room", "That isn't a link to a multiplayer room on osu!, or its number."))?
+    };
+    matches::update(&state.db(), &id, &matches::MatchPatch { mp_id: Some(mp), ..Default::default() })
+}
+
+/// Asks osu! for a match's room (its games and scores so far) and keeps the answer.
+#[tauri::command]
+async fn refresh_match(app: AppHandle, id: String) -> Result<matches::Match> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let m = matches::get(&state.db(), &id)?;
+        let mp = m.mp_id.ok_or_else(|| Error::known("no-room", "This match has no multiplayer room yet."))?;
+        let ep = osu_auth::Endpoints::default();
+        let room = osu_auth::with_token(&state.data_dir, &ep, |token| matches::fetch(&ep, token, mp))?;
+        let conn = state.db();
+        matches::store_result(&conn, &id, &room)?;
+        matches::get(&conn, &id)
+    })
+    .await
+    .map_err(|e| Error::known("internal", e.to_string()))?
+}
+
+// ── the stream overlay ───────────────────────────────────────────────────
+
+/// Switches the OBS overlay on (overlay.rs); its port.
+#[tauri::command]
+fn overlay_start(app: AppHandle) -> Result<u16> {
+    let handle = app.clone();
+    overlay::start(Box::new(move |hash| {
+        let state = handle.state::<AppState>();
+        let source = state.files().path(hash).filter(|p| p.is_file())?;
+        thumbs::get_or_create(&state.thumbs_dir(), &source, hash, 640).ok()
+    }))
+}
+
+#[tauri::command]
+fn overlay_stop() {
+    overlay::stop()
+}
+
+#[tauri::command]
+fn overlay_port() -> Option<u16> {
+    overlay::port()
+}
+
+/// What the overlay shows now, and the map backgrounds it may hand out.
+#[tauri::command]
+fn overlay_state(state: serde_json::Value, art: Vec<String>) -> Result<()> {
+    overlay::set_state(&state, art)
 }
 
 #[tauri::command]
@@ -1852,6 +1933,16 @@ pub fn run() {
             clear_pool_slot,
             swap_pool_slots,
             set_pool_slot_note,
+            get_matches,
+            create_match,
+            update_match,
+            delete_match,
+            set_match_room,
+            refresh_match,
+            overlay_start,
+            overlay_stop,
+            overlay_port,
+            overlay_state,
             create_collection,
             create_smart_collection,
             set_collection_query,
