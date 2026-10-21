@@ -250,6 +250,9 @@ export function slotNumbers(mapId: string, mods: readonly string[]): Promise<Slo
 
 // ── out of Fumen ────────────────────────────────────────────────────────
 
+/** Whether the RPRO bot takes the pool: osu!mania, its kinds only (RC LN HB SV EX TB). */
+export const rproFits = (p: Pool): boolean => p.mode === 3 && p.categories.every((k) => ["RC", "LN", "HB", "SV", "EX", "TB"].includes(k.code));
+
 /** A pool the way the RPRO bot takes it: "SLOT link" per line. Slots without osu!'s id are left
  * out (they're counted). */
 export function rproText(p: Pool): { text: string; left: string[] } {

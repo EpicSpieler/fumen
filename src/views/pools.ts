@@ -20,7 +20,7 @@ import { mapIndexOf } from "../lib/history";
 import { t, tn } from "../lib/i18n";
 import {
   clearPoolSlot, deletePool, fitsPool, kindInfo, kindOfSlot, loadPools, modText, poolById, poolEvents, poolRuleset, pools, poolsLoaded,
-  poolSlot, rateOf, rproText, setPoolSlot, setPoolSlotNote, slotChart, slotCodes, slotMapIdx, slotNumbers, swapPoolSlots, updatePool,
+  poolSlot, rateOf, rproFits, rproText, setPoolSlot, setPoolSlotNote, slotChart, slotCodes, slotMapIdx, slotNumbers, swapPoolSlots, updatePool,
   type Pool, type PoolKind, type PoolSlot, type SlotChart,
 } from "../lib/pools";
 import { go } from "../lib/router";
@@ -189,7 +189,7 @@ export class PoolsView {
           <div class="view-sub pool-sub num"></div>
         </div>
         <div class="pool-head-tools">
-          <button class="btn btn-sm" type="button" data-act="rpro" data-tip="${t("One line per slot, like the RPRO bot's Test match takes them")}">${icon("copy")}<span>${t("Copy for the RPRO bot")}</span></button>
+          ${rproFits(p) ? `<button class="btn btn-sm" type="button" data-act="rpro" data-tip="${t("One line per slot, like the RPRO bot's Test match takes them")}">${icon("copy")}<span>${t("Copy for the RPRO bot")}</span></button>` : ""}
           <button class="btn btn-sm" type="button" data-act="export">${icon("download")}<span>${t("Export")}</span></button>
           <button class="icon-btn" type="button" data-act="pool-menu" aria-label="${t("More")}" data-tip="${t("More")}">${icon("more-vert")}</button>
         </div>
@@ -479,7 +479,7 @@ export class PoolsView {
           action: () => void this.rename(p),
         },
         { label: t("Kinds of slot…"), icon: "sliders", action: () => void openPoolDialog(p) },
-        { label: t("Copy for the RPRO bot"), icon: "copy", action: () => void this.copyRpro(p) },
+        ...(rproFits(p) ? [{ label: t("Copy for the RPRO bot"), icon: "copy", action: () => void this.copyRpro(p) } satisfies MenuEntry] : []),
         "sep",
         {
           label: t("Delete pool…"),
