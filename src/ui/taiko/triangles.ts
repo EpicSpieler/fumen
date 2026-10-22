@@ -10,6 +10,7 @@
 import { tex, type TexRef } from "../../lib/skin/skins";
 import { css, ease, mix, rgb, tinted, tween, type Colour } from "../mania/draw";
 import { seeded } from "../mania/argon";
+import { glowBox } from "../glow";
 import { BASE_HEIGHT, DEFAULT_SIZE, HIT_X, INPUT_DRUM_WIDTH, KEYS, LEFT_CENTRE, LEFT_RIM, MISSED, RIGHT_CENTRE, RIGHT_RIM, STRONG_SCALE, type HitResult, type TaikoChart } from "./chart";
 import type { HitEvent, HitPiece, RollPiece, SwellPiece, TaikoFrame, TaikoRenderer, TickPiece } from "./playfield";
 
@@ -96,17 +97,6 @@ export function drumPress(ch: TaikoChart, key: number, t: number, up = 1000, dow
   return [scale, alphaAfter(last, t, 3)];
 }
 
-/** The glow lazer's EdgeEffect draws around a filled shape (shadow of the shape itself). */
-function withGlow(f: TaikoFrame, colour: Colour, radius: number, alpha: number, fill: () => void): void {
-  const ctx = f.ctx;
-  if (radius <= 0 || alpha <= 0) return fill();
-  ctx.save();
-  ctx.shadowColor = css(colour, alpha);
-  ctx.shadowBlur = radius * f.px;
-  fill();
-  ctx.restore();
-}
-
 export class TrianglesRenderer implements TaikoRenderer {
   constructor(private readonly drumTex: DrumTextures | null = null) {}
 
@@ -114,13 +104,19 @@ export class TrianglesRenderer implements TaikoRenderer {
 
   backgroundRight(f: TaikoFrame): void {
     const ctx = f.ctx;
-    // a soft shadow under the strip, the strip at 60%, a thin border
-    ctx.save();
-    ctx.shadowColor = "rgba(0,0,0,.2)";
-    ctx.shadowBlur = 5 * f.px;
+    // a soft shadow under the strip (a blur of 5 fades out over ~7.5 either side of the edge),
+    // the strip at 60%, a thin border
+    const s = 7.5;
+    const shade = ctx.createLinearGradient(0, -s, 0, BASE_HEIGHT + s);
+    const k = (s * 2) / (BASE_HEIGHT + s * 2);
+    shade.addColorStop(0, "rgba(0,0,0,0)");
+    shade.addColorStop(k, "rgba(0,0,0,.2)");
+    shade.addColorStop(1 - k, "rgba(0,0,0,.2)");
+    shade.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = shade;
+    ctx.fillRect(0, -s, f.width, BASE_HEIGHT + s * 2);
     ctx.fillStyle = css(C.gray0, 0.6);
     ctx.fillRect(0, 0, f.width, BASE_HEIGHT);
-    ctx.restore();
     ctx.strokeStyle = css(C.gray0);
     ctx.lineWidth = 2;
     ctx.strokeRect(1, 1, f.width - 2, BASE_HEIGHT - 2);
@@ -251,16 +247,10 @@ export class TrianglesRenderer implements TaikoRenderer {
     const ctx = f.ctx;
     const w = BASE_HEIGHT * DEFAULT_SIZE;
     const h = BASE_HEIGHT * tween(el, 1, 3, 500, ease.outQuint);
-    const off = 10000;
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
     ctx.globalAlpha = 0.25 * (1 - el / 250);
-    ctx.shadowColor = css(e.rim ? C.blueDarker : C.pinkDarker);
-    ctx.shadowBlur = 60 * f.px;
-    ctx.shadowOffsetX = -off * f.px;
-    pill(ctx, HIT_X + off, BASE_HEIGHT / 2, w, h);
-    ctx.fillStyle = "#000";
-    ctx.fill();
+    glowBox(ctx, HIT_X - w / 2, BASE_HEIGHT / 2 - h / 2, w, h, Math.min(w, h) / 2, 60, e.rim ? C.blueDarker : C.pinkDarker);
     ctx.restore();
   }
 
@@ -462,11 +452,11 @@ export class TrianglesRenderer implements TaikoRenderer {
         }
       }
     }
-    withGlow(f, accent, radius, edge, () => {
-      pill(ctx, x, y, w, h);
-      ctx.fillStyle = css(accent);
-      ctx.fill();
-    });
+    // lazer's EdgeEffect: the shape's own glow under it
+    glowBox(ctx, x - w / 2, y - h / 2, w, h, Math.min(w, h) / 2, radius, accent, edge);
+    pill(ctx, x, y, w, h);
+    ctx.fillStyle = css(accent);
+    ctx.fill();
     // the triangles: white to 10% darker, drifting up through the shape
     ctx.save();
     pill(ctx, x, y, w, h);

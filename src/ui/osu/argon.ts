@@ -12,6 +12,7 @@
  */
 import { css, darken, ease, opacity, rgb, tween, WHITE, type Colour } from "../mania/draw";
 import { OBJECT_RADIUS } from "./chart";
+import { glowBox } from "../glow";
 import { arc, box, disc, glow, ICON, icon, ring, sprite, text, vertical } from "./draw";
 import { seeded } from "../mania/argon";
 import { dimmed, type ApproachPiece, type BallPiece, type BodyStyle, type CirclePiece, type CursorPiece, type FollowPointPiece, type JudgementPiece, type OsuFrame, type OsuRenderer, type RepeatPiece, type SpinnerPiece, type TickPiece, type TrailPart, type TrailStyle } from "./playfield";
@@ -233,8 +234,6 @@ export class ArgonOsuRenderer implements OsuRenderer {
       // ticks: 25 hollow bars, turning with the spins
       ctx.save();
       ctx.rotate(((turn + s.rotation) * Math.PI) / 180);
-      ctx.shadowColor = "rgba(255,255,255,0.2)";
-      ctx.shadowBlur = 30 * f.px * discScale;
       ctx.strokeStyle = "#fff";
       ctx.lineWidth = 2;
       for (let i = 0; i < 25; i++) {
@@ -242,6 +241,7 @@ export class ArgonOsuRenderer implements OsuRenderer {
         ctx.save();
         ctx.translate((Math.sin(a) / 2) * 0.75 * inner, (Math.cos(a) / 2) * 0.75 * inner);
         ctx.rotate(((-i / 25) * 360 - 120) * (Math.PI / 180));
+        glowBox(ctx, -29 / 2, -2, 29, 4, 2.5, 30, WHITE, 0.2, { stroke: 2 });
         box(ctx, 29, 4, 2.5);
         ctx.stroke();
         ctx.restore();

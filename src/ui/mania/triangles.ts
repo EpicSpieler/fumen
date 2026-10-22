@@ -5,6 +5,7 @@
  */
 import { lowerBound } from "../../lib/charts";
 import { drawDefaultBarLines, drawTextJudgement, pressOverlay, seeded } from "./argon";
+import { glowBox } from "../glow";
 import { css, darken, ease, lighten, mix, opacity, tween, WHITE, type Colour, type View } from "./draw";
 import { Autoplay, HIT_TARGET_POSITION, isSpecial, layoutColumns, type Frame, type Renderer, type StageGeometry } from "./stage";
 
@@ -72,10 +73,9 @@ export class TrianglesRenderer implements Renderer {
       // DefaultHitTarget: a dark bar with a glowing line on the hit position
       ctx.fillStyle = "rgba(0,0,0,.6)";
       v.rect(x, box.w, hitD, hitD + NOTE_HEIGHT);
-      v.glow(opacity(accent, 0.5), 5);
+      v.glow(x, box.w, hitD, hitD + 2, 0, opacity(accent, 0.5), 5);
       ctx.fillStyle = "#fff";
       v.rect(x, box.w, hitD, hitD + 2);
-      v.glow(null, 0);
     }
     f.notes(() => {
       for (let j = to - 3; j >= from; j -= 3) {
@@ -145,11 +145,10 @@ export class TrianglesRenderer implements Renderer {
   /** DefaultNotePiece, bottom at `d` */
   private notePiece(v: View, x: number, w: number, d: number, accent: Colour): void {
     const ctx = v.ctx;
-    v.glow(opacity(lighten(accent, 1), 0.2), 10);
+    v.glow(x, w, d, d + NOTE_HEIGHT, 5, opacity(lighten(accent, 1), 0.2), 10);
     ctx.fillStyle = "#fff";
     v.roundRect(x, w, d, d + NOTE_HEIGHT, 5);
     ctx.fill();
-    v.glow(null, 0);
     ctx.save();
     v.roundRect(x, w, d, d + NOTE_HEIGHT, 5);
     ctx.clip();
@@ -177,13 +176,12 @@ export class TrianglesRenderer implements Renderer {
     ctx.save();
     ctx.translate(cx, cy);
     ctx.scale(scale, scale);
-    v.glow(opacity(this.colours[col], 0.5), 5);
+    glowBox(ctx, -4, -4, 8, 8, 2, 5, opacity(this.colours[col], 0.5), 1, { stroke: 2 });
     ctx.strokeStyle = "#fff";
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.roundRect(-4, -4, 8, 8, 2);
     ctx.stroke();
-    v.glow(null, 0);
     ctx.restore();
   }
 
@@ -201,7 +199,8 @@ export class TrianglesRenderer implements Renderer {
     // largeFaint: 0.8 → 4 wide over 200 ms, out over 400 ms
     const fw = w * 0.8 * tween(e, 1, 5, 200, ease.outQuint);
     ctx.globalAlpha = alpha * faint;
-    v.glow(opacity(mix(accent, WHITE, 0.1), 0.3), 200);
+    // a fill at 0.3 casts its shadow at 0.3 too
+    glowBox(ctx, -fw / 2, -NOTE_HEIGHT * 0.4, fw, NOTE_HEIGHT * 0.8, NOTE_HEIGHT * 0.4, 200, opacity(mix(accent, WHITE, 0.1), 0.3), 0.3);
     ctx.fillStyle = css(opacity(mix(accent, WHITE, 0.1), 0.3));
     ctx.beginPath();
     ctx.roundRect(-fw / 2, -NOTE_HEIGHT * 0.4, fw, NOTE_HEIGHT * 0.8, NOTE_HEIGHT * 0.4);
@@ -210,23 +209,22 @@ export class TrianglesRenderer implements Renderer {
       ctx.globalAlpha = alpha;
       const s = tween(e, 1, 1.4, 200, ease.outQuint);
       const main = mix(accent, WHITE, 0.6);
-      v.glow(main, 50);
+      glowBox(ctx, (-w / 2) * s, (-NOTE_HEIGHT / 2) * s, w * s, NOTE_HEIGHT * s, (NOTE_HEIGHT / 2) * s, 50, main);
       ctx.fillStyle = css(main);
       ctx.beginPath();
       ctx.roundRect((-w / 2) * s, (-NOTE_HEIGHT / 2) * s, w * s, NOTE_HEIGHT * s, (NOTE_HEIGHT / 2) * s);
       ctx.fill();
       const streak = mix(accent, WHITE, 0.4);
-      v.glow(streak, 40);
       ctx.fillStyle = css(streak);
       const rand = seeded(seed + 7);
       for (let i = 0; i < 2; i++) {
         ctx.save();
         ctx.rotate(((rand() * 30 - 15) * Math.PI) / 180);
+        glowBox(ctx, -w * 0.005, -NOTE_HEIGHT * 5, w * 0.01, NOTE_HEIGHT * 10, 0, 40, streak);
         ctx.fillRect(-w * 0.005, -NOTE_HEIGHT * 5, w * 0.01, NOTE_HEIGHT * 10);
         ctx.restore();
       }
     }
-    v.glow(null, 0);
     ctx.restore();
   }
 }

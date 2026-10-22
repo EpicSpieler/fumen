@@ -13,6 +13,7 @@
 import { css, darken, ease, multiply, rgb, tween, WHITE, type Colour } from "../mania/draw";
 import { preload, type TexRef } from "../../lib/skin/skins";
 import { asterisk, triangles } from "../taiko/triangles";
+import { glowBox } from "../glow";
 import { box, disc, glow, ICON, icon, ring, sprite, text } from "./draw";
 import { OBJECT_RADIUS } from "./chart";
 import { dimmed, FOLLOW_AREA, type ApproachPiece, type BallPiece, type BodyStyle, type CirclePiece, type CursorPiece, type FollowPointPiece, type JudgementPiece, type OsuFrame, type OsuRenderer, type RepeatPiece, type SpinnerPiece, type TickPiece, type TrailPart, type TrailStyle } from "./playfield";
@@ -332,13 +333,12 @@ export class TrianglesOsuRenderer implements OsuRenderer {
       ctx.save();
       ctx.globalCompositeOperation = "lighter";
       ctx.globalAlpha *= 0.4;
-      ctx.shadowColor = css(dark, 0.8);
-      ctx.shadowBlur = 20 * f.px * mainScale * discScale;
       for (let i = 0; i < 8; i++) {
         const a = (i / 8) * Math.PI * 2;
         ctx.save();
         ctx.translate((Math.sin(a) / 2) * 0.83 * area, (Math.cos(a) / 2) * 0.83 * area);
         ctx.rotate(((-i / 8) * 360 + 90) * (Math.PI / 180));
+        glowBox(ctx, -30, -5, 60, 10, 5, 20, dark, 0.8);
         box(ctx, 60, 10, 5);
         ctx.fillStyle = css(dark);
         ctx.fill();

@@ -4,6 +4,7 @@
  * with rings. Bar lines are the default ones, as argon has none of its own.
  */
 import { lowerBound } from "../../lib/charts";
+import { glowBox, glowCircle } from "../glow";
 import { css, darken, ease, lighten, mix, opacity, rgb, tween, WHITE, type Colour, type View } from "./draw";
 import { Autoplay, firstBar, HIT_TARGET_POSITION, isSpecial, layoutColumns, type Frame, type Renderer, type StageGeometry } from "./stage";
 
@@ -156,11 +157,10 @@ export class ArgonRenderer implements Renderer {
         const alpha = 1 - ease.out(e / 200);
         ctx.globalCompositeOperation = "lighter";
         ctx.globalAlpha = alpha;
-        v.glow(glowColour, 60);
+        v.glow(x0 + box.x, box.w, hitD, hitD + NOTE_HEIGHT * NOTE_ACCENT_RATIO, CORNER_RADIUS, glowColour, 60);
         ctx.fillStyle = css(mix(glowColour, WHITE, 0.8));
         v.roundRect(x0 + box.x, box.w, hitD, hitD + NOTE_HEIGHT * NOTE_ACCENT_RATIO, CORNER_RADIUS);
         ctx.fill();
-        v.glow(null, 0);
         ctx.globalAlpha = 1;
         ctx.globalCompositeOperation = "source-over";
       }
@@ -319,11 +319,10 @@ export class ArgonRenderer implements Renderer {
     // the hit target line along the top, glowing while pressed
     const gray = 196 / 255;
     const line: Colour = [gray + (1 - gray) * on, gray + (1 - gray) * on, gray + (1 - gray) * on, 1];
-    v.glow(lighting, k.down ? 20 * on : 20 + 5 * (1 - on), 0.4 * on);
+    v.glow(x, w, bottom + height - CORNER_RADIUS * 2, bottom + height, CORNER_RADIUS, lighting, k.down ? 20 * on : 20 + 5 * (1 - on), 0.4 * on);
     ctx.fillStyle = css(line);
     v.roundRect(x, w, bottom + height - CORNER_RADIUS * 2, bottom + height, CORNER_RADIUS);
     ctx.fill();
-    v.glow(null, 0);
 
     const cx = x + w / 2;
     // the pill outline, 30 below the top
@@ -332,28 +331,26 @@ export class ArgonRenderer implements Renderer {
     ctx.save();
     ctx.translate(cx, py);
     ctx.scale(pillScale, pillScale);
-    v.glow(lighting, 20, 0.1 * on);
+    glowBox(ctx, -11 + 2, -7 + 2, 22 - 4, 14 - 4, 5, 20, lighting, 0.1 * on, { stroke: 4 });
     ctx.strokeStyle = "#fff";
     ctx.lineWidth = 4;
     ctx.beginPath();
     ctx.roundRect(-11 + 2, -7 + 2, 22 - 4, 14 - 4, 5);
     ctx.stroke();
-    v.glow(null, 0);
     ctx.restore();
 
     // three dots, 30 above the bottom
     const dots = mix(accent, WHITE, on);
     ctx.globalCompositeOperation = "lighter";
-    v.glow(lighting, 30 + 30 * on, 0.2 * on);
     ctx.fillStyle = css(dots);
     const dy = v.up ? -1 : 1;
     const by = v.y(bottom + 30);
     for (const [ox, oy] of [[0, -4.2], [-7, 4.2], [7, 4.2]]) {
+      glowCircle(ctx, cx + ox, by + oy * dy, 8, 30 + 30 * on, lighting, 0.2 * on);
       ctx.beginPath();
       ctx.arc(cx + ox, by + oy * dy, 4, 0, Math.PI * 2);
       ctx.fill();
     }
-    v.glow(null, 0);
     ctx.globalCompositeOperation = "source-over";
   }
 }

@@ -2,6 +2,7 @@
  * FontAwesome icons lazer draws with (SpriteIcon), textures centred and tinted. */
 import { tex, type TexRef } from "../../lib/skin/skins";
 import { css, tinted, type Colour } from "../mania/draw";
+import { glowCircle } from "../glow";
 
 /** FontAwesome 5 solid icons (CC BY 4.0) as SpriteIcon draws them: [path, width, height]. */
 export const ICON = {
@@ -72,24 +73,7 @@ export function deviceScale(ctx: CanvasRenderingContext2D): number {
 /** An EdgeEffect glow around a circle (just the glow, not the circle): `radius` beyond its edge;
  * hollow: only outside it. */
 export function glow(ctx: CanvasRenderingContext2D, x: number, y: number, diameter: number, radius: number, colour: Colour, alpha = 1, hollow = false): void {
-  if (radius <= 0 || alpha <= 0 || diameter <= 0) return;
-  const k = deviceScale(ctx);
-  // the circle is drawn far off and only its shadow lands here (shadow offsets ignore transforms)
-  const away = 100000;
-  ctx.save();
-  if (hollow) {
-    // EdgeEffect.Hollow: nothing inside the circle
-    const out = diameter / 2 + radius * 2;
-    ctx.beginPath();
-    ctx.rect(x - out, y - out, out * 2, out * 2);
-    ctx.arc(x, y, diameter / 2, 0, Math.PI * 2, true);
-    ctx.clip();
-  }
-  ctx.shadowColor = css(colour, alpha);
-  ctx.shadowBlur = radius * k;
-  ctx.shadowOffsetX = away * k;
-  disc(ctx, x - away, y, diameter, "#000");
-  ctx.restore();
+  glowCircle(ctx, x, y, diameter, radius, colour, alpha, { hollow });
 }
 
 /** A rounded box centred on (0, 0). */

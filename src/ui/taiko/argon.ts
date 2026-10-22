@@ -10,6 +10,7 @@
  *    hits). No kiai explosions. The swell is the default one around argon's disc.
  */
 import { seeded } from "../mania/argon";
+import { glowCircle } from "../glow";
 import { css, ease, rgb, tween, type Colour } from "../mania/draw";
 import { BASE_HEIGHT, DEFAULT_SIZE, GREAT, HIT_X, INPUT_DRUM_WIDTH, LEFT_CENTRE, LEFT_RIM, MISSED, RIGHT_CENTRE, RIGHT_RIM, STRONG_SCALE } from "./chart";
 import type { HitEvent, HitPiece, RollPiece, SwellPiece, TaikoFrame, TickPiece } from "./playfield";
@@ -74,10 +75,7 @@ export class ArgonTaikoRenderer extends TrianglesRenderer {
         if (alpha <= 0) return;
         ctx.save();
         ctx.globalAlpha *= alpha;
-        if (glow) {
-          ctx.shadowColor = css(glow, glowAlpha);
-          ctx.shadowBlur = 50 * f.px;
-        }
+        if (glow) glowCircle(ctx, c, c, size, 50, glow, glowAlpha);
         ctx.beginPath();
         ctx.arc(c, c, size / 2, 0, Math.PI * 2);
         ctx.fillStyle = fill;
@@ -186,8 +184,7 @@ export class ArgonTaikoRenderer extends TrianglesRenderer {
     ctx.arc(x, y, outer / 2, 0, Math.PI * 2);
     ctx.fillStyle = grad;
     ctx.fill();
-    ctx.shadowColor = css(e.rim ? RIM_HIT_GLOW : CENTRE_HIT_GLOW, 0.5);
-    ctx.shadowBlur = 45 * f.px;
+    glowCircle(ctx, x, y, base * 0.85, 45, e.rim ? RIM_HIT_GLOW : CENTRE_HIT_GLOW, 0.5);
     ctx.beginPath();
     ctx.arc(x, y, (base * 0.85) / 2, 0, Math.PI * 2);
     ctx.fillStyle = "#fff";

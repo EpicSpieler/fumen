@@ -1,5 +1,6 @@
 /* draw.ts — canvas helpers shared by the skin renderers: lazer's colour maths, easing curves,
  * vertical mirroring for the "Up" scroll direction, tinted and flipped images. */
+import { glowBox } from "../glow";
 
 /** RGBA with channels 0–1, like lazer's Color4 */
 export type Colour = [number, number, number, number];
@@ -121,16 +122,10 @@ export class View {
     return g;
   }
 
-  /** Glow (lazer's EdgeEffect) for the next fill: radius in units. */
-  glow(colour: Colour | null, radius: number, alpha = 1): void {
-    const ctx = this.ctx;
-    if (!colour || radius <= 0 || colour[3] * alpha <= 0) {
-      ctx.shadowBlur = 0;
-      ctx.shadowColor = "transparent";
-      return;
-    }
-    ctx.shadowColor = css(colour, alpha);
-    ctx.shadowBlur = radius * this.px;
+  /** Glow (lazer's EdgeEffect) of a rounded box in the band, radius in units; draw the box after it. */
+  glow(x: number, w: number, d0: number, d1: number, r: number, colour: Colour, radius: number, alpha = 1): void {
+    const [top, bottom] = this.band(d0, d1);
+    glowBox(this.ctx, x, top, w, bottom - top, r, radius, colour, alpha);
   }
 }
 
