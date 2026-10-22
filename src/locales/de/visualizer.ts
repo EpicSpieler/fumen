@@ -34,6 +34,8 @@ export const visualizer: Record<string, string> = {
   Full: "Voll",
   Background: "Hintergrund",
   Blurred: "Unscharf",
+  Blur: "Unschärfe",
+  Sharp: "Scharf",
   Cover: "Cover",
   Black: "Schwarz",
   "Kiai effects": "Kiai-Effekte",

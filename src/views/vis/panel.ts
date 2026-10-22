@@ -8,7 +8,7 @@ import { attachSegIndicator, updateRange } from "../../ui/controls";
 import { icon } from "../../ui/icons";
 import { OWN_COLORS, setVis, visPrefs } from "./visualizer";
 
-type Num = "reaction" | "sensitivity" | "pulse" | "bars" | "dim" | "offset";
+type Num = "reaction" | "sensitivity" | "pulse" | "bars" | "blur" | "dim" | "offset";
 type Seg = "colors" | "flashes" | "background";
 type Flag = "kiai" | "mirror" | "title";
 
@@ -18,6 +18,7 @@ const RANGES: [Num, string, number, number, number, string, string, (v: number) 
   ["sensitivity", t("Sensitivity"), 0, 100, 100, t("Calm"), t("Strong"), (v) => `${v}`],
   ["pulse", t("Beat pulse"), 0, 100, 100, t("Off"), t("Strong"), (v) => (v ? `${v}` : t("Off"))],
   ["bars", t("Bars"), 24, 128, 1, t("Fewer"), t("More"), (v) => `${v}`],
+  ["blur", t("Blur"), 0, 100, 100, t("Sharp"), t("Soft"), (v) => (v ? `${v}` : t("Off"))],
   ["dim", t("Dim the background"), 0, 90, 100, "", "", (v) => `${v} %`],
   ["offset", t("Beat offset"), -100, 100, 1, t("Earlier"), t("Later"), (v) => `${v > 0 ? "+" : ""}${v} ms`],
 ];
@@ -55,10 +56,11 @@ export function panelHtml(): string {
     ${seg(SEGS[1])}
     ${seg(SEGS[2])}
     ${range(RANGES[4])}
+    ${range(RANGES[5])}
     <div class="vp-switches">${FLAGS.map(
       ([key, label, sub]) => `<label class="vp-switch"><span><b>${label}</b>${sub ? `<i>${sub}</i>` : ""}</span><input type="checkbox" role="switch" data-vis="${key}" /></label>`,
     ).join("")}</div>
-    ${range(RANGES[5])}
+    ${range(RANGES[6])}
     <button class="btn btn-sm vp-reset" type="button">${icon("refresh")}${t("Reset to defaults")}</button>`;
 }
 
@@ -99,6 +101,7 @@ export function bindPanel(host: HTMLElement, changed: () => void): () => void {
       const el = host.querySelector<HTMLInputElement>(`#vp-${key}`)!;
       const v = Math.round(o[key] * scale);
       if (document.activeElement !== el) el.value = String(v);
+      if (key === "blur") el.disabled = o.background !== "blur";
       updateRange(el);
       host.querySelector(`[data-val="${key}"]`)!.textContent = show(v);
     }

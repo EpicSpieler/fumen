@@ -98,6 +98,7 @@
 .vp-range-top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .vp-range-top b { font-size: var(--fs-12); font-weight: 600; color: var(--t2); }
 .vp-range input { width: 100%; margin: 2px 0; }
+.vp-range:has(input:disabled) { opacity: .4; }
 .vp-ends { display: flex; justify-content: space-between; margin-top: -4px; font-size: var(--fs-11); color: var(--t4); }
 .vp-swatches { display: flex; flex-wrap: wrap; gap: 8px; }
 .vp-swatches[hidden] { display: none; }

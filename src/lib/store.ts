@@ -53,6 +53,7 @@ export const DEFAULT_PREFS: UiPrefs = {
     kiai: true,
     flashes: "soft",
     background: "blur",
+    blur: 0.4,
     dim: 0.55,
     title: true,
     offset: 0,

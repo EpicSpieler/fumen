@@ -57,8 +57,28 @@ export function setVis(patch: Partial<VisPrefs>): void {
 const WHITE: Rgb = [255, 255, 255];
 const lookOf = (p: Palette): Look => ({ a: p.a, b: p.b, ink: mix(p.a, WHITE, 0.7) });
 
+/** Draws the cover over a w×h canvas, cropped to fit (`over` > 1 zooms in). */
+function fit(c: CanvasRenderingContext2D, img: HTMLImageElement, w: number, h: number, over = 1): void {
+  const s = Math.max(w / img.naturalWidth, h / img.naturalHeight) * over;
+  c.drawImage(img, (w - img.naturalWidth * s) / 2, (h - img.naturalHeight * s) / 2, img.naturalWidth * s, img.naturalHeight * s);
+}
+
+/** A small blurred copy of the cover (`amount` 0–1, prefs `blur`); null at 0, where the cover is used as it is. */
+function blurCopy(img: HTMLImageElement, amount: number): HTMLCanvasElement | null {
+  const px = Math.round(24 * amount);
+  if (px <= 0) return null;
+  const blur = document.createElement("canvas");
+  blur.width = 320;
+  blur.height = 180;
+  const b = blur.getContext("2d")!;
+  b.filter = `blur(${px}px) saturate(1.35)`;
+  // zoomed in far enough that the blur's see-through edges fall outside
+  fit(b, img, 320, 180, 1 + (4 * px) / 180);
+  return blur;
+}
+
 /** The cover as an image, a blurred copy and its palette; null when it can't be read. */
-async function loadArt(url: string): Promise<{ art: Art; palette: Palette | null } | null> {
+async function loadArt(url: string, amount: number): Promise<{ art: Art; palette: Palette | null } | null> {
   const img = new Image();
   img.crossOrigin = "anonymous";
   img.src = url;
@@ -67,30 +87,18 @@ async function loadArt(url: string): Promise<{ art: Art; palette: Palette | null
   } catch {
     return null;
   }
-  const iw = img.naturalWidth;
-  const ih = img.naturalHeight;
-  const fit = (c: CanvasRenderingContext2D, w: number, h: number, over = 1) => {
-    const s = Math.max(w / iw, h / ih) * over;
-    c.drawImage(img, (w - iw * s) / 2, (h - ih * s) / 2, iw * s, ih * s);
-  };
-  const blur = document.createElement("canvas");
-  blur.width = 320;
-  blur.height = 180;
-  const b = blur.getContext("2d")!;
-  b.filter = "blur(9px) saturate(1.35)";
-  fit(b, 320, 180, 1.18);
   let palette: Palette | null = null;
   try {
     const small = document.createElement("canvas");
     small.width = 48;
     small.height = 27;
     const s = small.getContext("2d", { willReadFrequently: true })!;
-    fit(s, 48, 27);
+    fit(s, img, 48, 27);
     palette = paletteOf(s.getImageData(0, 0, 48, 27).data);
   } catch (e) {
     console.warn("[vis] no palette", e);
   }
-  return { art: { img, blur }, palette };
+  return { art: { img, blur: blurCopy(img, amount) }, palette };
 }
 
 export class Visualizer {
@@ -99,6 +107,8 @@ export class Visualizer {
   private styleId: VisStyle;
   private o: VisPrefs = visPrefs();
   private art: Art = { img: null, blur: null };
+  /** the `blur` the current blurred copy was made with */
+  private blurred: number;
   private prevArt: Art | null = null;
   private artMix = 1;
   private palette: Palette | null = null;
@@ -121,12 +131,18 @@ export class Visualizer {
     private readonly kick: () => void,
   ) {
     this.styleId = this.o.style;
+    this.blurred = this.o.blur;
     this.style = (STYLES.find((s) => s.id === this.styleId) ?? STYLES[0]).make();
   }
 
   /** Picks up changed settings (a new style crossfades from the old one). */
   sync(): void {
     this.o = visPrefs();
+    if (this.o.blur !== this.blurred) {
+      this.blurred = this.o.blur;
+      if (this.art.img instanceof HTMLImageElement) this.art = { ...this.art, blur: blurCopy(this.art.img, this.blurred) };
+      this.kick();
+    }
     if (this.o.style === this.styleId) return;
     const def = STYLES.find((s) => s.id === this.o.style) ?? STYLES[0];
     if (this.canvas.width && this.canvas.height && !reduceMotion()) {
@@ -152,7 +168,7 @@ export class Visualizer {
       this.kick();
     };
     if (o.bg) {
-      void loadArt(thumbUrl(o.bg, 1280)).then((r) => {
+      void loadArt(thumbUrl(o.bg, 1280), this.blurred).then((r) => {
         if (job !== this.artJob) return;
         if (r) swap(r.art, r.palette);
         else swap({ img: null, blur: null }, null);

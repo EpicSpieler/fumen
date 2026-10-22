@@ -88,7 +88,7 @@ function fitImage(c: CanvasRenderingContext2D, img: CanvasImageSource & { width:
 /** The cover filling x/y/w/h (cropped to fit), the old one under it while the new one fades in. */
 export function drawArt(f: VisFrame, x: number, y: number, w: number, h: number, o: { blur?: boolean; zoom?: number; px?: number; py?: number } = {}): void {
   const c = f.c;
-  const pick = (a: Art) => (o.blur ? a.blur : a.img);
+  const pick = (a: Art) => (o.blur ? (a.blur ?? a.img) : a.img);
   const cur = pick(f.art);
   const prev = f.prevArt && f.artMix < 1 ? pick(f.prevArt) : null;
   const zoom = o.zoom ?? 1;

@@ -522,6 +522,8 @@ export interface VisPrefs {
   kiai: boolean;
   flashes: "off" | "soft" | "full";
   background: "blur" | "art" | "black";
+  /** how soft the blurred background is, 0 sharp … 1 very soft */
+  blur: number;
   /** 0–0.9 */
   dim: number;
   title: boolean;
