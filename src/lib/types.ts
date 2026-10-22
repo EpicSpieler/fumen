@@ -481,10 +481,18 @@ export interface UiPrefs {
   collapsedGroups: string[];
   shuffle: boolean;
   repeat: RepeatMode;
+  /** a new song starts where its sound does, past the silence at its start */
+  skipSilence: boolean;
+  /** seconds a song fades in when another one came before it */
+  fadeIn: number;
+  /** seconds a song fades out before the next one: at its end, or when you skip it */
+  fadeOut: number;
   /** osu!mania scroll speed for the playfield preview; null = follow lazer's setting */
   scrollSpeed: number | null;
   /** skin of the playfield (a lazer skin id); null = the one selected in lazer */
   playfieldSkin: string | null;
+  /** the playfield's skin per ruleset ("0"–"3"), over `playfieldSkin` */
+  modeSkins: Record<string, string>;
   /** volume of the playfield's hitsounds, 0–1, relative to the music */
   hitsoundVolume: number;
   /** fullscreen view used last */

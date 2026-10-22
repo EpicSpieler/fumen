@@ -104,4 +104,12 @@ export const settings: Record<string, string> = {
   "Downloading Fumen {version}…": "Lade Fumen {version} herunter…",
   "Installing Fumen {version}. Fumen closes for a moment and opens again.": "Installiere Fumen {version}. Fumen schließt sich kurz und öffnet sich wieder.",
   "Installing…": "Installiere…",
+  "{s} s": "{s} s",
+  Listening: "Wiedergabe",
+  "Skip the silence at the start": "Stille am Anfang überspringen",
+  "A song starts where its sound does, not in the quiet before it.": "Ein Song beginnt dort, wo er hörbar wird, nicht in der Stille davor.",
+  "Fade in": "Einblenden",
+  "How softly a song comes in after another one.": "Wie sanft ein Song nach einem anderen einsetzt.",
+  "Fade out": "Ausblenden",
+  "How softly a song goes before the next one: at its end, and when you skip it.": "Wie sanft ein Song vor dem nächsten ausklingt: an seinem Ende und wenn du ihn überspringst.",
 };

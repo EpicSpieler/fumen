@@ -3,13 +3,13 @@ import { getVersion } from "@tauri-apps/api/app";
 import { open } from "@tauri-apps/plugin-dialog";
 import { api, asApiError } from "../lib/api";
 import { lang, LANGS, switchLang, t, tn } from "../lib/i18n";
-import { esc, MODE_LABEL, num, relativeTime } from "../lib/format";
+import { esc, fixed, MODE_LABEL, num, relativeTime } from "../lib/format";
 import { collectionEvents, fumenCollections, loadCollections, putIntoLazer, saveCollectionDb } from "../lib/collections";
 import { syncHistory } from "../lib/history";
 import { canUpdate, checkForUpdate, downloadText, installUpdate, updateEvents, updateState } from "../lib/updater";
 import { describeScan, isScanning, runScan } from "../lib/scan";
 import { DEFAULT_ACCENT, events, flushPrefs, refreshStatus, setPrefs, store } from "../lib/store";
-import type { OsuAccount } from "../lib/types";
+import type { OsuAccount, UiPrefs } from "../lib/types";
 import { attachSegIndicator, openMenu, toast, uiConfirm, uiPrompt } from "../ui/controls";
 import { importSets, openImport } from "./import";
 import { icon } from "../ui/icons";
@@ -44,6 +44,24 @@ export async function loginWithOsu(): Promise<void> {
   }
 }
 
+/** "Off", or seconds */
+const fadeLabel = (v: number): string => (v > 0 ? t("{s} s", { s: fixed(v, 1) }) : t("Off"));
+
+/** A setting row with a 0–5 s slider (prefs fadeIn / fadeOut, in tenths on the slider). */
+function fadeRow(key: "fadeIn" | "fadeOut", title: string, desc: string, v: number): string {
+  return `
+    <div class="setting-row">
+      <div class="setting-text">
+        <div class="setting-title">${title}</div>
+        <div class="setting-desc">${desc}</div>
+      </div>
+      <div class="setting-range">
+        <input type="range" data-fade="${key}" min="0" max="50" step="1" value="${Math.round(v * 10)}" style="--pct:${(v / 5) * 100}%" aria-label="${title}" />
+        <b class="num s-fade-val">${fadeLabel(v)}</b>
+      </div>
+    </div>`;
+}
+
 export class SettingsView {
   readonly el: HTMLElement;
   private offs: (() => void)[] = [];
@@ -63,6 +81,14 @@ export class SettingsView {
     shown = this;
     void this.loadAccount();
     this.el.addEventListener("change", (e) => this.onChange(e));
+    this.el.addEventListener("input", (e) => {
+      const input = e.target as HTMLInputElement;
+      const key = input.dataset.fade as "fadeIn" | "fadeOut" | undefined;
+      if (!key) return;
+      const v = +input.value / 10;
+      setPrefs({ [key]: v } as Pick<UiPrefs, typeof key>);
+      input.parentElement!.querySelector(".s-fade-val")!.textContent = fadeLabel(v);
+    });
     getVersion()
       .then((v) => {
         this.version = v;
@@ -168,6 +194,19 @@ export class SettingsView {
             </div>
             <input type="checkbox" role="switch" data-pref="reduceMotion" ${p.reduceMotion ? "checked" : ""} />
           </div>
+        </section>
+
+        <section class="settings-section">
+          <div class="label-caps settings-label">${t("Listening")}</div>
+          <div class="setting-row">
+            <div class="setting-text">
+              <div class="setting-title">${t("Skip the silence at the start")}</div>
+              <div class="setting-desc">${t("A song starts where its sound does, not in the quiet before it.")}</div>
+            </div>
+            <input type="checkbox" role="switch" data-pref="skipSilence" aria-label="${t("Skip the silence at the start")}" ${p.skipSilence ? "checked" : ""} />
+          </div>
+          ${fadeRow("fadeIn", t("Fade in"), t("How softly a song comes in after another one."), p.fadeIn)}
+          ${fadeRow("fadeOut", t("Fade out"), t("How softly a song goes before the next one: at its end, and when you skip it."), p.fadeOut)}
         </section>
 
         <section class="settings-section">

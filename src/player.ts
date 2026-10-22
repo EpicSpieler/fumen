@@ -16,6 +16,7 @@ import type { Mod } from "./lib/mods";
 import type { RepeatMode } from "./lib/types";
 import { toast } from "./ui/controls";
 import { icon } from "./ui/icons";
+import { leadingSilence } from "./lib/silence";
 import { setContentArt } from "./ui/theme";
 import { setMenu } from "./views/actions";
 import { t } from "./lib/i18n";
@@ -29,13 +30,17 @@ export interface NowPlaying {
 
 /** Going back within this many seconds of the start jumps to the previous track instead. */
 const RESTART_GRACE = 3;
+/** ms a song fades in when it's resumed or starts somewhere in the middle */
+const RESUME_FADE = 450;
+/** ms a new song waits at most for its silence to be found */
+const SILENCE_WAIT = 400;
 
 export const RATE_MIN = 0.5;
 export const RATE_MAX = 2;
 export const RATE_STEP = 0.05;
 
 class Player {
-  readonly bus = new Emitter<{ track: NowPlaying | null; state: boolean; queue: null; rate: number; mods: readonly Mod[] }>();
+  readonly bus = new Emitter<{ track: NowPlaying | null; state: boolean; queue: null; rate: number; pitch: boolean; mods: readonly Mod[] }>();
   readonly audio = new Audio();
   now: NowPlaying | null = null;
   /** playback speed, HT 0.75 / DT 1.5 or anything from 0.5 to 2 in steps of 0.05 (session only) */
@@ -48,20 +53,37 @@ class Player {
   /** sets played before the current one (for "previous" in shuffle) */
   private history: number[] = [];
   private startAt = 0;
-  private fadeRaf = 0;
+  /** the running fade's timer */
+  private fadeTimer = 0;
   /** the volume, once it lives in Web Audio */
   private gain: GainNode | null = null;
+  /** the song is fading out towards its end (prefs fadeOut) */
+  private endFade = false;
+  /** bumped per track change, so a fade-out finishing late doesn't swap in an older pick */
+  private swapJob = 0;
+  private swapping = false;
+  /** the track change waiting for the fade-out */
+  private pending: (() => void) | null = null;
+  /** the next track loads without starting (paused during the fade-out) */
+  private holdPaused = false;
+  /** the waiting "loadedmetadata" handler of the track being loaded */
+  private onMeta: (() => void) | null = null;
+  /** the pitch follows the rate, like Nightcore / Daycore (session only) */
+  pitch = false;
 
   constructor() {
     this.audio.preload = "auto";
     // CORS mode, so the fullscreen visualizer can read the audio (fumen:// allows any origin)
     this.audio.crossOrigin = "anonymous";
+    this.audio.preservesPitch = true;
     this.audio.addEventListener("play", () => this.bus.emit("state", true));
     this.audio.addEventListener("pause", () => this.bus.emit("state", false));
     this.audio.addEventListener("ended", () => {
       this.bus.emit("state", false);
       if (this.hasNext) this.next();
     });
+    this.audio.addEventListener("timeupdate", () => this.fadeAtEnd());
+    this.audio.addEventListener("seeked", () => this.fadeAtEnd());
     this.audio.addEventListener("error", () => {
       if (!this.now) return;
       toast(t("This song's audio file couldn't be played."), { kind: "danger" });
@@ -105,10 +127,10 @@ class Player {
       this.history = [];
     }
     this.qpos = this.queue.indexOf(setIdx);
-    if (this.now && this.now.set === setIdx && this.now.audio === audio) {
+    if (this.now && this.now.set === setIdx && this.now.audio === audio && !this.swapping) {
       if (opts.at !== undefined) {
         this.audio.currentTime = Math.max(0, opts.at);
-        if (!this.playing) this.fadeIn();
+        if (!this.playing) this.fadeIn(RESUME_FADE);
       } else this.toggle();
       this.bus.emit("queue", null);
       return;
@@ -130,7 +152,10 @@ class Player {
     } else this.playSet(m.set, mi);
   }
 
-  /** Starts a set's song from the beginning (or `at` seconds). False when the set has no audio. */
+  /**
+   * Starts a set's song from the beginning (past its silence, prefs skipSilence) or `at` seconds,
+   * once the one playing has faded out (prefs fadeOut). False when the set has no audio.
+   */
   private load(setIdx: number, mapIdx?: number, at?: number): boolean {
     const snap = store.snap;
     if (!snap) return false;
@@ -139,26 +164,83 @@ class Player {
     const map = snap.maps[mi];
     const audio = map?.audio ?? set.audio;
     if (!audio) return false;
-    this.now = { set: setIdx, map: mi, audio, bg: map?.bg ?? set.bg };
-    this.bus.emit("track", this.now);
-    this.bus.emit("queue", null);
+    const url = fileUrl(audio);
+    // looked for while the old song fades out and the new one loads
+    const lead = at === undefined && store.prefs.skipSilence ? leadingSilence(url) : null;
+    const after = !!this.now;
+    this.swap(() => {
+      this.now = { set: setIdx, map: mi, audio, bg: map?.bg ?? set.bg };
+      this.bus.emit("track", this.now);
+      this.bus.emit("queue", null);
 
-    const a = this.audio;
-    a.pause();
-    a.loop = store.prefs.repeat === "one";
-    a.src = fileUrl(audio);
-    const start = () => {
-      a.removeEventListener("loadedmetadata", start);
-      const d = a.duration;
-      const t = Math.max(0, at ?? 0);
-      this.startAt = Number.isFinite(d) ? Math.min(t, Math.max(0, d - 1)) : t;
-      a.currentTime = this.startAt;
-      a.playbackRate = this.rate;
-      this.fadeIn();
-    };
-    a.addEventListener("loadedmetadata", start);
-    a.load();
+      const a = this.audio;
+      a.pause();
+      if (this.onMeta) a.removeEventListener("loadedmetadata", this.onMeta);
+      a.loop = store.prefs.repeat === "one";
+      a.src = url;
+      const job = this.swapJob;
+      const start = async () => {
+        a.removeEventListener("loadedmetadata", start);
+        this.onMeta = null;
+        // the silence, if it's found in time; the song doesn't wait long for it
+        const skip = lead ? await Promise.race([lead, new Promise<number>((r) => setTimeout(() => r(0), SILENCE_WAIT))]) : 0;
+        if (job !== this.swapJob) return;
+        const d = a.duration;
+        const t = Math.max(0, at ?? skip);
+        this.startAt = Number.isFinite(d) ? Math.min(t, Math.max(0, d - 1)) : t;
+        a.currentTime = this.startAt;
+        a.playbackRate = this.rate;
+        if (this.holdPaused) {
+          this.holdPaused = false;
+          this.setOut(this.targetVolume());
+          return;
+        }
+        // from the start (or where the sound starts) a fade would swallow the first beat, unless asked for
+        const fade = after ? store.prefs.fadeIn * 1000 : 0;
+        this.fadeIn(at === undefined ? fade : Math.max(fade, RESUME_FADE));
+      };
+      this.onMeta = start;
+      a.addEventListener("loadedmetadata", start);
+      a.load();
+    });
     return true;
+  }
+
+  /** Runs `change` once the song playing has faded out (prefs fadeOut); at once when nothing plays,
+   * or when another change comes while it fades. */
+  private swap(change: () => void): void {
+    const job = ++this.swapJob;
+    const ms = store.prefs.fadeOut * 1000;
+    this.endFade = false;
+    this.holdPaused = false;
+    if (!ms || !this.playing || this.swapping) {
+      this.swapping = false;
+      this.pending = null;
+      return change();
+    }
+    this.swapping = true;
+    this.pending = change;
+    this.ramp(0, ms, () => {
+      if (job !== this.swapJob) return;
+      this.swapping = false;
+      this.pending = null;
+      change();
+    });
+  }
+
+  /** Fades the song out over its last seconds (prefs fadeOut), and back in when it's moved away from the end. */
+  private fadeAtEnd(): void {
+    const a = this.audio;
+    const ms = store.prefs.fadeOut * 1000;
+    if (!ms || a.loop || this.swapping || !Number.isFinite(a.duration)) return;
+    const left = ((a.duration - a.currentTime) / (a.playbackRate || 1)) * 1000;
+    if (!this.endFade && this.playing && left > 0 && left <= ms) {
+      this.endFade = true;
+      this.ramp(0, left);
+    } else if (this.endFade && left > ms + 250) {
+      this.endFade = false;
+      this.ramp(this.targetVolume(), RESUME_FADE);
+    }
   }
 
   next(): void {
@@ -199,41 +281,75 @@ class Player {
   restart(): void {
     if (!this.now) return;
     this.audio.currentTime = this.startAt;
-    if (!this.playing) this.fadeIn();
+    if (!this.playing) this.fadeIn(this.startAt > 0 ? 0 : RESUME_FADE);
   }
 
-  /** Plays with a short fade-in, except from the very start, where a fade would swallow the first beat. */
-  private fadeIn(): void {
-    cancelAnimationFrame(this.fadeRaf);
-    const target = this.targetVolume();
-    if (this.audio.currentTime < 0.05) {
-      this.setOut(target);
-      this.audio.play().catch(() => {});
+  /** Plays, fading in over `ms` (none: at once). */
+  private fadeIn(ms: number): void {
+    this.endFade = false;
+    if (ms > 0) this.setOut(0);
+    else this.setOut(this.targetVolume());
+    this.audio.play().catch((e) => console.warn("[player] play", e));
+    if (ms > 0) this.ramp(this.targetVolume(), ms);
+  }
+
+  /**
+   * Takes the output to `to` over `ms`, then runs `done`. On the audio clock once the song plays
+   * through Web Audio, else on a timer: either keeps going while the window is hidden, where
+   * animation frames stop (and a fade-in waiting on them would stay silent).
+   */
+  private ramp(to: number, ms: number, done?: () => void): void {
+    this.stopFade();
+    const ctx = this.gain?.context as AudioContext | undefined;
+    if (ctx?.state === "suspended") void ctx.resume();
+    if (ms <= 0 || (ctx && ctx.state !== "running")) {
+      this.setOut(to);
+      done?.();
       return;
     }
-    this.setOut(0);
-    this.audio.play().catch(() => {});
+    if (this.gain && ctx) {
+      const g = this.gain.gain;
+      const now = ctx.currentTime;
+      g.cancelScheduledValues(now);
+      g.setValueAtTime(g.value, now);
+      g.linearRampToValueAtTime(to, now + ms / 1000);
+      if (done) this.fadeTimer = window.setTimeout(done, ms);
+      return;
+    }
+    const a = this.audio;
+    const from = a.volume;
     const t0 = performance.now();
-    const step = (t: number) => {
-      const k = Math.min(1, (t - t0) / 450);
-      this.setOut(target * k);
-      if (k < 1) this.fadeRaf = requestAnimationFrame(step);
-    };
-    this.fadeRaf = requestAnimationFrame(step);
+    this.fadeTimer = window.setInterval(() => {
+      const k = Math.min(1, (performance.now() - t0) / ms);
+      a.volume = from + (to - from) * k;
+      if (k < 1) return;
+      this.stopFade();
+      done?.();
+    }, 16);
+  }
+
+  private stopFade(): void {
+    clearTimeout(this.fadeTimer);
+    clearInterval(this.fadeTimer);
+    this.fadeTimer = 0;
   }
 
   /** Routes the volume through a gain in Web Audio (lib/eq, once the song plays through it), so the
    * visualizer's analysers before it hear the song at full level. */
   useGain(gain: GainNode): void {
     const v = this.audio.volume;
+    this.stopFade();
     this.gain = gain;
     this.audio.volume = 1;
-    this.setOut(v);
+    this.setOut(this.swapping || this.endFade ? v : this.targetVolume());
   }
 
   private setOut(v: number): void {
-    if (this.gain) this.gain.gain.value = v;
-    else this.audio.volume = v;
+    if (this.gain) {
+      const g = this.gain.gain;
+      g.cancelScheduledValues(this.gain.context.currentTime);
+      g.value = v;
+    } else this.audio.volume = v;
   }
 
   /** Perceptual volume curve. */
@@ -244,13 +360,28 @@ class Player {
 
   toggle(): void {
     if (!this.now) return;
+    if (this.swapping && this.pending) {
+      // paused while the old song fades out: the new one comes in paused
+      const change = this.pending;
+      this.swapJob++;
+      this.swapping = false;
+      this.pending = null;
+      this.stopFade();
+      this.holdPaused = true;
+      change();
+      return;
+    }
     if (this.playing) return this.audio.pause();
     if (this.audio.ended) this.audio.currentTime = this.startAt;
-    this.fadeIn();
+    this.fadeIn(this.audio.currentTime < 0.05 ? 0 : RESUME_FADE);
   }
 
   stop(): void {
-    cancelAnimationFrame(this.fadeRaf);
+    this.stopFade();
+    this.swapJob++;
+    this.swapping = false;
+    this.pending = null;
+    this.holdPaused = false;
     this.audio.pause();
     this.audio.removeAttribute("src");
     this.audio.load();
@@ -270,7 +401,9 @@ class Player {
 
   setVolume(v: number): void {
     setPrefs({ volume: Math.max(0, Math.min(1, v)) });
-    cancelAnimationFrame(this.fadeRaf);
+    // a fade-out under way goes on from the new volume
+    if (this.swapping || this.endFade) return;
+    this.stopFade();
     this.setOut(this.targetVolume());
   }
 
@@ -279,10 +412,20 @@ class Player {
     const rate = Math.round(v * 100) / 100;
     if (rate === this.rate) return;
     this.rate = rate;
-    // pitch stays, like lazer's rate mods without "adjust pitch"
+    // pitch stays, like lazer's rate mods without "adjust pitch" (unless `pitch`)
     this.audio.defaultPlaybackRate = rate;
     this.audio.playbackRate = rate;
     this.bus.emit("rate", rate);
+  }
+
+  /** The pitch goes up and down with the rate (Nightcore / Daycore), or stays. */
+  setPitch(on: boolean): void {
+    if (on === this.pitch) return;
+    this.pitch = on;
+    this.audio.preservesPitch = !on;
+    this.bus.emit("pitch", on);
+    // what shows the rate shows the pitch with it
+    this.bus.emit("rate", this.rate);
   }
 
   setMods(mods: readonly Mod[]): void {
@@ -335,8 +478,7 @@ export function mountPlayerBar(host: HTMLElement, opts: { onFullscreen: () => vo
         <button class="pb-btn pb-repeat" type="button" aria-label="${t("Repeat")}"></button>
       </div>
       <div class="pb-right">
-        <button class="pb-btn pb-mute" type="button" aria-label="${t("Mute")}"></button>
-        <div class="pb-vol" role="slider" aria-label="${t("Volume")}" aria-valuemin="0" aria-valuemax="100" tabindex="0"><div class="pb-vol-fill"></div></div>
+        ${volumeHtml()}
         <button class="pb-btn pb-full" type="button" data-tip="${t("Fullscreen")}" aria-label="${t("Fullscreen")}">${icon("fullscreen")}</button>
         <button class="pb-btn pb-more" type="button" data-tip="${t("More")}" aria-label="${t("More")}">${icon("more-vert")}</button>
         <button class="pb-btn pb-close" type="button" data-tip="${t("Close player")}" aria-label="${t("Close player")}">${icon("x")}</button>
@@ -352,8 +494,6 @@ export function mountPlayerBar(host: HTMLElement, opts: { onFullscreen: () => vo
   const dur = $<HTMLSpanElement>(".pb-dur");
   const seek = $<HTMLDivElement>(".pb-seek");
   const seekTip = $<HTMLDivElement>(".pb-seek-tip");
-  const vol = $<HTMLDivElement>(".pb-vol");
-  const mute = $<HTMLButtonElement>(".pb-mute");
   const shuffle = $<HTMLButtonElement>(".pb-shuffle");
   const repeat = $<HTMLButtonElement>(".pb-repeat");
   const prev = $<HTMLButtonElement>(".pb-prev");
@@ -361,35 +501,7 @@ export function mountPlayerBar(host: HTMLElement, opts: { onFullscreen: () => vo
   const rateBtn = $<HTMLButtonElement>(".pb-rate");
   const a = player.audio;
 
-  // ── volume ──
-  let lastVolume = store.prefs.volume || 0.6;
-  const renderVolume = () => {
-    const v = store.prefs.volume;
-    vol.style.setProperty("--v", `${v * 100}%`);
-    vol.setAttribute("aria-valuenow", String(Math.round(v * 100)));
-    mute.innerHTML = icon(v === 0 ? "volume-off" : v < 0.45 ? "volume-low" : "volume");
-    mute.dataset.tip = v === 0 ? t("Unmute") : t("Mute");
-  };
-  const setVolume = (v: number) => {
-    player.setVolume(v);
-    if (store.prefs.volume > 0) lastVolume = store.prefs.volume;
-    renderVolume();
-  };
-  renderVolume();
-  dragSlider(vol, (f) => setVolume(f));
-  vol.addEventListener("keydown", (e) => {
-    const step = e.key === "ArrowRight" || e.key === "ArrowUp" ? 0.05 : e.key === "ArrowLeft" || e.key === "ArrowDown" ? -0.05 : 0;
-    if (!step) return;
-    e.preventDefault();
-    setVolume(store.prefs.volume + step);
-  });
-  for (const el of [vol, mute]) {
-    el.addEventListener("wheel", (e) => {
-      e.preventDefault();
-      setVolume(store.prefs.volume + ((e as WheelEvent).deltaY < 0 ? 0.05 : -0.05));
-    }, { passive: false });
-  }
-  mute.addEventListener("click", () => setVolume(store.prefs.volume > 0 ? 0 : lastVolume));
+  bindVolume($<HTMLButtonElement>(".pb-mute"), $<HTMLDivElement>(".pb-vol"));
 
   // ── track ──
   const renderTrack = (np: NowPlaying | null) => {
@@ -448,7 +560,7 @@ export function mountPlayerBar(host: HTMLElement, opts: { onFullscreen: () => vo
 
   const renderRate = (rate: number) => {
     rateBtn.hidden = rate === 1;
-    rateBtn.textContent = `${fixed(rate, 2)}×`;
+    rateBtn.textContent = player.pitch ? `${rate > 1 ? "NC" : "DC"} ${fixed(rate, 2)}×` : `${fixed(rate, 2)}×`;
     rateBtn.setAttribute("aria-label", t("Playing at {rate}×, back to normal speed", { rate: fixed(rate, 2) }));
     renderTime();
   };
@@ -538,6 +650,49 @@ export function mountPlayerBar(host: HTMLElement, opts: { onFullscreen: () => vo
   renderModes();
 }
 
+/** the volume before muting, for unmuting */
+let lastVolume = 0;
+
+/** The markup of a volume control (a mute button and a slider), for `bindVolume`. */
+export function volumeHtml(cls = ""): string {
+  return `<button class="pb-btn pb-mute${cls ? ` ${cls}-mute` : ""}" type="button" aria-label="${t("Mute")}"></button>
+    <div class="pb-vol${cls ? ` ${cls}-vol` : ""}" role="slider" aria-label="${t("Volume")}" aria-valuemin="0" aria-valuemax="100" tabindex="0"><div class="pb-vol-fill"></div></div>`;
+}
+
+/** Wires a mute button and a volume slider to the player's volume; every one of them shows it. */
+export function bindVolume(mute: HTMLButtonElement, vol: HTMLElement): void {
+  lastVolume ||= store.prefs.volume || 0.6;
+  const render = () => {
+    const v = store.prefs.volume;
+    vol.style.setProperty("--v", `${v * 100}%`);
+    vol.setAttribute("aria-valuenow", String(Math.round(v * 100)));
+    mute.innerHTML = icon(v === 0 ? "volume-off" : v < 0.45 ? "volume-low" : "volume");
+    mute.dataset.tip = v === 0 ? t("Unmute") : t("Mute");
+  };
+  const set = (v: number) => {
+    player.setVolume(v);
+    if (store.prefs.volume > 0) lastVolume = store.prefs.volume;
+  };
+  render();
+  events.on("prefs", (p) => {
+    if ("volume" in p) render();
+  });
+  dragSlider(vol, (f) => set(f));
+  vol.addEventListener("keydown", (e) => {
+    const step = e.key === "ArrowRight" || e.key === "ArrowUp" ? 0.05 : e.key === "ArrowLeft" || e.key === "ArrowDown" ? -0.05 : 0;
+    if (!step) return;
+    e.preventDefault();
+    set(store.prefs.volume + step);
+  });
+  for (const el of [vol, mute]) {
+    el.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      set(store.prefs.volume + ((e as WheelEvent).deltaY < 0 ? 0.05 : -0.05));
+    }, { passive: false });
+  }
+  mute.addEventListener("click", () => set(store.prefs.volume > 0 ? 0 : lastVolume));
+}
+
 /** Click or drag along a horizontal track; reports the fraction (0–1). */
 export function dragSlider(el: HTMLElement, onValue: (f: number, done: boolean) => void, enabled: () => boolean = () => true): void {
   let active = false;
@@ -592,14 +747,23 @@ function openCurrent(): void {
   go({ name: "set", id: store.snap.sets[np.set].id });
 }
 
-/** The set page owns the ambient while open; otherwise the playing track does. */
+/** The set page owns the ambient while open; otherwise the playing track does, and with nothing
+ * playing the set home shows first (so "from artwork" has artwork from the start). */
 let pageArt: string | null | undefined;
 let playerArt: string | null = null;
+let restingArt: string | null = null;
+const applyArt = () => setContentArt(pageArt !== undefined ? pageArt : (playerArt ?? restingArt));
 function setContentArtFromPlayer(url: string | null): void {
   playerArt = url;
-  if (pageArt === undefined) setContentArt(playerArt);
+  applyArt();
 }
 export function claimContentArt(url: string | null | undefined): void {
   pageArt = url;
-  setContentArt(url === undefined ? playerArt : url);
+  applyArt();
+}
+/** The art for when nothing plays and no page claims it (home's "where you left off"). */
+export function setRestingArt(url: string | null): void {
+  if (url === restingArt) return;
+  restingArt = url;
+  applyArt();
 }

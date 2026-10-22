@@ -37,8 +37,12 @@ export const DEFAULT_PREFS: UiPrefs = {
   collapsedGroups: [],
   shuffle: true,
   repeat: "off",
+  skipSilence: true,
+  fadeIn: 0,
+  fadeOut: 0,
   scrollSpeed: null,
   playfieldSkin: null,
+  modeSkins: {},
   hitsoundVolume: 0.6,
   fullscreenMode: "visual",
   visualizer: {

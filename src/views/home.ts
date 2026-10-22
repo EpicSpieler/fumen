@@ -14,7 +14,7 @@ import { currentContext, goalEvents, goalsNow } from "../lib/goals-store";
 import { goalNow, goalTarget, goalTitle, goalValue, progress } from "../lib/goals";
 import { historyEvents, historyNow, loadHistory } from "../lib/history";
 import { go } from "../lib/router";
-import { player } from "../player";
+import { player, setRestingArt } from "../player";
 import { type IconName, icon } from "../ui/icons";
 import { openSet, setMenu } from "./actions";
 import { t, tn } from "../lib/i18n";
@@ -244,6 +244,8 @@ export class HomeView {
       line = last ? relativeTime(last) : snap.sets[si].added ? relativeTime(snap.sets[si].added!) : "";
     }
     const set: SetRow = snap.sets[si];
+    // the accent and ambient follow it while nothing plays
+    setRestingArt(set.bg ? thumbUrl(set.bg, 360) : null);
     const art = set.bg ? `<img class="bt-art" src="${thumbUrl(set.bg, 960)}" alt="" decoding="async" />` : "";
     let result = "";
     if (recent) {
