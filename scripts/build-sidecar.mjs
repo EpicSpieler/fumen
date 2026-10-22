@@ -1,7 +1,7 @@
 // Builds the .NET helpers and places them where the app expects them:
 //   src-tauri/binaries/fumen-realm-<target-triple>.exe      lazer reader, Tauri's `externalBin`
 //   src-tauri/binaries/fumen-import/fumen-import.dll + its launcher (fumen-import.exe on
-//                                                           Windows, fumen-import on macOS): lazer
+//                                                           Windows, fumen-import elsewhere): lazer
 //                                                           importer, embedded into the app (it runs
 //                                                           on lazer's own runtime, see
 //                                                           src-tauri/src/lazer_import.rs)
@@ -37,6 +37,7 @@ const RIDS = {
   "x86_64-pc-windows-msvc": "win-x64",
   "aarch64-apple-darwin": "osx-arm64",
   "x86_64-apple-darwin": "osx-x64",
+  "x86_64-unknown-linux-gnu": "linux-x64",
 };
 const rid = RIDS[triple];
 if (!rid) throw new Error(`No .NET runtime identifier known for ${triple}`);

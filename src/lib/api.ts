@@ -237,6 +237,9 @@ const BASE =
   (navigator.userAgent.includes("Windows") ? "http://fumen.localhost/" : "fumen://localhost/");
 
 export const fileUrl = (hash: string): string => `${BASE}file/${hash}`;
+/** WebKitGTK (Linux) plays media through GStreamer, which can't read fumen:// itself: the player
+ * fetches the file and plays it from memory there (`fetch` reads custom schemes fine). */
+export const mediaFromMemory = !(window as { __FUMEN_BASE__?: string }).__FUMEN_BASE__ && /Linux/.test(navigator.userAgent) && !/Android/.test(navigator.userAgent);
 export const thumbUrl = (hash: string, width: number): string => `${BASE}thumb/${width}/${hash}`;
 /** lazer's built-in skin files: classic / retro textures, hit sounds of all of them */
 export type BuiltinSkin = "classic" | "retro" | "triangles" | "argon" | "argon-pro";

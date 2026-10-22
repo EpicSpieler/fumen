@@ -122,15 +122,20 @@ impl Compat {
 
 #[derive(Debug, Clone)]
 pub struct Installed {
-    /// lazer's assemblies and runtime: `…\osulazer\current` on Windows,
+    /// lazer's assemblies and runtime (Linux: the unpacked AppImage or Flatpak, see lazer_linux): `…\osulazer\current` on Windows,
     /// `osu!.app/Contents/MacOS` on macOS
     pub dir: PathBuf,
     pub version: String,
 }
 
 /// Where osu!lazer is looked for, for messages.
-pub const INSTALL_HINT: &str =
-    if cfg!(target_os = "macos") { "Applications as osu!.app" } else { "%LOCALAPPDATA%\\osulazer" };
+pub const INSTALL_HINT: &str = if cfg!(target_os = "macos") {
+    "Applications as osu!.app"
+} else if cfg!(target_os = "linux") {
+    "~/Applications, ~/Downloads, ~/.local/bin or ~ as osu.AppImage, or as the Flatpak sh.ppy.osu"
+} else {
+    "%LOCALAPPDATA%\\osulazer"
+};
 
 /// lazer as installed by its installer (Velopack: `%LOCALAPPDATA%\osulazer\current`).
 #[cfg(windows)]
@@ -159,7 +164,12 @@ pub fn installed() -> Option<Installed> {
     })
 }
 
-#[cfg(not(any(windows, target_os = "macos")))]
+#[cfg(target_os = "linux")]
+pub fn installed() -> Option<Installed> {
+    crate::lazer_linux::installed()
+}
+
+#[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
 pub fn installed() -> Option<Installed> {
     None
 }
@@ -176,7 +186,7 @@ fn plist_version(xml: &str) -> Option<String> {
     Some(if v.contains('-') { v.to_string() } else { format!("{v}-lazer") })
 }
 
-fn parse_sq_version(xml: &str) -> Option<String> {
+pub(crate) fn parse_sq_version(xml: &str) -> Option<String> {
     let start = xml.find("<version>")? + "<version>".len();
     let end = start + xml[start..].find("</version>")?;
     let v = xml[start..end].trim();
@@ -243,7 +253,12 @@ pub fn lazer_running(_install: &Path) -> bool {
     }
 }
 
-#[cfg(not(any(windows, target_os = "macos")))]
+#[cfg(target_os = "linux")]
+pub fn lazer_running(_install: &Path) -> bool {
+    crate::lazer_linux::running()
+}
+
+#[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
 pub fn lazer_running(_install: &Path) -> bool {
     true
 }

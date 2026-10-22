@@ -1,0 +1,90 @@
+name: Linux
+
+# The Linux app (AppImage and .deb), built on GitHub's Ubuntu 22.04 (its older glibc runs on most
+# distributions). Started by hand (scripts/linux-build.mjs).
+#
+# The import is also tested for real, in a job of its own: osu!lazer's AppImage (from GitHub,
+# ppy/osu) goes into ~/Applications, Fumen unpacks it as it would on a player's PC, and the importer
+# runs lazer's own import into a fresh library, read back by Fumen's reader
+# (lazer_import::tests::importer_on_fresh_library).
+on:
+  workflow_dispatch:
+
+# the workflow only reads the repository (and lazer's public release)
+permissions:
+  contents: read
+
+concurrency:
+  group: linux-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # what Tauri needs to build on Linux (WebKitGTK and the bundlers' tools)
+  APT: libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev patchelf file
+
+jobs:
+  lazer:
+    name: Import into lazer
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - run: sudo apt-get update && sudo apt-get install -y $APT
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          dotnet-version: 8.0.x
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          workspaces: src-tauri -> target
+          key: lazer
+      - run: npm ci
+      - run: node scripts/build-sidecar.mjs --target x86_64-unknown-linux-gnu
+      - name: osu!lazer (its AppImage on GitHub)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p ~/Applications
+          gh release download --repo ppy/osu --pattern 'osu.AppImage' --output ~/Applications/osu.AppImage
+          chmod +x ~/Applications/osu.AppImage
+      - name: Import into lazer, read back
+        run: |
+          npx vite build
+          cargo test --manifest-path src-tauri/Cargo.toml --config 'profile.dev.package."*".opt-level=0' --lib lazer_import::tests::importer_on_fresh_library -- --ignored --exact --nocapture
+
+  build:
+    name: AppImage and .deb
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - run: sudo apt-get update && sudo apt-get install -y $APT
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          dotnet-version: 8.0.x
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          workspaces: src-tauri -> target
+          key: linux
+      - run: npm ci
+      - run: node scripts/build-sidecar.mjs --target x86_64-unknown-linux-gnu
+      - run: npx tauri build
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: fumen-linux
+          path: |
+            src-tauri/target/release/bundle/appimage/*.AppImage
+            src-tauri/target/release/bundle/deb/*.deb
+          if-no-files-found: error
+          retention-days: 14

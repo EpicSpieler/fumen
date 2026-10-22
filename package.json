@@ -17,6 +17,7 @@
     "verify-lazer": "node scripts/verify-lazer.mjs",
     "release": "node scripts/release.mjs",
     "mac": "node scripts/mac-build.mjs",
+    "linux": "node scripts/linux-build.mjs",
     "test": "vitest run && cargo test --manifest-path src-tauri/Cargo.toml",
     "test:ui": "vitest run"
   },

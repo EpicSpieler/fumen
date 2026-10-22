@@ -633,8 +633,13 @@ through the overlay server; a small visualizer in the player bar. Storyboards: n
   - Skins: every skin on the same moment of a chart, two side by side, and mixing pieces of
     several skins into an `.osk` (osu! / mania / taiko / catch parts per skin)
   - Everywhere: Linux and macOS builds (Tauri, the .NET sidecar and lazer all run there; the
-    importer's host folder differs); a read-only view of goals, skills and pools on
-    fumen.dertesti.dev, synced from the app on request
+    importer's host folder differs). Linux started 2026-10-22 for a tester: AppImage and .deb built
+    on GitHub (`npm run linux`, linux.yml, import tested against lazer's AppImage), downloads at
+    /download/linux and /download/linux-deb, not on the homepage yet. lazer found as an AppImage
+    (unpacked once into ~/.cache/dev.fumen.app), the Flatpak or a package's folder (lazer_linux.rs);
+    audio plays from memory there (GStreamer can't read fumen://). No self-update on Linux yet.
+    Also: a read-only view of goals, skills and pools on fumen.dertesti.dev, synced from the app on
+    request
   - Mapping lens: difficulty spikes along a chart, a pattern heatmap per section, a spread check
     across a set's difficulties; the analyser's leftovers (Azusa's marathon correction, Roxy /
     Mixed estimators — v0.2)

@@ -14,6 +14,7 @@ mod goals;
 mod hitsounds;
 mod lazer;
 mod lazer_import;
+mod lazer_linux;
 mod matches;
 mod mirror_search;
 mod mma;

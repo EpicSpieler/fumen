@@ -11,6 +11,9 @@ pub fn default_lazer_dir() -> Option<PathBuf> {
     if cfg!(target_os = "macos") {
         return std::env::var_os("HOME").map(|home| PathBuf::from(home).join("Library").join("Application Support").join("osu"));
     }
+    if cfg!(target_os = "linux") {
+        return crate::lazer_linux::data_dir();
+    }
     std::env::var_os("APPDATA").map(|appdata| PathBuf::from(appdata).join("osu"))
 }
 

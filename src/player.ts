@@ -8,7 +8,7 @@
  * and times shown in the bar are at that rate. The other mods (lib/mods) work the same way: picked
  * once, they stay on for whatever plays.
  */
-import { fileUrl, thumbUrl } from "./lib/api";
+import { fileUrl, mediaFromMemory, thumbUrl } from "./lib/api";
 import { displayArtist, displayTitle, duration, esc, fixed } from "./lib/format";
 import { go } from "./lib/router";
 import { Emitter, events, setPrefs, store } from "./lib/store";
@@ -177,7 +177,6 @@ class Player {
       a.pause();
       if (this.onMeta) a.removeEventListener("loadedmetadata", this.onMeta);
       a.loop = store.prefs.repeat === "one";
-      a.src = url;
       const job = this.swapJob;
       const start = async () => {
         a.removeEventListener("loadedmetadata", start);
@@ -201,7 +200,25 @@ class Player {
       };
       this.onMeta = start;
       a.addEventListener("loadedmetadata", start);
-      a.load();
+      if (!mediaFromMemory) {
+        a.src = url;
+        a.load();
+        return;
+      }
+      fetch(url)
+        .then((r) => (r.ok ? r.blob() : Promise.reject(new Error(String(r.status)))))
+        .then((blob) => {
+          if (job !== this.swapJob) return;
+          if (a.src.startsWith("blob:")) URL.revokeObjectURL(a.src);
+          a.src = URL.createObjectURL(blob);
+          a.load();
+        })
+        .catch((e) => {
+          if (job !== this.swapJob) return;
+          console.warn("[player] audio", e);
+          toast(t("This song's audio file couldn't be played."), { kind: "danger" });
+          this.stop();
+        });
     });
     return true;
   }
@@ -383,6 +400,7 @@ class Player {
     this.pending = null;
     this.holdPaused = false;
     this.audio.pause();
+    if (this.audio.src.startsWith("blob:")) URL.revokeObjectURL(this.audio.src);
     this.audio.removeAttribute("src");
     this.audio.load();
     this.now = null;
