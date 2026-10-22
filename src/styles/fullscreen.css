@@ -319,3 +319,22 @@
   .fs-field { grid-template-columns: minmax(0, 1fr) minmax(300px, 360px); gap: 24px; padding: 0 24px 0 12px; }
   .fs-stat b { font-size: 24px; }
 }
+
+/* the song's volume, in both views */
+.fs-volume { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.fs-vol { width: 110px; margin: 0; }
+
+/* the combo, in the playfield's corner like lazer's */
+.fs-combo {
+  position: absolute;
+  left: 4px;
+  bottom: 6px;
+  font-size: 34px;
+  font-weight: 800;
+  line-height: 1;
+  color: #fff;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, .55);
+  transform-origin: left bottom;
+  pointer-events: none;
+}
+.fs-combo:empty { display: none; }

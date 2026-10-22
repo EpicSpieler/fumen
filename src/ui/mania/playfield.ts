@@ -70,6 +70,19 @@ export class ManiaPlayfield {
   /** the chart as built (a replay with Hold Off shows it with notes for holds) */
   private readonly chart: ChartData;
   private mods: ModState | null = null;
+  private comboCache: Combo | null = null;
+
+  /** Autoplay's combo: notes, and a hold's head and tail, add to it. */
+  combo(): Combo {
+    if (this.comboCache) return this.comboCache;
+    const n = this.data.notes;
+    const times: number[] = [];
+    for (let i = 0; i < n.length; i += 3) {
+      times.push(n[i]);
+      if (n[i + 2] > 0) times.push(n[i] + n[i + 2]);
+    }
+    return (this.comboCache = new Combo(times));
+  }
   /** the notes, drawn apart to be covered */
   private layer: HTMLCanvasElement | null = null;
 
@@ -96,6 +109,7 @@ export class ManiaPlayfield {
     this.auto = play ?? this.autoplay;
     this.data = play && notes && notes !== this.chart.notes ? { ...this.chart, notes: Array.from(notes) } : this.chart;
     this.maxHold = ManiaPlayfield.longest(this.data.notes);
+    this.comboCache = null;
     // the combo the mods follow is the chart's
     if (this.mods) {
       const cover = this.mods.cover;
@@ -119,14 +133,7 @@ export class ManiaPlayfield {
     }
     let state = this.mods;
     if (!state) {
-      // notes, and a hold's head and tail, add to the combo
-      const n = this.data.notes;
-      const times: number[] = [];
-      for (let i = 0; i < n.length; i += 3) {
-        times.push(n[i]);
-        if (n[i + 2] > 0) times.push(n[i] + n[i + 2]);
-      }
-      const combo = new Combo(times);
+      const combo = this.combo();
       state = { combo, breaks: breakPeriods(this.data, combo), cover: null, light: null };
     }
     state.cover = cover;

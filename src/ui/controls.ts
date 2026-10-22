@@ -104,6 +104,8 @@ export interface MenuItem {
   keepOpen?: boolean;
   /** Items sharing a radio name check exclusively (with keepOpen). */
   radio?: string;
+  /** Stays in view whatever is searched for (menus with `search`). */
+  always?: boolean;
 }
 export type MenuEntry = MenuItem | { group: string } | "sep";
 
@@ -125,12 +127,22 @@ export function closeMenus(instant = false): void {
 export function openMenu(
   anchor: Element | { x: number; y: number },
   entries: MenuEntry[],
-  opts: { minWidth?: number; className?: string; onClose?: () => void; header?: HTMLElement } = {},
+  opts: { minWidth?: number; className?: string; onClose?: () => void; header?: HTMLElement; search?: string } = {},
 ): () => void {
   closeMenus(true);
   const el = document.createElement("div");
   el.className = `menu${opts.className ? " " + opts.className : ""}`;
   el.setAttribute("role", "menu");
+  let search: HTMLInputElement | null = null;
+  if (opts.search) {
+    const box = document.createElement("label");
+    box.className = "menu-search";
+    box.innerHTML = `${icon("search")}<input type="search" spellcheck="false" />`;
+    search = box.querySelector("input")!;
+    search.placeholder = opts.search;
+    search.setAttribute("aria-label", opts.search);
+    el.appendChild(box);
+  }
   if (opts.header) el.appendChild(opts.header);
   const items: { el: HTMLElement; item: MenuItem }[] = [];
   let k = 0;
@@ -205,6 +217,14 @@ export function openMenu(
     items.forEach((x, j) => x.el.classList.toggle("hl", j === i));
     idx = i;
   };
+  // searching hides what doesn't match and picks the first that does
+  search?.addEventListener("input", () => {
+    const q = search!.value.trim().toLowerCase();
+    for (const x of items) x.el.hidden = !!q && !x.item.always && !x.item.label.toLowerCase().includes(q);
+    const first = items.findIndex((x) => !x.el.hidden && !x.item.disabled && !x.item.always);
+    highlight(first);
+    if (first >= 0) items[first].el.scrollIntoView({ block: "nearest" });
+  });
   if (idx >= 0) {
     highlight(idx);
     items[idx].el.scrollIntoView({ block: "nearest" });
@@ -227,11 +247,11 @@ export function openMenu(
       let i = idx;
       for (let s = 0; s < n; s++) {
         i = (i + (e.key === "ArrowDown" ? 1 : -1) + n) % n;
-        if (!items[i].item.disabled) break;
+        if (!items[i].item.disabled && !items[i].el.hidden) break;
       }
       highlight(i);
       items[i].el.scrollIntoView({ block: "nearest" });
-    } else if (e.key === "Enter" || e.key === " ") {
+    } else if (e.key === "Enter" || (e.key === " " && e.target !== search)) {
       const it = items[idx];
       if (it && !it.item.disabled) {
         e.preventDefault();
@@ -280,6 +300,7 @@ export function openMenu(
     setTimeout(() => el.remove(), 150);
   }
   openMenuState = { el, anchor: anchor instanceof Element ? anchor : null, close };
+  search?.focus({ preventScroll: true });
   return close;
 }
 

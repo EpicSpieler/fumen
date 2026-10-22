@@ -104,6 +104,8 @@ export class OsuReplay {
   readonly windows: number[];
   /** every circle's, slider head's and spinner's judgement, by time */
   readonly judgements: Judgement[];
+  /** sliders' ticks, repeats and ends for the combo: [time, 1 up / 0 nothing / −1 broken] */
+  readonly nestedCombo: [number, number][] = [];
   readonly results: readonly Result[] = [GREAT, OK, MEH, MISS];
   /** the score's rate */
   readonly rate: number;
@@ -182,6 +184,8 @@ export class OsuReplay {
     const judgeNested = (x: Nested, at: number, hit: boolean) => {
       x.judgedAt = at;
       x.hit = hit;
+      // a missed end leaves the combo be (SliderTailHit: IgnoreMiss); a missed tick or repeat breaks it
+      this.nestedCombo.push([at, hit ? 1 : x.kind === 2 ? 0 : -1]);
       if (x.kind === 2) {
         parts.push({ time: at, score: hit ? TAIL_SCORE : 0, max: TAIL_SCORE });
         if (hit) tailHit++;

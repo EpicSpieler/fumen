@@ -1,6 +1,7 @@
 /* ---------- Browse: the mirrors' search ---------- */
 .browse-view { container-type: inline-size; }
-.br-head-tools { display: flex; align-items: center; gap: 6px; flex: none; }
+/* filters and sort, beside the rulesets */
+.br-refine { display: flex; align-items: center; gap: 6px; flex: none; padding-left: 10px; border-left: 1px solid var(--stroke-dim); }
 
 .br-toolbar { flex-wrap: wrap; row-gap: 8px; }
 .br-search {

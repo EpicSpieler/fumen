@@ -185,13 +185,20 @@ export class TaikoPlayfield {
     this.hidden = mods.includes("HD");
     if (!mods.includes("FL")) this.light = null;
     else if (!this.light) {
-      // hits add to the combo (a strong one once); drum roll ticks and swells don't
-      const ch = this.chart;
-      const times: number[] = [];
-      for (let i = 0; i < ch.n; i++) if (ch.kind[i] === CENTRE || ch.kind[i] === RIM) times.push(ch.time[i]);
-      const combo = new Combo(times);
+      const combo = this.combo();
       this.light = new FlashlightSize(FLASHLIGHT, combo, breakPeriods(this.data, combo));
     }
+  }
+
+  private comboCache: Combo | null = null;
+
+  /** Autoplay's combo: hits add to it (a strong one once); drum roll ticks and swells don't. */
+  combo(): Combo {
+    if (this.comboCache) return this.comboCache;
+    const ch = this.chart;
+    const times: number[] = [];
+    for (let i = 0; i < ch.n; i++) if (ch.kind[i] === CENTRE || ch.kind[i] === RIM) times.push(ch.time[i]);
+    return (this.comboCache = new Combo(times));
   }
 
   draw(t: number, rate: number): void {

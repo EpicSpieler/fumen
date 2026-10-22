@@ -158,7 +158,6 @@ export class BrowseView {
           <h1 class="view-title">${t("Browse")}</h1>
           <div class="view-sub">${t("osu!'s beatmaps, found through the mirrors. What you add goes into osu!lazer.")}</div>
         </div>
-        <div class="br-head-tools"></div>
       </header>
       <div class="lib-toolbar br-toolbar">
         <label class="br-search">${icon("search")}<input type="search" spellcheck="false" placeholder="${t("Title, artist, mapper or tags")}" aria-label="${t("Search the mirrors")}" /></label>
@@ -168,8 +167,9 @@ export class BrowseView {
         <div class="lib-keys" role="group" aria-label="${t("Keys")}">
           ${KEY_COUNTS.map((k) => `<button type="button" data-keys="${k}">${k}K</button>`).join("")}
         </div>
-        <span class="lib-toolbar-gap"></span>
-        <button class="btn btn-ghost lib-filters-btn br-filters-btn" type="button">${icon("sliders")}<span>${t("Filters")}</span></button>
+        <div class="br-refine">
+          <button class="btn btn-ghost lib-filters-btn br-filters-btn" type="button">${icon("sliders")}<span>${t("Filters")}</span></button>
+        </div>
       </div>
       <div class="br-lazer" hidden></div>
       <div class="br-summary"></div>
@@ -179,7 +179,8 @@ export class BrowseView {
       this.q.sort = v;
       this.search();
     }, { prefix: t("Sort"), tip: t("Sort the sets by") });
-    this.el.querySelector(".br-head-tools")!.appendChild(sort.el);
+    // what narrows and orders the search sits right with it
+    this.el.querySelector(".br-refine")!.appendChild(sort.el);
     attachSegIndicator(this.el.querySelector(".lib-modes")!);
     this.syncControls();
     this.bind();

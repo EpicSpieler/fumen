@@ -164,4 +164,12 @@ export const chart: Record<string, string> = {
   "Columns flipped": "Spalten gespiegelt",
   "Fruits flipped left to right": "Früchte links-rechts gespiegelt",
   "Flipped left to right": "Links-rechts gespiegelt",
+  "Daycore · {rate}×": "Daycore · {rate}×",
+  "Nightcore · {rate}×": "Nightcore · {rate}×",
+  "The pitch goes up and down with the speed, like Nightcore and Daycore": "Die Tonhöhe geht mit der Geschwindigkeit hoch und runter, wie bei Nightcore und Daycore",
+  Pitch: "Tonhöhe",
+  "only for {ruleset}": "nur für {ruleset}",
+  "Only for {ruleset}": "Nur für {ruleset}",
+  "its own skin": "eigener Skin",
+  "Search skins": "Skins durchsuchen",
 };

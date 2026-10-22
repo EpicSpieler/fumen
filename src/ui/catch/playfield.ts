@@ -156,13 +156,20 @@ export class CatchPlayfield {
     this.hidden = mods.includes("HD");
     if (!mods.includes("FL")) this.light = null;
     else if (!this.light) {
-      // fruits and droplets add to the combo; tiny droplets and bananas don't
-      const ch = this.chart;
-      const times: number[] = [];
-      for (let i = 0; i < ch.n; i++) if (ch.kind[i] === FRUIT || ch.kind[i] === DROPLET) times.push(ch.time[i]);
-      const combo = new Combo(times);
+      const combo = this.combo();
       this.light = new FlashlightSize(FLASHLIGHT, combo, breakPeriods(this.data, combo));
     }
+  }
+
+  private comboCache: Combo | null = null;
+
+  /** Autoplay's combo: fruits and droplets add to it; tiny droplets and bananas don't. */
+  combo(): Combo {
+    if (this.comboCache) return this.comboCache;
+    const ch = this.chart;
+    const times: number[] = [];
+    for (let i = 0; i < ch.n; i++) if (ch.kind[i] === FRUIT || ch.kind[i] === DROPLET) times.push(ch.time[i]);
+    return (this.comboCache = new Combo(times));
   }
 
   /** PalpableCatchHitObject.GetComboColour (IndexInBeatmap + 1); bananas have their own. */

@@ -45,6 +45,28 @@ export class Combo {
   }
 }
 
+/** A replay's combo over time: `events` are [time, 1 up / 0 nothing / −1 broken]. */
+export class ComboLine {
+  private readonly times: Float64Array;
+  private readonly values: Uint32Array;
+
+  constructor(events: readonly (readonly [number, number])[]) {
+    const sorted = [...events].sort((a, b) => a[0] - b[0]);
+    this.times = Float64Array.from(sorted.map((e) => e[0]));
+    this.values = new Uint32Array(sorted.length);
+    let c = 0;
+    sorted.forEach(([, d], i) => {
+      c = d > 0 ? c + 1 : d < 0 ? 0 : c;
+      this.values[i] = c;
+    });
+  }
+
+  at(t: number): number {
+    const i = upper(this.times, t);
+    return i ? this.values[i - 1] : 0;
+  }
+}
+
 /**
  * BreakTracker: lazer's break time, as [start, end) pairs — before gameplay starts, the beatmap's
  * breaks long enough to count (ending a fade early), and once everything is judged.

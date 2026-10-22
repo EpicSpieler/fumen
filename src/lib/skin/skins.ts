@@ -29,9 +29,11 @@ export function loadSkinList(refresh = false): Promise<SkinList> {
 }
 
 /** The skin the playfield uses: Fumen's own pick, else lazer's, else argon (lazer's default). */
-export function currentSkin(l: SkinList | null): SkinEntry {
+export function currentSkin(l: SkinList | null, mode?: number): SkinEntry {
   const skins = l?.skins ?? [];
-  const want = store.prefs.playfieldSkin ?? l?.selected ?? null;
+  // the ruleset's own, the one picked for every ruleset, lazer's
+  const own = mode === undefined ? undefined : store.prefs.modeSkins?.[mode];
+  const want = (own && skins.some((s) => s.id === own) ? own : null) ?? store.prefs.playfieldSkin ?? l?.selected ?? null;
   return skins.find((s) => s.id === want) ?? skins.find((s) => s.id === l?.selected) ?? skins.find((s) => s.id === ARGON_ID) ?? ARGON;
 }
 

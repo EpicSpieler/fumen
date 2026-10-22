@@ -23,6 +23,7 @@ import type { Mod } from "../lib/mods";
 import { player } from "../player";
 import { openMenu, toast, type MenuEntry } from "../ui/controls";
 import { icon } from "../ui/icons";
+import { ComboLine } from "../ui/flashlight";
 import { fitCanvas } from "../ui/playfield";
 import { CatchPlayfield } from "../ui/catch/playfield";
 import { ManiaPlayfield } from "../ui/mania/playfield";
@@ -62,6 +63,8 @@ export class ReplayPanel {
   private asking = false;
   private playing: Playing | null = null;
   private replay: ManiaReplay | TaikoReplay | OsuReplay | CatchReplay | null = null;
+  /** the replay's combo (misses break it) */
+  private combo: ComboLine | null = null;
   private misses: number[] = [];
   /** last text per field, so frames only touch the DOM on changes */
   private shown = new Map<string, string>();
@@ -147,6 +150,11 @@ export class ReplayPanel {
     const before = this.misses.filter((m) => m <= time).length;
     this.set("misses", this.misses.length ? t("{shown} of {n}", { shown: num(before), n: num(this.misses.length) }) : t("none"));
     this.drawErrors(r, time);
+  }
+
+  /** The replay's combo at `time`; null while autoplay plays. */
+  comboAt(time: number): number | null {
+    return this.combo ? this.combo.at(time) : null;
   }
 
   /** Handles a click in the panel; true when it was one. */
@@ -299,6 +307,9 @@ export class ReplayPanel {
       this.replay = replay;
     } else return;
     this.misses = this.replay.judgements.filter((j) => j.result === MISS).map((j) => j.time);
+    const events: [number, number][] = this.replay.judgements.map((j) => [j.time, j.result === MISS ? -1 : 1]);
+    if (this.replay instanceof OsuReplay) events.push(...this.replay.nestedCombo);
+    this.combo = new ComboLine(events);
     this.shown.clear();
     this.renderMarks();
     this.render();
@@ -309,6 +320,7 @@ export class ReplayPanel {
     this.job++;
     this.playing = null;
     this.replay = null;
+    this.combo = null;
     this.misses = [];
     const field = this.field();
     if (field instanceof ManiaPlayfield || field instanceof TaikoPlayfield || field instanceof OsuPlayfield || field instanceof CatchPlayfield) field.setPlay(null);

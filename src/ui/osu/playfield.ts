@@ -329,23 +329,31 @@ export class OsuPlayfield {
     this.hidden = mods.includes("HD");
     if (!mods.includes("FL")) this.light = null;
     else if (!this.light) {
-      // every judgement adds to the combo: circles, a slider's head, ticks, repeats and tail, spinners
       const ch = this.chart;
-      const times: number[] = [];
       const sliders: number[] = [];
-      for (let i = 0; i < ch.n; i++) {
-        if (ch.kind[i] === CIRCLE) times.push(ch.time[i]);
-        else if (ch.kind[i] === SPINNER) times.push(ch.end[i]);
-        else {
-          const s = ch.slider(i);
-          times.push(ch.time[i], ...s.tickTime, ch.end[i]);
-          for (let k = 1; k < s.spans; k++) times.push(ch.time[i] + k * s.spanDuration);
-          sliders.push(ch.time[i], ch.end[i]);
-        }
-      }
-      const combo = new Combo(times);
+      for (let i = 0; i < ch.n; i++) if (ch.kind[i] === SLIDER) sliders.push(ch.time[i], ch.end[i]);
+      const combo = this.combo();
       this.light = { size: new FlashlightSize(FLASHLIGHT, combo, breakPeriods(this.data, combo)), sliders };
     }
+  }
+
+  private comboCache: Combo | null = null;
+
+  /** Autoplay's combo: every judgement adds to it (circles, a slider's head, ticks, repeats and tail, spinners). */
+  combo(): Combo {
+    if (this.comboCache) return this.comboCache;
+    const ch = this.chart;
+    const times: number[] = [];
+    for (let i = 0; i < ch.n; i++) {
+      if (ch.kind[i] === CIRCLE) times.push(ch.time[i]);
+      else if (ch.kind[i] === SPINNER) times.push(ch.end[i]);
+      else {
+        const s = ch.slider(i);
+        times.push(ch.time[i], ...s.tickTime, ch.end[i]);
+        for (let k = 1; k < s.spans; k++) times.push(ch.time[i] + k * s.spanDuration);
+      }
+    }
+    return (this.comboCache = new Combo(times));
   }
 
   /** OsuModHidden's fade-out of a circle (and the slider pieces that go with its head). */

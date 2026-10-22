@@ -19,13 +19,13 @@ import { thumbUrl } from "../lib/api";
 import { bpmAt, loadChart, lowerBound, PATTERNS, SCROLL_SPEED_MAX, SCROLL_SPEED_MIN, scrollSpeed, scrollTime, scrollUp } from "../lib/charts";
 import { startAnalyser } from "../lib/eq";
 import { hitsounds } from "../lib/hitsounds";
-import { bpm, displayArtist, displayTitle, duration, esc, fixed, keysOrMode, num, srChip, stars } from "../lib/format";
+import { bpm, displayArtist, displayTitle, duration, esc, fixed, keysOrMode, MODE_LABEL, num, srChip, stars } from "../lib/format";
 import { currentSkin, loadSkin, loadSkinList, loadSkinSounds } from "../lib/skin/skins";
 import { activeMods, adjustDifficulty, chartMods, chartModsKey, MOD_NAMES, modEffect, modsFor, starsKnown, toggleMod, type Mod } from "../lib/mods";
 import { setPrefs, store } from "../lib/store";
 import type { ChartData, ReplayEntry, SkinList, VisStyle } from "../lib/types";
 import type { Section } from "../lib/practice";
-import { dragSlider, player } from "../player";
+import { bindVolume, dragSlider, player, volumeHtml } from "../player";
 import { attachSegIndicator, createSelect, openMenu, reduceMotion, type MenuEntry, type SelectHandle } from "../ui/controls";
 import { icon } from "../ui/icons";
 import { ArgonRenderer } from "../ui/mania/argon";
@@ -87,6 +87,8 @@ class Fullscreen {
   private field: ManiaPlayfield | TaikoPlayfield | OsuPlayfield | CatchPlayfield | null = null;
   /** lazer's skins (loaded once per import) */
   private skins: SkinList | null = null;
+  /** the combo shown */
+  private combo = -1;
   /** bumped on every skin / chart change, so late renderers are dropped */
   private skinJob = 0;
   private graphDrawn = "";
@@ -188,6 +190,7 @@ class Fullscreen {
         <section class="fs-field">
           <div class="fs-stage">
             <canvas class="fs-pf" aria-label="${t("Playfield")}"></canvas>
+            <div class="fs-combo num" aria-hidden="true"></div>
             <div class="fs-empty" hidden></div>
           </div>
           <aside class="fs-info">
@@ -255,11 +258,12 @@ class Fullscreen {
             <button class="pb-play fs-play" type="button" aria-label="${t("Play")}"></button>
             <button class="pb-btn pb-skip pb-next fs-next" type="button" data-tip="${t("Next")}" aria-label="${t("Next")}">${icon("skip-forward")}</button>
           </div>
-          <span></span>
+          <div class="fs-volume">${volumeHtml("fs")}</div>
         </div>
       </footer>`;
     document.body.appendChild(el);
     this.el = el;
+    bindVolume(el.querySelector<HTMLButtonElement>(".fs-mute")!, el.querySelector<HTMLElement>(".fs-vol")!);
     this.practice = new PracticePanel(el, () => this.kick());
     this.replays = new ReplayPanel(el, () => this.field, () => this.kick());
     attachSegIndicator(el.querySelector(".fs-modes")!);
@@ -492,7 +496,7 @@ class Fullscreen {
     // cached until the next import
     this.skins = await loadSkinList().catch(() => this.skins);
     this.renderSkin();
-    const entry = currentSkin(this.skins);
+    const entry = currentSkin(this.skins, d.mode);
     const list = this.skins ?? NO_SKINS;
     try {
       const skin = await loadSkin(entry, list);
@@ -508,20 +512,60 @@ class Fullscreen {
     }
   }
 
+  /** The ruleset on the playfield, which can have a skin of its own (prefs modeSkins). */
+  private skinMode(): number | undefined {
+    const np = player.now;
+    return this.data?.mode ?? (np ? store.snap?.maps[np.map]?.mode : undefined);
+  }
+
+  /** Whether the ruleset on the playfield has a skin of its own. */
+  private ownSkin(): boolean {
+    const mode = this.skinMode();
+    return mode !== undefined && !!store.prefs.modeSkins[mode];
+  }
+
   private renderSkin(): void {
     const el = this.el;
     if (!el) return;
-    const skin = currentSkin(this.skins);
+    const mode = this.skinMode();
+    const skin = currentSkin(this.skins, mode);
     const lazer = this.skins?.skins.find((s) => s.id === this.skins?.selected);
     el.querySelector(".fs-skin-name")!.textContent = skin.name;
     const sub = el.querySelector(".fs-skin-sub")!;
-    if (!lazer || skin.id === lazer.id) sub.textContent = lazer ? t("from lazer") : "";
-    else sub.innerHTML = `<button class="fs-speed-reset fs-skin-reset" type="button">${t("back to lazer's {name}", { name: esc(lazer.name) })}</button>`;
+    const own = this.ownSkin() && mode !== undefined ? t("only for {ruleset}", { ruleset: MODE_LABEL[mode as 0] }) : "";
+    if (!lazer || skin.id === lazer.id) sub.textContent = own || (lazer ? t("from lazer") : "");
+    else sub.innerHTML = `${own ? `${esc(own)} · ` : ""}<button class="fs-speed-reset fs-skin-reset" type="button">${t("back to lazer's {name}", { name: esc(lazer.name) })}</button>`;
   }
 
+  /** Picks the playfield's skin: for this ruleset when it has its own, else for every ruleset
+   * (null: lazer's again). */
   private async setSkin(id: string | null): Promise<void> {
-    // picking lazer's own skin means following lazer again
-    setPrefs({ playfieldSkin: id === this.skins?.selected ? null : id });
+    const mode = this.skinMode();
+    const modeSkins = { ...store.prefs.modeSkins };
+    if (this.ownSkin() && mode !== undefined) {
+      if (id === null) delete modeSkins[mode];
+      else modeSkins[mode] = id;
+      setPrefs({ modeSkins });
+    } else {
+      // picking lazer's own skin means following lazer again
+      setPrefs({ playfieldSkin: id === this.skins?.selected ? null : id });
+    }
+    await this.applySkin();
+  }
+
+  /** Gives this ruleset a skin of its own (the one it shows now), or lets it follow the rest again. */
+  private async setOwnSkin(on: boolean): Promise<void> {
+    const mode = this.skinMode();
+    if (mode === undefined) return;
+    const modeSkins = { ...store.prefs.modeSkins };
+    if (on) modeSkins[mode] = currentSkin(this.skins, mode).id;
+    else delete modeSkins[mode];
+    setPrefs({ modeSkins });
+    await this.applySkin();
+  }
+
+  /** Draws (and sounds) the playfield in the skin the settings now name. */
+  private async applySkin(): Promise<void> {
     this.renderSkin();
     const field = this.field;
     if (!field) return;
@@ -549,7 +593,7 @@ class Fullscreen {
   private async loadSounds(): Promise<void> {
     if (!this.field) return;
     const id = this.mapId;
-    const entry = currentSkin(this.skins);
+    const entry = currentSkin(this.skins, this.skinMode());
     const chain = await loadSkinSounds(entry, this.skins ?? NO_SKINS).catch((e) => {
       console.warn("[hitsounds] skin", entry.name, e);
       return null;
@@ -582,7 +626,8 @@ class Fullscreen {
       openMenu(anchor, [{ group: "Skins" }, { label: t("Import your lazer library to see its skins"), disabled: true }], { minWidth: 300 });
       return;
     }
-    const cur = currentSkin(list).id;
+    const mode = this.skinMode();
+    const cur = currentSkin(list, mode).id;
     // like lazer's list: its own skins first, then yours
     const ordered = [...list.skins.filter((s) => s.protected), ...list.skins.filter((s) => !s.protected)];
     const entries: MenuEntry[] = [{ group: t("osu!lazer skins") }];
@@ -594,7 +639,21 @@ class Fullscreen {
         action: () => void this.setSkin(s.id),
       });
     }
-    openMenu(anchor, entries, { minWidth: 320 });
+    if (mode !== undefined) {
+      entries.push("sep", {
+        label: t("Only for {ruleset}", { ruleset: MODE_LABEL[mode as 0] }),
+        hint: t("its own skin"),
+        checked: this.ownSkin(),
+        keepOpen: true,
+        always: true,
+        action: () => {
+          const on = !this.ownSkin();
+          void this.setOwnSkin(on);
+          return on;
+        },
+      });
+    }
+    openMenu(anchor, entries, { minWidth: 320, search: t("Search skins") });
   }
 
   /** Message in place of the playfield: a ruleset it doesn't show (with a way to pick a difficulty it does), loading, errors. */
@@ -605,6 +664,7 @@ class Fullscreen {
     const show = mode !== null || !!text;
     box.hidden = !show;
     canvas.style.visibility = show ? "hidden" : "";
+    el.querySelector<HTMLElement>(".fs-combo")!.style.visibility = show ? "hidden" : "";
     // the numbers beside it belong to a chart; without one they'd be the previous chart's
     const info = el.querySelector<HTMLElement>(".fs-info")!;
     info.classList.toggle("dim", show && mode === null);
@@ -773,6 +833,15 @@ class Fullscreen {
     }, 3000);
   }
 
+  /** The combo in the playfield's corner, bumping as it grows. */
+  private showCombo(combo: number): void {
+    if (combo === this.combo) return;
+    const box = this.el!.querySelector<HTMLElement>(".fs-combo")!;
+    box.textContent = `${combo}×`;
+    if (combo > this.combo && !reduceMotion()) box.animate([{ transform: "scale(1.14)" }, { transform: "scale(1)" }], { duration: 140, easing: "ease-out" });
+    this.combo = combo;
+  }
+
   private drawField(): void {
     const el = this.el!;
     const d = this.data;
@@ -785,6 +854,7 @@ class Fullscreen {
     if (!(field instanceof ManiaPlayfield)) field.draw(time, r);
     else field.draw(time, scrollTime(scrollSpeed().speed) * r, scrollUp(), r);
     this.replays.frame(time);
+    this.showCombo(this.replays.comboAt(time) ?? field.combo().at(time));
 
     // live numbers
     const a = d.analysis;

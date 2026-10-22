@@ -475,3 +475,36 @@ body.has-player .toast-host { bottom: calc(var(--player-h) + 12px); }
   80% { transform: translateX(4px); }
 }
 @keyframes unfold-down { from { opacity: 0; transform: scaleY(.4); transform-origin: top; } }
+
+/* a menu's search field (long lists: skins) */
+.menu-search {
+  position: sticky;
+  top: -5px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  margin: -5px -5px 4px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--stroke-dim);
+  border-radius: var(--r-xl) var(--r-xl) 0 0;
+  background: var(--bg-elevated);
+  color: var(--t3);
+}
+.menu-search .ic { width: 15px; height: 15px; flex: none; }
+/* the strip is the field: the input inside stays bare (as in Browse's search) */
+.menu-search input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: var(--t1);
+  font-size: var(--fs-13);
+}
+.menu-search input::-webkit-search-cancel-button { -webkit-appearance: none; }
+.menu-item[hidden] { display: none; }
