@@ -18,25 +18,30 @@ function boxBlur(d: Uint8ClampedArray, w: number, h: number, r: number, horizont
   const len = horizontal ? w : h;
   const lines = horizontal ? h : w;
   const at = (line: number, i: number) => (horizontal ? line * w + i : i * w + line) * 4;
+  const n = r * 2 + 1;
+  const clamp = (j: number) => Math.min(len - 1, Math.max(0, j));
   for (let line = 0; line < lines; line++) {
+    // a running sum over the window (edges repeated): the same work for any radius
+    let r0 = 0;
+    let g0 = 0;
+    let b0 = 0;
+    for (let k = -r; k <= r; k++) {
+      const p = at(line, clamp(k));
+      r0 += src[p];
+      g0 += src[p + 1];
+      b0 += src[p + 2];
+    }
     for (let i = 0; i < len; i++) {
-      let r0 = 0;
-      let g0 = 0;
-      let b0 = 0;
-      let n = 0;
-      for (let k = -r; k <= r; k++) {
-        const j = Math.min(len - 1, Math.max(0, i + k));
-        const p = at(line, j);
-        r0 += src[p];
-        g0 += src[p + 1];
-        b0 += src[p + 2];
-        n++;
-      }
       const p = at(line, i);
       d[p] = r0 / n;
       d[p + 1] = g0 / n;
       d[p + 2] = b0 / n;
       d[p + 3] = 255;
+      const out = at(line, clamp(i - r));
+      const inn = at(line, clamp(i + r + 1));
+      r0 += src[inn] - src[out];
+      g0 += src[inn + 1] - src[out + 1];
+      b0 += src[inn + 2] - src[out + 2];
     }
   }
 }
@@ -63,17 +68,31 @@ export async function softArt(url: string, o: { saturate: number; brightness: nu
   if (!ctx) return null;
   const s = Math.max(W / img.naturalWidth, H / img.naturalHeight);
   ctx.drawImage(img, (W - img.naturalWidth * s) / 2, (H - img.naturalHeight * s) / 2, img.naturalWidth * s, img.naturalHeight * s);
+  return soften(ctx, W, H, 2, o) ? c : null;
+}
+
+/** Whether canvases take CSS filters (ctx.filter); WebKitGTK's may not. */
+export const canvasFilters = typeof CanvasRenderingContext2D !== "undefined" && "filter" in CanvasRenderingContext2D.prototype;
+
+/**
+ * Blurs the w × h picture in `ctx` by about `radius` pixels (a gaussian's sigma) and applies CSS's
+ * `saturate()` / `brightness()`, by hand. False when its pixels can't be read.
+ */
+export function soften(ctx: CanvasRenderingContext2D, w: number, h: number, radius: number, o: { saturate: number; brightness: number }): boolean {
   let data: ImageData;
   try {
-    data = ctx.getImageData(0, 0, W, H);
+    data = ctx.getImageData(0, 0, w, h);
   } catch {
-    return null;
+    return false;
   }
   const d = data.data;
   // three box passes each way: close to a gaussian
-  for (let pass = 0; pass < 3; pass++) {
-    boxBlur(d, W, H, 2, true);
-    boxBlur(d, W, H, 2, false);
+  const r = Math.max(0, Math.round(radius));
+  if (r > 0) {
+    for (let pass = 0; pass < 3; pass++) {
+      boxBlur(d, w, h, r, true);
+      boxBlur(d, w, h, r, false);
+    }
   }
   // CSS's saturate() and brightness() matrices
   const k = o.saturate;
@@ -84,5 +103,5 @@ export async function softArt(url: string, o: { saturate: number; brightness: nu
     d[i + 2] = ((0.213 - 0.213 * k) * r + (0.715 - 0.715 * k) * g + (0.072 + 0.928 * k) * b) * o.brightness;
   }
   ctx.putImageData(data, 0, 0);
-  return c;
+  return true;
 }

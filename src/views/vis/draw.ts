@@ -4,6 +4,7 @@ import type { Analysis } from "../../lib/vis/analysis";
 import type { Beat } from "../../lib/vis/beat";
 import { css, type Rgb } from "../../lib/vis/palette";
 import type { VisPrefs } from "../../lib/types";
+import { glowBox } from "../../ui/glow";
 
 export interface Art {
   /** the cover, or null while there's none */
@@ -112,16 +113,7 @@ export function drawArt(f: VisFrame, x: number, y: number, w: number, h: number,
 /** The cover in a rounded box, with a coloured glow under it. */
 export function artCard(f: VisFrame, x: number, y: number, w: number, h: number, r: number, glow = 0): void {
   const c = f.c;
-  if (glow > 0) {
-    c.save();
-    c.shadowColor = css(f.look.a, glow);
-    c.shadowBlur = f.h * (0.05 + 0.08 * f.a.bass);
-    c.fillStyle = "#000";
-    c.beginPath();
-    c.roundRect(x, y, w, h, r);
-    c.fill();
-    c.restore();
-  }
+  if (glow > 0) glowBox(c, x, y, w, h, r, f.h * (0.05 + 0.08 * f.a.bass), unit(f.look.a), glow);
   c.save();
   c.beginPath();
   c.roundRect(x, y, w, h, r);
@@ -143,18 +135,48 @@ export function background(f: VisFrame, o: { dim?: number; still?: boolean } = {
     c.fillStyle = `rgba(0,0,0,${o.dim ?? f.o.dim})`;
     c.fillRect(0, 0, W, H);
   }
+  // the gradients are smooth: drawn small once and scaled up, not filled over the window each frame
   if (f.kiai > 0.01) {
-    const g = c.createRadialGradient(W / 2, H * 1.05, 0, W / 2, H * 1.05, H);
-    g.addColorStop(0, css(f.look.a, 0.32 * f.kiai));
-    g.addColorStop(1, css(f.look.a, 0));
-    c.fillStyle = g;
-    c.fillRect(0, 0, W, H);
+    const a = f.look.a;
+    const g = layer(`kiai ${W}x${H} ${a.map(Math.round)}`, W, H, (x) => {
+      const g = x.createRadialGradient(W / 2, H * 1.05, 0, W / 2, H * 1.05, H);
+      g.addColorStop(0, css(a, 0.32));
+      g.addColorStop(1, css(a, 0));
+      return g;
+    });
+    c.globalAlpha = f.kiai;
+    c.drawImage(g, 0, 0, W, H);
+    c.globalAlpha = 1;
   }
-  const v = c.createRadialGradient(W / 2, H * 0.45, H * 0.2, W / 2, H * 0.45, Math.max(W, H) * 0.75);
-  v.addColorStop(0, "rgba(0,0,0,0)");
-  v.addColorStop(1, "rgba(0,0,0,.55)");
-  c.fillStyle = v;
-  c.fillRect(0, 0, W, H);
+  const v = layer(`vignette ${W}x${H}`, W, H, (x) => {
+    const v = x.createRadialGradient(W / 2, H * 0.45, H * 0.2, W / 2, H * 0.45, Math.max(W, H) * 0.75);
+    v.addColorStop(0, "rgba(0,0,0,0)");
+    v.addColorStop(1, "rgba(0,0,0,.55)");
+    return v;
+  });
+  c.drawImage(v, 0, 0, W, H);
+}
+
+/** a vis colour (0–255) as the glow's (0–1) */
+export const unit = (c: Rgb): [number, number, number, number] => [c[0] / 255, c[1] / 255, c[2] / 255, 1];
+
+const layers = new Map<string, HTMLCanvasElement>();
+
+/** A W×H gradient, drawn a quarter of the size and kept (the last few). */
+function layer(key: string, W: number, H: number, gradient: (c: CanvasRenderingContext2D) => CanvasGradient): HTMLCanvasElement {
+  let canvas = layers.get(key);
+  if (canvas) return canvas;
+  const k = 0.25;
+  canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.ceil(W * k));
+  canvas.height = Math.max(1, Math.ceil(H * k));
+  const x = canvas.getContext("2d")!;
+  x.scale(canvas.width / W, canvas.height / H);
+  x.fillStyle = gradient(x);
+  x.fillRect(0, 0, W, H);
+  if (layers.size >= 8) layers.delete(layers.keys().next().value!);
+  layers.set(key, canvas);
+  return canvas;
 }
 
 /** One line of text, cut with an ellipsis at `maxW`. */

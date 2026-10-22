@@ -18,6 +18,7 @@ import { beatAt, inKiai } from "../../lib/vis/beat";
 import { css, hexRgb, mix, paletteOf, type Palette, type Rgb } from "../../lib/vis/palette";
 import { player } from "../../player";
 import { reduceMotion } from "../../ui/controls";
+import { canvasFilters, soften } from "../../ui/soft-art";
 import type { Art, Look, Style, VisFrame } from "./draw";
 import { hifi } from "./styles/hifi";
 import { ring } from "./styles/ring";
@@ -67,6 +68,15 @@ function fit(c: CanvasRenderingContext2D, img: HTMLImageElement, w: number, h: n
 function blurCopy(img: HTMLImageElement, amount: number): HTMLCanvasElement | null {
   const px = Math.round(24 * amount);
   if (px <= 0) return null;
+  if (!canvasFilters) {
+    // no canvas filters (WebKitGTK): blurred by hand, at half the size to keep that quick
+    const blur = document.createElement("canvas");
+    blur.width = 160;
+    blur.height = 90;
+    const b = blur.getContext("2d", { willReadFrequently: true })!;
+    fit(b, img, 160, 90);
+    return soften(b, 160, 90, px / 2, { saturate: 1.35, brightness: 1 }) ? blur : null;
+  }
   const blur = document.createElement("canvas");
   blur.width = 320;
   blur.height = 180;

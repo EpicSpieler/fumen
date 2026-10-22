@@ -1,4 +1,5 @@
 /* Spektrum: bars in the cover's colours with falling peaks and a reflection; the cover breathes on the beat. */
+import { glowOf } from "../../../ui/glow";
 import { artCard, background, bars, css, titleBlock, type Style, type VisFrame } from "../draw";
 
 export function spectrum(): Style {
@@ -25,11 +26,11 @@ export function spectrum(): Style {
       const slot = (w * 0.92) / n;
       const bw = Math.max(1, slot * 0.62);
       const r = Math.min(bw / 2, h * 0.006);
-      c.beginPath();
+      const path = new Path2D();
       let moving = false;
       for (let i = 0; i < n; i++) {
         const bh = Math.max(h * 0.006, v[i] * maxH);
-        c.roundRect(x0 + i * slot + (slot - bw) / 2, base - bh, bw, bh, r);
+        path.roundRect(x0 + i * slot + (slot - bw) / 2, base - bh, bw, bh, r);
         if (v[i] >= peak[i]) {
           peak[i] = v[i];
           fall[i] = 0;
@@ -42,14 +43,9 @@ export function spectrum(): Style {
       const g = c.createLinearGradient(0, base - maxH, 0, base);
       g.addColorStop(0, css(f.look.a));
       g.addColorStop(1, css(f.look.b));
-      c.save();
+      if (f.kiai > 0.02) glowOf(c, x0, base - maxH, slot * n, maxH, h * 0.035, css(f.look.a, 0.7 * f.kiai), (g) => g.fill(path));
       c.fillStyle = g;
-      if (f.kiai > 0.02) {
-        c.shadowColor = css(f.look.a, 0.7 * f.kiai);
-        c.shadowBlur = h * 0.035;
-      }
-      c.fill();
-      c.restore();
+      c.fill(path);
       // the reflection
       const g2 = c.createLinearGradient(0, base, 0, base + maxH * 0.35);
       g2.addColorStop(0, css(f.look.b, 0.28));

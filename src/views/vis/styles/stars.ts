@@ -1,4 +1,5 @@
 /* Sternenfeld: a flight through stars; speed from loudness, a push on every beat and kick, faster in kiai. */
+import { glowOf } from "../../../ui/glow";
 import { background, css, text, type Style, type VisFrame } from "../draw";
 
 interface Star {
@@ -56,10 +57,9 @@ export function stars(): Style {
         c.save();
         c.translate(cx, cy);
         c.scale(s, s);
-        c.shadowColor = css(f.look.a, 0.15 + 0.5 * f.hit);
-        c.shadowBlur = h * 0.04;
-        text(c, f.meta.title, 0, 0, h * 0.078, { weight: 700, color: "rgba(255,255,255,.97)", align: "center", maxW: w * 0.8, base: "middle" });
-        c.shadowBlur = 0;
+        const title = (g: CanvasRenderingContext2D) => text(g, f.meta.title, 0, 0, h * 0.078, { weight: 700, color: "rgba(255,255,255,.97)", align: "center", maxW: w * 0.8, base: "middle" });
+        glowOf(c, -w * 0.4, -h * 0.05, w * 0.8, h * 0.1, h * 0.04, css(f.look.a, 0.15 + 0.5 * f.hit), title);
+        title(c);
         text(c, f.meta.artist, 0, h * 0.075, h * 0.027, { weight: 500, color: "rgba(255,255,255,.62)", align: "center", maxW: w * 0.8, base: "middle" });
         c.restore();
       }

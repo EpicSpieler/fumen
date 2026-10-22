@@ -1,6 +1,7 @@
 /* Hi-Fi: LED segments with peak hold, a beat lamp and a kiai lamp, like the front of an amplifier. */
 import { t } from "../../../lib/i18n";
 import { bandPos } from "../../../lib/vis/analysis";
+import { glowOf } from "../../../ui/glow";
 import { artCard, css, drawArt, FONT, text, TAU, type Style, type VisFrame } from "../draw";
 
 const SEGS = 22;
@@ -62,14 +63,9 @@ export function hifi(): Style {
       c.fill(off);
       c.fillStyle = css(f.look.b);
       c.fill(lo);
-      c.save();
-      if (f.kiai > 0.02) {
-        c.shadowColor = css(f.look.a, 0.8 * f.kiai);
-        c.shadowBlur = h * 0.02;
-      }
+      if (f.kiai > 0.02) glowOf(c, x0, y0, x1 - x0, y1 - y0, h * 0.02, css(f.look.a, 0.8 * f.kiai), (g) => g.fill(mid));
       c.fillStyle = css(f.look.a);
       c.fill(mid);
-      c.restore();
       c.fillStyle = "#ff7b6b";
       c.fill(hi);
       c.fillStyle = css(f.look.ink, 0.9);

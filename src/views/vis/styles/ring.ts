@@ -1,6 +1,7 @@
 /* Ring: the cover round in the middle, the spectrum around it, a wave on every beat, sparks in kiai. */
 import { mix } from "../../../lib/vis/palette";
-import { background, css, drawArt, TAU, titleBlock, type Style, type VisFrame } from "../draw";
+import { glowCircle } from "../../../ui/glow";
+import { background, css, drawArt, TAU, titleBlock, unit, type Style, type VisFrame } from "../draw";
 
 interface Spark {
   x: number;
@@ -67,14 +68,7 @@ export function ring(): Style {
       }
       c.lineCap = "butt";
       const rr = R * 0.94;
-      c.save();
-      c.shadowColor = css(f.look.a, 0.35 + 0.4 * f.a.bass);
-      c.shadowBlur = h * 0.06;
-      c.fillStyle = "#000";
-      c.beginPath();
-      c.arc(cx, cy, rr, 0, TAU);
-      c.fill();
-      c.restore();
+      glowCircle(c, cx, cy, rr * 2, h * 0.06, unit(f.look.a), 0.35 + 0.4 * f.a.bass);
       c.save();
       c.beginPath();
       c.arc(cx, cy, rr, 0, TAU);

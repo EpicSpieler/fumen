@@ -113,6 +113,43 @@ export function glowBox(ctx: CanvasRenderingContext2D, x: number, y: number, w: 
   ctx.restore();
 }
 
+let scratch: HTMLCanvasElement | null = null;
+
+/**
+ * The glow of whatever `shape` fills (bars, text: shapes that change every frame, so nothing to
+ * cache), inside the box x/y/w/h of the current transform: blurred on a small canvas, a quarter of
+ * the size or so, and scaled up. A blur loses nothing by it, and it's a sixteenth of the work.
+ * `blur` as for glowBox, `colour` a CSS colour.
+ */
+export function glowOf(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, blur: number, colour: string, shape: (c: CanvasRenderingContext2D) => void): void {
+  if (blur <= 0 || w <= 0 || h <= 0) return;
+  const px = scaleOf(ctx);
+  // small, but with the blur still a few pixels wide
+  const k = Math.min(1, Math.max(0.25, 6 / (blur * px))) * px;
+  const margin = blur * 1.5;
+  const cw = Math.max(1, Math.ceil((w + margin * 2) * k));
+  const ch = Math.max(1, Math.ceil((h + margin * 2) * k));
+  scratch ??= document.createElement("canvas");
+  // one empty pixel more each way: scaling up reads a little past the picture's edge
+  if (scratch.width < cw + 1 || scratch.height < ch + 1) {
+    scratch.width = Math.max(scratch.width, cw + 1);
+    scratch.height = Math.max(scratch.height, ch + 1);
+  }
+  const c = scratch.getContext("2d")!;
+  c.setTransform(1, 0, 0, 1, 0, 0);
+  c.clearRect(0, 0, cw + 1, ch + 1);
+  // the shape far off; only its shadow lands here
+  const away = 100000;
+  c.setTransform(k, 0, 0, k, (margin - x - away) * k, (margin - y) * k);
+  c.shadowColor = colour;
+  c.shadowBlur = blur * k;
+  c.shadowOffsetX = away * k;
+  c.fillStyle = "#000";
+  shape(c);
+  c.shadowColor = "transparent";
+  ctx.drawImage(scratch, 0, 0, cw, ch, x - margin, y - margin, cw / k, ch / k);
+}
+
 /** The glow of a circle of `diameter` around (x, y). */
 export function glowCircle(ctx: CanvasRenderingContext2D, x: number, y: number, diameter: number, blur: number, colour: Colour, alpha = 1, o: { stroke?: number; hollow?: boolean } = {}): void {
   glowBox(ctx, x - diameter / 2, y - diameter / 2, diameter, diameter, diameter / 2, blur, colour, alpha, o);
