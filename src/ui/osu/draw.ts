@@ -64,12 +64,6 @@ export function vertical(ctx: CanvasRenderingContext2D, y: number, diameter: num
   return g;
 }
 
-/** The current transform's scale (device pixels per unit), for blur radii and shadow offsets. */
-export function deviceScale(ctx: CanvasRenderingContext2D): number {
-  const m = ctx.getTransform();
-  return Math.hypot(m.a, m.b);
-}
-
 /** An EdgeEffect glow around a circle (just the glow, not the circle): `radius` beyond its edge;
  * hollow: only outside it. */
 export function glow(ctx: CanvasRenderingContext2D, x: number, y: number, diameter: number, radius: number, colour: Colour, alpha = 1, hollow = false): void {
