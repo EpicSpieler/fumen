@@ -66,6 +66,8 @@ class Fullscreen {
   private mode: FullscreenMode = "visual";
   private raf = 0;
   private lastFrame = 0;
+  /** Ctrl+F11 (as in lazer): frames a second and how long drawing one takes, for slow machines */
+  private meter: { frames: number; draw: number; worst: number; since: number } | null = null;
   private offs: (() => void)[] = [];
   private colors = new AccentColors();
   /** where the window controls live outside the overlay */
@@ -185,6 +187,7 @@ class Fullscreen {
         </div>
       </header>
       <main class="fs-body">
+        <div class="fs-fps num" aria-hidden="true" hidden></div>
         <section class="fs-visual">
           <aside class="fs-vis-panel" aria-label="${t("Visualizer settings")}" hidden>${panelHtml()}</aside>
         </section>
@@ -758,12 +761,26 @@ class Fullscreen {
     const dt = this.lastFrame ? Math.min(0.1, (now - this.lastFrame) / 1000) : 1 / 60;
     let again = player.playing;
     this.transport();
+    const t0 = performance.now();
     if (this.mode === "visual") again = this.drawVis(dt) || again;
     else this.drawField();
+    if (this.meter) this.measure(now, performance.now() - t0);
     if (again) {
       this.lastFrame = now;
       this.kick();
     } else this.lastFrame = 0;
+  }
+
+  /** Counts a frame for the meter (`ms` spent drawing it) and shows the numbers twice a second. */
+  private measure(now: number, ms: number): void {
+    const m = this.meter!;
+    m.frames++;
+    m.draw += ms;
+    m.worst = Math.max(m.worst, ms);
+    if (now - m.since < 500) return;
+    const box = this.el!.querySelector<HTMLElement>(".fs-fps")!;
+    box.textContent = `${Math.round((m.frames * 1000) / (now - m.since))} fps · draw ${(m.draw / m.frames).toFixed(1)} ms · worst ${m.worst.toFixed(1)} ms`;
+    this.meter = { frames: 0, draw: 0, worst: 0, since: now };
   }
 
   /** Empties the playfield's live numbers and graph. */
@@ -793,7 +810,10 @@ class Fullscreen {
     const time = a.currentTime || 0;
     const r = player.rate;
     el.classList.toggle("playing", player.playing);
-    el.querySelector(".fs-play")!.setAttribute("aria-label", player.playing ? t("Pause") : t("Play"));
+    // every frame: only what changed, so the page isn't restyled for nothing
+    const play = el.querySelector(".fs-play")!;
+    const label = player.playing ? t("Pause") : t("Play");
+    if (play.getAttribute("aria-label") !== label) play.setAttribute("aria-label", label);
     const seek = el.querySelector<HTMLElement>(".fs-seek")!;
     if (!seek.classList.contains("dragging")) {
       seek.style.setProperty("--p", d > 0 ? `${(time / d) * 100}%` : "0%");
@@ -1013,6 +1033,13 @@ class Fullscreen {
             this.setStyle(STYLES[(i + (e.shiftKey ? STYLES.length - 1 : 1)) % STYLES.length].id);
             break;
           }
+          case "F11":
+            if (!e.ctrlKey) return;
+            e.preventDefault();
+            this.meter = this.meter ? null : { frames: 0, draw: 0, worst: 0, since: performance.now() };
+            this.el!.querySelector<HTMLElement>(".fs-fps")!.hidden = !this.meter;
+            this.el!.querySelector<HTMLElement>(".fs-fps")!.textContent = "…";
+            break;
           case "F3":
           case "F4":
             e.preventDefault();

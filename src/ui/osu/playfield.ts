@@ -29,6 +29,7 @@
  * all. The skin renderers (argon.ts, triangles.ts, legacy.ts) draw the pieces; this decides where
  * and when.
  */
+import { isLinux } from "../../lib/api";
 import type { Nested, OsuReplay } from "../../lib/osu-replay";
 import type { Mod } from "../../lib/mods";
 import type { ChartData } from "../../lib/types";
@@ -840,6 +841,8 @@ export class OsuPlayfield {
 interface CachedBody {
   key: string;
   canvas: HTMLCanvasElement;
+  /** Linux: the finished body as an ImageBitmap (still.ts), once made */
+  bitmap?: ImageBitmap;
   x: number;
   y: number;
   w: number;
@@ -911,8 +914,18 @@ class BodyCache {
         g.strokeStyle = `rgba(${Math.round(colour[0] * 255)},${Math.round(colour[1] * 255)},${Math.round(colour[2] * 255)},${colour[3]})`;
         g.stroke(path);
       }
-      body = { key, canvas, x, y, w: cw / px, h: chh / px };
+      const made: CachedBody = { key, canvas, x, y, w: cw / px, h: chh / px };
+      body = made;
       this.cache.set(id, body);
+      // the canvas goes back to the spares when the body changes, so the bitmap is the body's
+      if (isLinux) {
+        createImageBitmap(canvas).then(
+          (b) => {
+            if (this.cache.get(id) === made) made.bitmap = b;
+          },
+          () => {},
+        );
+      }
       if (this.cache.size > 48) {
         const oldest = this.cache.keys().next().value!;
         this.spare.push(this.cache.get(oldest)!.canvas);
@@ -922,7 +935,7 @@ class BodyCache {
     const ctx = f.ctx;
     ctx.save();
     ctx.globalAlpha *= alpha;
-    ctx.drawImage(body.canvas, body.x, body.y, body.w, body.h);
+    ctx.drawImage(body.bitmap ?? body.canvas, body.x, body.y, body.w, body.h);
     ctx.restore();
   }
 }

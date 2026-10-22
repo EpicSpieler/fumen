@@ -324,6 +324,20 @@
 .fs-volume { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
 .fs-vol { width: 110px; margin: 0; }
 
+/* Ctrl+F11: frames a second and drawing time */
+.fs-fps {
+  position: absolute;
+  top: 64px;
+  left: 16px;
+  z-index: 5;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, .6);
+  color: #fff;
+  font-size: 12px;
+  pointer-events: none;
+}
+
 /* the combo, in the playfield's corner like lazer's */
 .fs-combo {
   position: absolute;

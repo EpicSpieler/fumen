@@ -5,6 +5,7 @@ import type { Beat } from "../../lib/vis/beat";
 import { css, type Rgb } from "../../lib/vis/palette";
 import type { VisPrefs } from "../../lib/types";
 import { glowBox } from "../../ui/glow";
+import { still } from "../../ui/still";
 
 export interface Art {
   /** the cover, or null while there's none */
@@ -89,7 +90,7 @@ function fitImage(c: CanvasRenderingContext2D, img: CanvasImageSource & { width:
 /** The cover filling x/y/w/h (cropped to fit), the old one under it while the new one fades in. */
 export function drawArt(f: VisFrame, x: number, y: number, w: number, h: number, o: { blur?: boolean; zoom?: number; px?: number; py?: number } = {}): void {
   const c = f.c;
-  const pick = (a: Art) => (o.blur ? (a.blur ?? a.img) : a.img);
+  const pick = (a: Art) => (o.blur && a.blur ? still(a.blur) : a.img);
   const cur = pick(f.art);
   const prev = f.prevArt && f.artMix < 1 ? pick(f.prevArt) : null;
   const zoom = o.zoom ?? 1;
@@ -145,7 +146,7 @@ export function background(f: VisFrame, o: { dim?: number; still?: boolean } = {
       return g;
     });
     c.globalAlpha = f.kiai;
-    c.drawImage(g, 0, 0, W, H);
+    c.drawImage(still(g), 0, 0, W, H);
     c.globalAlpha = 1;
   }
   const v = layer(`vignette ${W}x${H}`, W, H, (x) => {
@@ -154,7 +155,7 @@ export function background(f: VisFrame, o: { dim?: number; still?: boolean } = {
     v.addColorStop(1, "rgba(0,0,0,.55)");
     return v;
   });
-  c.drawImage(v, 0, 0, W, H);
+  c.drawImage(still(v), 0, 0, W, H);
 }
 
 /** a vis colour (0–255) as the glow's (0–1) */

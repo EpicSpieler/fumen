@@ -1,6 +1,7 @@
 /* draw.ts — canvas helpers shared by the skin renderers: lazer's colour maths, easing curves,
  * vertical mirroring for the "Up" scroll direction, tinted and flipped images. */
 import { glowBox } from "../glow";
+import { still } from "../still";
 
 /** RGBA with channels 0–1, like lazer's Color4 */
 export type Colour = [number, number, number, number];
@@ -152,5 +153,5 @@ export function tinted(img: HTMLImageElement, key: string, c: Colour): CanvasIma
     tints.set(k, canvas);
     if (tints.size > 400) tints.delete(tints.keys().next().value!);
   }
-  return canvas;
+  return still(canvas);
 }

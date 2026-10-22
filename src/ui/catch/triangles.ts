@@ -9,6 +9,7 @@
  *
  * Pulps are drawn once per colour into an offscreen canvas (their glows are blurs) and reused.
  */
+import { still } from "../still";
 import { preload, tex, type TexRef } from "../../lib/skin/skins";
 import { css, darken, ease, mix, opacity, WHITE, type Colour } from "../mania/draw";
 import { DEFAULT_COMBO } from "../osu/triangles";
@@ -95,7 +96,7 @@ function pulps(list: Pulp[], accent: Colour): HTMLCanvasElement {
 function drawPulps(ctx: CanvasRenderingContext2D, list: Pulp[], accent: Colour): void {
   ctx.save();
   ctx.globalCompositeOperation = "lighter";
-  ctx.drawImage(pulps(list, accent), -CACHE_BOX / 2, -CACHE_BOX / 2, CACHE_BOX, CACHE_BOX);
+  ctx.drawImage(still(pulps(list, accent)), -CACHE_BOX / 2, -CACHE_BOX / 2, CACHE_BOX, CACHE_BOX);
   ctx.restore();
 }
 

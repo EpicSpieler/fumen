@@ -6,6 +6,7 @@
  * to the shape — the way lazer draws its glows as textures. Sizes are rounded to 4 % steps for the
  * cache (a glow that much wider or narrower looks the same), colours to 1/32. */
 import type { Colour } from "./mania/draw";
+import { still } from "./still";
 
 /** a shape: a box with rounded corners (a circle when r = w / 2 = h / 2), filled or outlined */
 interface Shape {
@@ -109,7 +110,7 @@ export function glowBox(ctx: CanvasRenderingContext2D, x: number, y: number, w: 
   const sy = h / hit.h;
   ctx.save();
   ctx.globalAlpha *= a;
-  ctx.drawImage(hit.canvas, x - hit.margin * sx, y - hit.margin * sy, (hit.w + hit.margin * 2) * sx, (hit.h + hit.margin * 2) * sy);
+  ctx.drawImage(still(hit.canvas), x - hit.margin * sx, y - hit.margin * sy, (hit.w + hit.margin * 2) * sx, (hit.h + hit.margin * 2) * sy);
   ctx.restore();
 }
 
