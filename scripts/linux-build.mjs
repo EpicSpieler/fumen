@@ -1,16 +1,20 @@
 // Builds the Linux app on GitHub's Ubuntu machines (.github/workflows/linux.yml: AppImage and .deb,
 // the import tested against osu!lazer's AppImage) and puts both on fumen.dertesti.dev/updates for
-// downloading (/download/linux, /download/linux-deb). Builds what's pushed to main, so push first.
+// downloading (/download/linux, /download/linux-deb), with a PKGBUILD for Arch that installs the
+// .deb on the system's own libraries (/download/linux-arch, arch-pkgbuild.mjs). Builds what's
+// pushed to main, so push first.
 //
 //   node scripts/linux-build.mjs
 //
 // No self-update on Linux yet: a new version is downloaded again. Needs gh logged in and SSH to the
 // VPS as for release.mjs ("vps", or VPS_HOST).
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { archPkgbuild } from "./arch-pkgbuild.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const host = process.env.VPS_HOST ?? "vps";
@@ -63,13 +67,21 @@ const named = files.map((f) => {
   const ext = f.endsWith(".deb") ? "deb" : "AppImage";
   return [f, `Fumen_${version}_${head.slice(0, 7)}_amd64.${ext}`];
 });
+// Arch: the .deb's files on the system's own WebKitGTK
+const [deb, debName] = named.find(([, n]) => n.endsWith(".deb")) ?? [];
+if (deb) {
+  const sha = createHash("sha256").update(readFileSync(deb)).digest("hex");
+  const pkgbuild = join(scratch, "PKGBUILD");
+  writeFileSync(pkgbuild, archPkgbuild(version, debName, sha));
+  named.push([pkgbuild, debName.replace(/\.deb$/, ".PKGBUILD")]);
+}
 for (const [f, name] of named) run("scp", ["-q", f, `${host}:${updatesDir}/${name}`]);
 // the two newest of each kind stay
 run("ssh", [
   host,
-  `cd ~/${updatesDir} && for e in AppImage deb; do ls -t Fumen_*_amd64.$e 2>/dev/null | tail -n +3 | while read -r f; do rm -f -- "$f"; done; done`,
+  `cd ~/${updatesDir} && for e in AppImage deb PKGBUILD; do ls -t Fumen_*_amd64.$e 2>/dev/null | tail -n +3 | while read -r f; do rm -f -- "$f"; done; done`,
 ]);
 rmSync(scratch, { recursive: true, force: true });
 
 for (const [, name] of named) console.log(`✓ ${origin}/updates/${name}`);
-console.log(`✓ ${origin}/download/linux (AppImage) · ${origin}/download/linux-deb`);
+console.log(`✓ ${origin}/download/linux (AppImage) · ${origin}/download/linux-deb · ${origin}/download/linux-arch (PKGBUILD)`);
