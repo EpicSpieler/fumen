@@ -114,7 +114,7 @@ export const manage: Record<string, string> = {
   "Downloading · {done} MB": "Lädt · {done} MB",
   "Mirrors are busy · trying again in {time}": "Mirrors sind ausgelastet · neuer Versuch in {time}",
   "Waiting for a free mirror": "Wartet auf einen freien Mirror",
-  "Downloaded · waiting for osu!lazer": "Geladen · wartet auf osu!lazer",
+  "Downloaded · in line for the next import": "Geladen · wartet auf den nächsten Import",
   "Importing into osu!lazer": "Importiere in osu!lazer",
   Imported: "Importiert",
   Skipped: "Übersprungen",

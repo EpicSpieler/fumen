@@ -782,7 +782,7 @@ function stateText(r: Row, to: Target): string {
     case "held":
       return r.total > 2 ? t("Mirrors are busy · trying again in {time}", { time: clock(r.total) }) : t("Waiting for a free mirror");
     case "ready":
-      return to === "stable" ? t("Downloaded") : t("Downloaded · waiting for osu!lazer");
+      return to === "stable" ? t("Downloaded") : t("Downloaded · in line for the next import");
     case "importing":
       return to === "stable" ? t("Into osu!stable's Songs folder") : t("Importing into osu!lazer");
     case "done":
