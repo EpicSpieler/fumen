@@ -1126,6 +1126,7 @@ dependencies = [
  "tauri-plugin-updater",
  "thiserror 2.0.21",
  "ureq",
+ "webkit2gtk",
  "windows-sys 0.61.2",
  "zip",
 ]

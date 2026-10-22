@@ -40,6 +40,7 @@ import type {
 export const isTauri = "__TAURI_INTERNALS__" in window;
 /** macOS: the window keeps its own title bar buttons (top left), shortcuts use ⌘ */
 export const isMac = navigator.userAgent.includes("Mac OS");
+export const isLinux = /Linux/.test(navigator.userAgent) && !/Android/.test(navigator.userAgent);
 
 export const api = {
   getSettings: () => invoke<Settings>("get_settings"),
@@ -103,6 +104,8 @@ export const api = {
   poolChoices: () => invoke<PoolChoice[]>("pool_choices"),
   poolRows: (id: string, since: number) => invoke<PoolRow[]>("pool_rows", { id, since }),
   openCompanion: () => invoke<void>("open_companion"),
+  /** Linux: WebKitGTK's page on how it draws (webkit://gpu), in a window of its own */
+  openGpuInfo: () => invoke<void>("open_gpu_info"),
   closeCompanion: () => invoke<void>("close_companion"),
   fitCompanion: (height: number) => invoke<void>("fit_companion", { height }),
   showMain: () => invoke<void>("show_main"),

@@ -1,7 +1,7 @@
 /* settings.ts — osu! account, library source, appearance, about. Adjacent rows merge into one group. */
 import { getVersion } from "@tauri-apps/api/app";
 import { open } from "@tauri-apps/plugin-dialog";
-import { api, asApiError } from "../lib/api";
+import { api, asApiError, isLinux } from "../lib/api";
 import { lang, LANGS, switchLang, t, tn } from "../lib/i18n";
 import { esc, fixed, MODE_LABEL, num, relativeTime } from "../lib/format";
 import { collectionEvents, fumenCollections, loadCollections, putIntoLazer, saveCollectionDb } from "../lib/collections";
@@ -236,6 +236,17 @@ export class SettingsView {
             </div>
           </div>
           <div class="setting-row" data-row="update"></div>
+          ${
+            isLinux
+              ? `<div class="setting-row">
+            <div class="setting-text">
+              <div class="setting-title">${t("Graphics")}</div>
+              <div class="setting-desc">${t("How WebKitGTK draws Fumen on this PC: whether the graphics card does it, and with what. Helps when Fumen runs slowly.")}</div>
+            </div>
+            <button class="btn s-gpu-info" type="button">${t("Show graphics info")}</button>
+          </div>`
+              : ""
+          }
           <div class="setting-row">
             <div class="setting-text">
               <div class="setting-title">${t("Count me in")}</div>
@@ -259,7 +270,9 @@ export class SettingsView {
     let desc = t("Fumen looks for updates when it starts and every few hours. Installing one restarts it.");
     let control = `<button class="btn s-update-check" type="button">${t("Check for updates")}</button>`;
     if (!canUpdate) {
-      desc = t("On macOS, Fumen doesn't update itself yet: new versions are on fumen.dertesti.dev.");
+      desc = isLinux
+        ? t("On Linux, Fumen doesn't update itself yet: install it again the way you did (the AppImage, the .deb or the Arch command from fumen.dertesti.dev).")
+        : t("On macOS, Fumen doesn't update itself yet: new versions are on fumen.dertesti.dev.");
       control = "";
     } else if (s.phase === "checking") control = `<button class="btn" type="button" disabled>${t("Checking…")}</button>`;
     else if (s.phase === "current") desc = t("You have the latest version (checked {when}).", { when: relativeTime(s.at) });
@@ -520,6 +533,7 @@ export class SettingsView {
       return;
     }
     if (target.closest(".s-update-check")) return checkForUpdate(true);
+    if (target.closest(".s-gpu-info")) return void api.openGpuInfo().catch((e) => toast(asApiError(e).message, { kind: "danger" }));
     if (target.closest(".s-update-install")) return installUpdate();
     if (target.closest(".s-login")) return loginWithOsu();
     if (target.closest(".s-login-cancel")) return api.osuLoginCancel();

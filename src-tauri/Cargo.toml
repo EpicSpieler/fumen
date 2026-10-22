@@ -37,6 +37,10 @@ rosu-pp = { package = "rosu-pp-gemini", version = "=5.0.4" }
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security_Cryptography", "Win32_System_Diagnostics_ToolHelp", "Win32_System_Threading", "Win32_UI_Input_KeyboardAndMouse"] }
 
+# the webview's own settings (hardware acceleration); the version Tauri's wry uses
+[target.'cfg(target_os = "linux")'.dependencies]
+webkit2gtk = { version = "=2.0.2", features = ["v2_40"] }
+
 [dev-dependencies]
 sha2 = "0.10"
 flate2 = "1"
