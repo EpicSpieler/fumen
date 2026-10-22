@@ -46,6 +46,7 @@ import type { CorePattern } from "../lib/types";
 import { ReplayPanel } from "./replay-panel";
 import { bindPanel, panelHtml } from "./vis/panel";
 import { setVis, STYLES, visPrefs, Visualizer } from "./vis/visualizer";
+import { softArt, softArtByHand } from "../ui/soft-art";
 import { t } from "../lib/i18n";
 
 export type FullscreenMode = "visual" | "field";
@@ -348,8 +349,15 @@ class Fullscreen {
     for (const [sel, size] of [[".fs-bg img", 360]] as const) {
       const img = el.querySelector<HTMLImageElement>(sel)!;
       img.classList.remove("loaded");
-      if (np.bg) img.src = thumbUrl(np.bg, size);
-      else img.removeAttribute("src");
+      if (!np.bg) img.removeAttribute("src");
+      else if (!softArtByHand) img.src = thumbUrl(np.bg, size);
+      else {
+        // Linux: blurred once here instead of by fullscreen.css's filter (soft-art.ts)
+        const want = np.bg;
+        void softArt(thumbUrl(want, size), { saturate: 1.25, brightness: 0.42 }).then((c) => {
+          if (c && player.now?.bg === want) img.src = c.toDataURL();
+        });
+      }
     }
     this.live.clear();
     this.graphDrawn = "";

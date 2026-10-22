@@ -7,6 +7,7 @@
  */
 import { t } from "../lib/i18n";
 import { DEFAULT_ACCENT, store } from "../lib/store";
+import { softArt, softArtByHand } from "./soft-art";
 
 export const ACCENT_PRESETS = [
   { label: t("Violet"), color: "#8b7cff" },
@@ -183,18 +184,25 @@ function setAmbient(url: string | null): void {
     root.querySelectorAll(".ambient-art").forEach((n) => n.classList.remove("on"));
     return;
   }
-  const img = new Image();
-  img.decoding = "async";
-  img.className = "ambient-art";
-  img.alt = "";
-  img.onload = () => {
+  const show = (img: HTMLElement) => {
     if (ambientUrl !== url) return;
+    img.className = "ambient-art";
     root.insertBefore(img, root.querySelector(".ambient-scrim"));
     requestAnimationFrame(() => requestAnimationFrame(() => img.classList.add("on")));
     const layers = [...root.querySelectorAll(".ambient-art")];
     layers.slice(0, -1).forEach((n) => n.classList.remove("on"));
     setTimeout(() => [...root.querySelectorAll(".ambient-art")].slice(0, -1).forEach((n) => n.remove()), 1000);
   };
+  // Linux: blurred once here, as shell.css's filter would (soft-art.ts)
+  if (softArtByHand) {
+    const light = store.prefs.theme === "light";
+    void softArt(url, { saturate: light ? 1.3 : 1.4, brightness: light ? 1.18 : 0.78 }).then((c) => c && show(c));
+    return;
+  }
+  const img = new Image();
+  img.decoding = "async";
+  img.alt = "";
+  img.onload = () => show(img);
   img.src = url;
 }
 

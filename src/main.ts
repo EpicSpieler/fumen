@@ -60,6 +60,7 @@ import { SkillsView } from "./views/skills";
 import { LibraryView } from "./views/library";
 import { SetView } from "./views/set";
 import { SettingsView } from "./views/settings";
+import { softArtByHand } from "./ui/soft-art";
 import { WelcomeView } from "./views/welcome";
 
 interface View {
@@ -73,6 +74,8 @@ const MARK = `<svg class="side-mark" viewBox="0 0 24 24" aria-hidden="true"><rec
 const app = document.getElementById("app")!;
 app.className = "app";
 document.documentElement.classList.toggle("mac", isMac);
+// WebKitGTK: no live blurs (soft-art.ts, the :root.linux rules)
+document.documentElement.classList.toggle("linux", softArtByHand);
 app.innerHTML = `
   <nav class="sidebar">
     <div class="side-head" data-tauri-drag-region>

@@ -382,3 +382,11 @@ body.sidebar-collapsed .side-update-text { display: none; }
   .menu, .search { -webkit-backdrop-filter: none; backdrop-filter: none; background: var(--bg-surface); }
   .ambient-art { display: none; }
 }
+
+/* Linux (WebKitGTK): blurs there are slow enough to make the whole app stutter. The covers behind
+   come blurred already (ui/soft-art.ts), and glass surfaces stay clear: what's behind them is
+   that blurred cover anyway */
+:root.linux .ambient-art { filter: none !important; transform: none; }
+:root.linux .fs-bg img { filter: none !important; }
+:root.linux .fs[data-mode="field"] .fs-bg img.loaded { opacity: .62; }
+:root.linux *, :root.linux *::before, :root.linux *::after { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
