@@ -397,3 +397,5 @@ body.sidebar-collapsed .side-update-text { display: none; }
 :root.linux .ambient, :root.linux .fs-bg, :root.linux .fs-pf, :root.linux .fs-vis { will-change: transform; }
 :root.linux .pb-seek-fill { transition: none; }
 :root.linux .pb-seek-head { transition: transform .2s var(--ease-spring); }
+/* the playfield on plain dark: its cover background halved the frame rate there (frame meter) */
+:root.linux .fs[data-mode="field"] .fs-bg { display: none; }
