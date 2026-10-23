@@ -241,6 +241,12 @@ export const fileUrl = (hash: string): string => `${BASE}file/${hash}`;
 /** WebKitGTK (Linux) plays media through GStreamer, which can't read fumen:// itself: the player
  * fetches the file and plays it from memory there (`fetch` reads custom schemes fine). */
 export const mediaFromMemory = !(window as { __FUMEN_BASE__?: string }).__FUMEN_BASE__ && /Linux/.test(navigator.userAgent) && !/Android/.test(navigator.userAgent);
+/** There, songs come from Fumen's own server on 127.0.0.1 (media_server.rs) once it answers: WebKitGTK
+ * plays a stream far better than a blob from memory, which made the whole app stutter. */
+let mediaBase: string | null = null;
+if (mediaFromMemory) invoke<string | null>("media_base").then((b) => (mediaBase = b), () => {});
+/** The song file's address on that server; null where there's none (memory or fumen:// then). */
+export const mediaUrl = (hash: string): string | null => (mediaBase ? `${mediaBase}file/${hash}` : null);
 export const thumbUrl = (hash: string, width: number): string => `${BASE}thumb/${width}/${hash}`;
 /** lazer's built-in skin files: classic / retro textures, hit sounds of all of them */
 export type BuiltinSkin = "classic" | "retro" | "triangles" | "argon" | "argon-pro";

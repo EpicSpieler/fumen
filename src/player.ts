@@ -8,7 +8,7 @@
  * and times shown in the bar are at that rate. The other mods (lib/mods) work the same way: picked
  * once, they stay on for whatever plays.
  */
-import { fileUrl, mediaFromMemory, thumbUrl } from "./lib/api";
+import { fileUrl, mediaFromMemory, mediaUrl, thumbUrl } from "./lib/api";
 import { displayArtist, displayTitle, duration, esc, fixed } from "./lib/format";
 import { go } from "./lib/router";
 import { Emitter, events, setPrefs, store } from "./lib/store";
@@ -200,8 +200,10 @@ class Player {
       };
       this.onMeta = start;
       a.addEventListener("loadedmetadata", start);
-      if (!mediaFromMemory) {
-        a.src = url;
+      const served = mediaUrl(audio);
+      if (!mediaFromMemory || served) {
+        if (a.src.startsWith("blob:")) URL.revokeObjectURL(a.src);
+        a.src = served ?? url;
         a.load();
         return;
       }

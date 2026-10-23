@@ -32,6 +32,7 @@ mod player;
 mod pools;
 mod pp;
 mod protocol;
+mod media_server;
 mod settings;
 mod skins;
 mod stable;
@@ -168,6 +169,12 @@ impl AppState {
 }
 
 // ── Commands ────────────────────────────────────────────────────────────────
+
+/// Linux: where the player loads songs from (media_server.rs); null elsewhere or when it didn't start.
+#[tauri::command]
+fn media_base() -> Option<String> {
+    media_server::base()
+}
 
 #[tauri::command]
 fn get_settings(state: State<'_, AppState>) -> Settings {
@@ -1878,6 +1885,8 @@ pub fn run() {
             state.refresh_storage();
             state.reload_stable_files();
             app.manage(state);
+            #[cfg(target_os = "linux")]
+            media_server::start(app.handle().clone());
             // WebKitGTK: draw with the graphics card always, never only "on demand"
             #[cfg(target_os = "linux")]
             if let Some(w) = app.get_webview_window("main") {
@@ -1894,6 +1903,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            media_base,
             get_settings,
             library_care,
             update_settings,
