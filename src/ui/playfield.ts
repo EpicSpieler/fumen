@@ -1,5 +1,6 @@
 /* playfield.ts — chart drawing helpers: lane tones, accent colours, the notes-per-second graph.
  * The osu!mania playfield itself, in lazer's skins, lives in ./mania. */
+import { pixelRatio } from "./render-scale";
 import type { ChartData } from "../lib/types";
 
 /** Lane tones mirrored from the edges, like most mania skins: neutral / accent / centre. */
@@ -34,7 +35,7 @@ export function fitCanvas(c: HTMLCanvasElement): { ctx: CanvasRenderingContext2D
   const w = c.clientWidth;
   const h = c.clientHeight;
   if (!w || !h) return null;
-  const dpr = window.devicePixelRatio || 1;
+  const dpr = pixelRatio();
   const bw = Math.round(w * dpr);
   const bh = Math.round(h * dpr);
   if (c.width !== bw || c.height !== bh) {

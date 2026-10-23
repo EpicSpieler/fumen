@@ -8,6 +8,7 @@
  *    in break time;
  *  - ManiaModFlashlight: black but for a band across the middle, 50 units either way, twice and a
  *    half that in breaks. */
+import { pixelRatio } from "../render-scale";
 import type { Mod } from "../../lib/mods";
 import type { LoadedSkin } from "../../lib/skin/skins";
 import type { ChartData } from "../../lib/types";
@@ -150,7 +151,7 @@ export class ManiaPlayfield {
     const W = c.clientWidth;
     const H = c.clientHeight;
     if (!W || !H) return;
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = pixelRatio();
     const bw = Math.round(W * dpr);
     const bh = Math.round(H * dpr);
     if (c.width !== bw || c.height !== bh) {

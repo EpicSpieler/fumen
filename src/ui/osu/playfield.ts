@@ -29,6 +29,7 @@
  * all. The skin renderers (argon.ts, triangles.ts, legacy.ts) draw the pieces; this decides where
  * and when.
  */
+import { pixelRatio } from "../render-scale";
 import { isLinux } from "../../lib/api";
 import type { Nested, OsuReplay } from "../../lib/osu-replay";
 import type { Mod } from "../../lib/mods";
@@ -380,7 +381,7 @@ export class OsuPlayfield {
     const W = c.clientWidth;
     const H = c.clientHeight;
     if (!W || !H) return;
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = pixelRatio();
     const bw = Math.round(W * dpr);
     const bh = Math.round(H * dpr);
     if (c.width !== bw || c.height !== bh) {

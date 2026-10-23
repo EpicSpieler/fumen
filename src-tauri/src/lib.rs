@@ -253,24 +253,6 @@ fn pool_rows(state: State<'_, AppState>, id: String, since: i64) -> Result<Vec<l
 
 const COMPANION: &str = "companion";
 
-/// Linux: WebKitGTK's own page on how it draws (webkit://gpu: hardware acceleration, renderer,
-/// refresh) in a window of its own, for when Fumen runs slowly. Async like `open_companion`.
-#[tauri::command]
-async fn open_gpu_info(app: AppHandle) -> Result<()> {
-    use tauri::Manager;
-    if let Some(w) = app.get_webview_window("gpu") {
-        let _ = w.set_focus();
-        return Ok(());
-    }
-    let url = "webkit://gpu".parse::<tauri::Url>().map_err(|e| Error::known("internal", e.to_string()))?;
-    tauri::WebviewWindowBuilder::new(&app, "gpu", tauri::WebviewUrl::External(url))
-        .title("Fumen · Graphics")
-        .inner_size(900.0, 760.0)
-        .build()
-        .map_err(|e| Error::known("internal", e.to_string()))?;
-    Ok(())
-}
-
 /// The companion window's width; its height follows what it shows (`fit_companion`).
 const COMPANION_WIDTH: f64 = 248.0;
 
@@ -1912,7 +1894,6 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            open_gpu_info,
             get_settings,
             library_care,
             update_settings,

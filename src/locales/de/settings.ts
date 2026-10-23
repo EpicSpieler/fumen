@@ -98,10 +98,6 @@ export const settings: Record<string, string> = {
   "Check for updates": "Nach Updates suchen",
   "On Linux, Fumen doesn't update itself yet: install it again the way you did (the AppImage, the .deb or the Arch command from fumen.dertesti.dev).":
     "Unter Linux aktualisiert sich Fumen noch nicht selbst: Installier es einfach nochmal so wie beim ersten Mal (AppImage, .deb oder der Arch-Befehl von fumen.dertesti.dev).",
-  Graphics: "Grafik",
-  "How WebKitGTK draws Fumen on this PC: whether the graphics card does it, and with what. Helps when Fumen runs slowly.":
-    "Wie WebKitGTK Fumen auf diesem PC zeichnet: ob die Grafikkarte das macht und womit. Hilft, wenn Fumen langsam läuft.",
-  "Show graphics info": "Grafik-Infos anzeigen",
   "On macOS, Fumen doesn't update itself yet: new versions are on fumen.dertesti.dev.":
     "Unter macOS aktualisiert sich Fumen noch nicht selbst: Neue Versionen gibt es auf fumen.dertesti.dev.",
   "Checking…": "Suche…",

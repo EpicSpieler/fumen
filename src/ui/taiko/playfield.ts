@@ -22,6 +22,7 @@
  * The skin renderers (triangles.ts, argon.ts, legacy.ts) draw the pieces; this decides where and
  * when, from the timeline of what's played (chart.ts: autoplay or a replay).
  */
+import { pixelRatio } from "../render-scale";
 import type { Mod } from "../../lib/mods";
 import type { ChartData } from "../../lib/types";
 import { breakPeriods, Combo, comboScale, drawCircleLight, FlashlightSize, type FlashlightSpec } from "../flashlight";
@@ -206,7 +207,7 @@ export class TaikoPlayfield {
     const W = c.clientWidth;
     const H = c.clientHeight;
     if (!W || !H) return;
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = pixelRatio();
     const bw = Math.round(W * dpr);
     const bh = Math.round(H * dpr);
     if (c.width !== bw || c.height !== bh) {

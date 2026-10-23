@@ -15,6 +15,7 @@
  * Esc leaves; Space plays/pauses; ←/→ seek 5 s; F3/F4 lower/raise the scroll speed as in lazer.
  * Nothing animates while the song is paused.
  */
+import { setRenderScale } from "../ui/render-scale";
 import { thumbUrl } from "../lib/api";
 import { bpmAt, loadChart, lowerBound, PATTERNS, SCROLL_SPEED_MAX, SCROLL_SPEED_MIN, scrollSpeed, scrollTime, scrollUp } from "../lib/charts";
 import { startAnalyser } from "../lib/eq";
@@ -68,6 +69,8 @@ class Fullscreen {
   private lastFrame = 0;
   /** Ctrl+F11 (as in lazer): frames a second and how long drawing one takes, for slow machines */
   private meter: { frames: number; draw: number; worst: number; since: number } | null = null;
+  /** Ctrl+F12 with the meter on: leaves a part out, to see which one is slow (index into METER_TESTS) */
+  private test = 0;
   private offs: (() => void)[] = [];
   private colors = new AccentColors();
   /** where the window controls live outside the overlay */
@@ -762,7 +765,9 @@ class Fullscreen {
     let again = player.playing;
     this.transport();
     const t0 = performance.now();
-    if (this.mode === "visual") again = this.drawVis(dt) || again;
+    if (this.test === 2) {
+      // "no drawing": the canvas keeps its last picture
+    } else if (this.mode === "visual") again = this.drawVis(dt) || again;
     else this.drawField();
     if (this.meter) this.measure(now, performance.now() - t0);
     if (again) {
@@ -779,7 +784,7 @@ class Fullscreen {
     m.worst = Math.max(m.worst, ms);
     if (now - m.since < 500) return;
     const box = this.el!.querySelector<HTMLElement>(".fs-fps")!;
-    box.textContent = `${Math.round((m.frames * 1000) / (now - m.since))} fps · draw ${(m.draw / m.frames).toFixed(1)} ms · worst ${m.worst.toFixed(1)} ms`;
+    box.textContent = `[${METER_TESTS[this.test]}] ${Math.round((m.frames * 1000) / (now - m.since))} fps · draw ${(m.draw / m.frames).toFixed(1)} ms · worst ${m.worst.toFixed(1)} ms`;
     this.meter = { frames: 0, draw: 0, worst: 0, since: now };
   }
 
@@ -882,6 +887,8 @@ class Fullscreen {
     if (!(field instanceof ManiaPlayfield)) field.draw(time, r);
     else field.draw(time, scrollTime(scrollSpeed().speed) * r, scrollUp(), r);
     this.replays.frame(time);
+    // the meter's "no side panel" test: the playfield alone
+    if (this.test === 1) return;
     this.showCombo(this.replays.comboAt(time) ?? field.combo().at(time));
 
     // live numbers
@@ -1037,8 +1044,20 @@ class Fullscreen {
             if (!e.ctrlKey) return;
             e.preventDefault();
             this.meter = this.meter ? null : { frames: 0, draw: 0, worst: 0, since: performance.now() };
+            if (!this.meter && this.test) {
+              this.test = 0;
+              setRenderScale(1);
+            }
             this.el!.querySelector<HTMLElement>(".fs-fps")!.hidden = !this.meter;
             this.el!.querySelector<HTMLElement>(".fs-fps")!.textContent = "…";
+            break;
+          case "F12":
+            if (!e.ctrlKey || !this.meter) return;
+            e.preventDefault();
+            this.test = (this.test + 1) % METER_TESTS.length;
+            setRenderScale(this.test === 3 ? 0.5 : 1);
+            this.meter = { frames: 0, draw: 0, worst: 0, since: performance.now() };
+            this.el!.querySelector<HTMLElement>(".fs-fps")!.textContent = `[${METER_TESTS[this.test]}] …`;
             break;
           case "F3":
           case "F4":
@@ -1079,6 +1098,9 @@ function setBehindInert(on: boolean): void {
   const app = document.getElementById("app");
   if (app) app.inert = on;
 }
+
+/** what the meter's tests leave out (Ctrl+F12), in English: they're for reports */
+const METER_TESTS = ["everything", "no side panel", "no drawing", "half resolution"] as const;
 
 const fullscreen = new Fullscreen();
 

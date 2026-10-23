@@ -21,6 +21,7 @@
  * Objects are drawn under the catcher, earlier ones over later ones. The skin renderers
  * (triangles.ts, argon.ts, legacy.ts) draw the pieces; this decides where and when.
  */
+import { pixelRatio } from "../render-scale";
 import type { CatchReplay } from "../../lib/catch-replay";
 import type { Mod } from "../../lib/mods";
 import type { ChartData } from "../../lib/types";
@@ -191,7 +192,7 @@ export class CatchPlayfield {
     const W = c.clientWidth;
     const H = c.clientHeight;
     if (!W || !H) return;
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = pixelRatio();
     const bw = Math.round(W * dpr);
     const bh = Math.round(H * dpr);
     if (c.width !== bw || c.height !== bh) {

@@ -18,6 +18,7 @@ import { beatAt, inKiai } from "../../lib/vis/beat";
 import { css, hexRgb, mix, paletteOf, type Palette, type Rgb } from "../../lib/vis/palette";
 import { player } from "../../player";
 import { reduceMotion } from "../../ui/controls";
+import { renderScale } from "../../ui/render-scale";
 import { canvasFilters, soften } from "../../ui/soft-art";
 import type { Art, Look, Style, VisFrame } from "./draw";
 import { hifi } from "./styles/hifi";
@@ -225,7 +226,7 @@ export class Visualizer {
     const W = c0.clientWidth;
     const H = c0.clientHeight;
     if (!W || !H) return false;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const dpr = Math.min(window.devicePixelRatio || 1, 2) * renderScale();
     const bw = Math.round(W * dpr);
     const bh = Math.round(H * dpr);
     if (c0.width !== bw || c0.height !== bh) {

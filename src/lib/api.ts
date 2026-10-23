@@ -104,8 +104,6 @@ export const api = {
   poolChoices: () => invoke<PoolChoice[]>("pool_choices"),
   poolRows: (id: string, since: number) => invoke<PoolRow[]>("pool_rows", { id, since }),
   openCompanion: () => invoke<void>("open_companion"),
-  /** Linux: WebKitGTK's page on how it draws (webkit://gpu), in a window of its own */
-  openGpuInfo: () => invoke<void>("open_gpu_info"),
   closeCompanion: () => invoke<void>("close_companion"),
   fitCompanion: (height: number) => invoke<void>("fit_companion", { height }),
   showMain: () => invoke<void>("show_main"),
