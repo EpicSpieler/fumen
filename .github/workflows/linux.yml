@@ -30,7 +30,16 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           persist-credentials: false
-      - run: sudo apt-get update && sudo apt-get install -y $APT
+      # the mirrors sometimes hang for half an hour: short timeouts, tried again
+      - name: Packages
+        timeout-minutes: 15
+        run: |
+          A="-o Acquire::Retries=3 -o Acquire::http::Timeout=30"
+          for i in 1 2 3; do
+            timeout 240 sudo apt-get $A update && timeout 240 sudo apt-get $A install -y $APT && exit 0
+            echo "apt try $i failed"; sleep 10
+          done
+          exit 1
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 22
@@ -64,7 +73,16 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           persist-credentials: false
-      - run: sudo apt-get update && sudo apt-get install -y $APT
+      # the mirrors sometimes hang for half an hour: short timeouts, tried again
+      - name: Packages
+        timeout-minutes: 15
+        run: |
+          A="-o Acquire::Retries=3 -o Acquire::http::Timeout=30"
+          for i in 1 2 3; do
+            timeout 240 sudo apt-get $A update && timeout 240 sudo apt-get $A install -y $APT && exit 0
+            echo "apt try $i failed"; sleep 10
+          done
+          exit 1
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 22
