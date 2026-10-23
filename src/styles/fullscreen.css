@@ -64,6 +64,8 @@
 .fs[data-mode="visual"] .fs-bg { display: none; }
 /* the frame meter's "no background" test (Ctrl+F12) */
 .fs.test-no-bg .fs-bg { display: none; }
+/* … and "nothing behind": the app under the fullscreen view not drawn */
+body.fs-test-alone #app { visibility: hidden; }
 .fs-visual { pointer-events: none; }
 .fs-vis-ctl { display: flex; align-items: center; gap: 6px; }
 .fs-style, .vp-style { background: rgba(255, 255, 255, .08); }

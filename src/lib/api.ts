@@ -104,6 +104,8 @@ export const api = {
   poolChoices: () => invoke<PoolChoice[]>("pool_choices"),
   poolRows: (id: string, since: number) => invoke<PoolRow[]>("pool_rows", { id, since }),
   openCompanion: () => invoke<void>("open_companion"),
+  /** Linux: WebKit's inspector */
+  openInspector: () => invoke<void>("open_inspector"),
   closeCompanion: () => invoke<void>("close_companion"),
   fitCompanion: (height: number) => invoke<void>("fit_companion", { height }),
   showMain: () => invoke<void>("show_main"),

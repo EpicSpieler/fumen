@@ -40,6 +40,8 @@ windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Securit
 # the webview's own settings (hardware acceleration); the version Tauri's wry uses
 [target.'cfg(target_os = "linux")'.dependencies]
 webkit2gtk = { version = "=2.0.2", features = ["v2_40"] }
+# WebKit's inspector, for finding what's slow there (open_inspector)
+tauri = { version = "2", features = ["devtools"] }
 
 [dev-dependencies]
 sha2 = "0.10"

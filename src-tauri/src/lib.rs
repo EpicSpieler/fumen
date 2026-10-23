@@ -170,6 +170,16 @@ impl AppState {
 
 // ── Commands ────────────────────────────────────────────────────────────────
 
+/// Linux: WebKit's inspector, whose Timelines show where a slow frame's time goes. Built in there
+/// (and in development) only.
+#[tauri::command]
+fn open_inspector(window: tauri::WebviewWindow) {
+    #[cfg(any(debug_assertions, target_os = "linux"))]
+    window.open_devtools();
+    #[cfg(not(any(debug_assertions, target_os = "linux")))]
+    drop(window);
+}
+
 /// Linux: where the player loads songs from (media_server.rs); null elsewhere or when it didn't start.
 #[tauri::command]
 fn media_base() -> Option<String> {
@@ -1904,6 +1914,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             media_base,
+            open_inspector,
             get_settings,
             library_care,
             update_settings,
