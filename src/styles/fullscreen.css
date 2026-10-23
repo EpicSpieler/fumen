@@ -14,6 +14,9 @@
   transition: opacity .24s var(--ease-std);
 }
 .fs.on { opacity: 1; }
+/* once it has faded in, the app behind it isn't drawn at all (it's covered anyway): one window of
+   layers less for every frame; it shows again the moment the overlay starts to go */
+body.fs-open #app { visibility: hidden; transition: visibility 0s .25s; }
 .fs > header, .fs > main, .fs > footer { position: relative; z-index: 1; }
 
 /* the art, blurred, behind everything */
