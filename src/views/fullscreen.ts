@@ -17,6 +17,7 @@
  */
 import { setRenderScale } from "../ui/render-scale";
 import { setStills } from "../ui/still";
+import { SongClock } from "../lib/song-clock";
 import { thumbUrl } from "../lib/api";
 import { bpmAt, loadChart, lowerBound, PATTERNS, SCROLL_SPEED_MAX, SCROLL_SPEED_MIN, scrollSpeed, scrollTime, scrollUp } from "../lib/charts";
 import { startAnalyser } from "../lib/eq";
@@ -79,6 +80,8 @@ class Fullscreen {
 
   // visualizer
   private vis!: Visualizer;
+  /** the playfield's time, smooth between the audio element's reports */
+  private readonly clock = new SongClock();
   /** the style dropdowns: the top bar's and the panel's */
   private styleSelects: SelectHandle<VisStyle>[] = [];
   /** shows the saved settings in the panel */
@@ -785,7 +788,10 @@ class Fullscreen {
     m.worst = Math.max(m.worst, ms);
     if (now - m.since < 500) return;
     const box = this.el!.querySelector<HTMLElement>(".fs-fps")!;
-    box.textContent = `[${METER_TESTS[this.test]}] ${Math.round((m.frames * 1000) / (now - m.since))} fps · draw ${(m.draw / m.frames).toFixed(1)} ms · worst ${m.worst.toFixed(1)} ms`;
+    // the song's reported time going back (song-clock.ts), when there were any
+    const back = this.clock.backSteps ? ` · time back ${this.clock.backSteps}×` : "";
+    this.clock.backSteps = 0;
+    box.textContent = `[${METER_TESTS[this.test]}] ${Math.round((m.frames * 1000) / (now - m.since))} fps · draw ${(m.draw / m.frames).toFixed(1)} ms · worst ${m.worst.toFixed(1)} ms${back}`;
     this.meter = { frames: 0, draw: 0, worst: 0, since: now };
   }
 
@@ -881,9 +887,9 @@ class Fullscreen {
     const d = this.data;
     const field = this.field;
     if (!d || !field) return;
-    this.practice.frame(player.audio.currentTime * 1000);
+    const time = this.clock.read(player.audio.currentTime * 1000, performance.now(), player.audio.playbackRate || 1, player.playing);
+    this.practice.frame(time);
     const r = player.rate;
-    const time = player.audio.currentTime * 1000;
 
     if (!(field instanceof ManiaPlayfield)) field.draw(time, r);
     else field.draw(time, scrollTime(scrollSpeed().speed) * r, scrollUp(), r);
