@@ -640,6 +640,9 @@ through the overlay server; a small visualizer in the player bar. Storyboards: n
     audio plays from memory there (GStreamer can't read fumen://). No self-update on Linux yet.
     Also: a read-only view of goals, skills and pools on fumen.dertesti.dev, synced from the app on
     request
+  - osu!collector packs (a tester's wish, 2026-10-24, after the Linux fixes): Add beatmaps takes
+    an osu!collector link to a collection and downloads every set in it from the mirrors, into
+    lazer like any other download (maybe kept as a Fumen collection too)
   - Mapping lens: difficulty spikes along a chart, a pattern heatmap per section, a spread check
     across a set's difficulties; the analyser's leftovers (Azusa's marathon correction, Roxy /
     Mixed estimators — v0.2)
