@@ -390,11 +390,11 @@ body.sidebar-collapsed .side-update-text { display: none; }
 :root.linux .fs-bg img { filter: none !important; }
 :root.linux .fs[data-mode="field"] .fs-bg img.loaded { opacity: .62; }
 :root.linux *, :root.linux *::before, :root.linux *::after { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
-/* Linux: every frame WebKitGTK draws there can cost a lot when the big backgrounds are painted with
-   it. Backgrounds and canvases get layers of their own (painted once, then only moved and blended),
-   and the seek bar steps with the song instead of gliding: a glide never stops while a song plays,
-   so the whole window would be redrawn all the time */
-:root.linux .ambient, :root.linux .fs-bg, :root.linux .fs-pf, :root.linux .fs-vis { will-change: transform; }
+/* Linux: as few layers as possible. WebKitGTK composites each one the size of the window through a
+   slow path there (no DMA-BUF on NVIDIA): a test page went from 62 fps to 28 with two such layers
+   over its canvas and to 15 with four. So nothing gets a layer of its own (no will-change), and the
+   seek bar steps with the song instead of gliding: a glide never stops while a song plays, so the
+   whole window would be redrawn all the time */
 :root.linux .pb-seek-fill { transition: none; }
 :root.linux .pb-seek-head { transition: transform .2s var(--ease-spring); }
 /* the playfield on plain dark: its cover background halved the frame rate there (frame meter) */

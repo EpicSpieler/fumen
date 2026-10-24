@@ -1,5 +1,15 @@
 [
   {
+    "version": "1.3.13",
+    "date": "2026-10-24",
+    "en": [
+      "Linux: found it! Every extra layer the size of the window halves the frame rate there. Fumen had a few of those stacked in fullscreen, including the app's background still sitting behind it. They're gone now, so fullscreen should run a lot smoother."
+    ],
+    "de": [
+      "Linux: gefunden! Jede zusätzliche fenstergroße Ebene halbiert dort die Bildrate. Fumen hatte im Vollbild ein paar davon übereinander, unter anderem den Hintergrund der App, der noch dahinter lag. Die sind jetzt weg, das Vollbild sollte also deutlich flüssiger laufen."
+    ]
+  },
+  {
     "version": "1.3.12",
     "date": "2026-10-24",
     "en": [
