@@ -31,13 +31,14 @@ const fail = (msg) => {
 };
 
 const version = JSON.parse(readFileSync(join(root, "src-tauri", "tauri.conf.json"), "utf8")).version;
-const head = out("git", ["rev-parse", "HEAD"]);
-if (out("git", ["rev-parse", "origin/main"]) !== head) fail("Push main first: the build takes what's on GitHub.");
+const runAt = process.argv.indexOf("--run");
+let id = runAt >= 0 ? process.argv[runAt + 1] : undefined;
+// the commit built: that run's, else main as pushed
+const head = id ? JSON.parse(out(gh, ["run", "view", String(id), "--json", "headSha"])).headSha : out("git", ["rev-parse", "HEAD"]);
+if (!id && out("git", ["rev-parse", "origin/main"]) !== head) fail("Push main first: the build takes what's on GitHub.");
 
 // ── build ────────────────────────────────────────────────────────────────
 console.log(`→ Linux build of ${version} (${head.slice(0, 7)})`);
-const runAt = process.argv.indexOf("--run");
-let id = runAt >= 0 ? process.argv[runAt + 1] : undefined;
 if (!id) {
   const latestRun = () => JSON.parse(out(gh, ["run", "list", "--workflow", "linux.yml", "--limit", "1", "--json", "databaseId,headSha,createdAt"]))[0];
   const before = latestRun()?.databaseId;
