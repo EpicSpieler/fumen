@@ -1,8 +1,28 @@
 /* Bühne: the cover fills everything and zooms on the beat; a big title, a bar counter, a strip of light. */
+import { isLinux } from "../../../lib/api";
 import { t } from "../../../lib/i18n";
 import { bars, css, drawArt, text, type Style, type VisFrame } from "../draw";
 
+/** Darker toward the bottom and the left, over the cover dimmed. */
+function shades(c: CanvasRenderingContext2D, dim: number, W: number, H: number): void {
+  c.fillStyle = `rgba(0,0,0,${dim * 0.45})`;
+  c.fillRect(0, 0, W, H);
+  let g = c.createLinearGradient(0, H, 0, H * 0.3);
+  g.addColorStop(0, "rgba(0,0,0,.9)");
+  g.addColorStop(1, "rgba(0,0,0,0)");
+  c.fillStyle = g;
+  c.fillRect(0, 0, W, H);
+  g = c.createLinearGradient(0, 0, W * 0.65, 0);
+  g.addColorStop(0, "rgba(0,0,0,.45)");
+  g.addColorStop(1, "rgba(0,0,0,0)");
+  c.fillStyle = g;
+  c.fillRect(0, 0, W, H);
+}
+
 export function stage(): Style {
+  /** Linux: the shades at the canvas' size, and what they were made for */
+  let shade: HTMLCanvasElement | null = null;
+  let shadeKey = "";
   return {
     draw(f: VisFrame): boolean {
       const { c, x, y, w, h, W, H } = f;
@@ -11,18 +31,26 @@ export function stage(): Style {
       // a slow drift across the cover, by the time played
       const zoom = 1.07 + 0.035 * f.hit + 0.02 * f.kiai;
       drawArt(f, 0, 0, W, H, { zoom, px: Math.sin(f.clock * 0.06) * 0.018, py: Math.cos(f.clock * 0.045) * 0.012 });
-      c.fillStyle = `rgba(0,0,0,${f.o.dim * 0.45})`;
-      c.fillRect(0, 0, W, H);
-      let g = c.createLinearGradient(0, H, 0, H * 0.3);
-      g.addColorStop(0, "rgba(0,0,0,.9)");
-      g.addColorStop(1, "rgba(0,0,0,0)");
-      c.fillStyle = g;
-      c.fillRect(0, 0, W, H);
-      g = c.createLinearGradient(0, 0, W * 0.65, 0);
-      g.addColorStop(0, "rgba(0,0,0,.45)");
-      g.addColorStop(1, "rgba(0,0,0,0)");
-      c.fillStyle = g;
-      c.fillRect(0, 0, W, H);
+      if (isLinux) {
+        // the three shades over the cover put together once, then copied over as they are
+        const bw = c.canvas.width;
+        const bh = c.canvas.height;
+        const key = `${f.o.dim} ${bw}x${bh} ${W}x${H}`;
+        if (shadeKey !== key) {
+          shade ??= document.createElement("canvas");
+          shade.width = bw;
+          shade.height = bh;
+          const s = shade.getContext("2d")!;
+          s.setTransform(bw / W, 0, 0, bh / H, 0, 0);
+          shades(s, f.o.dim, W, H);
+          shadeKey = key;
+        }
+        c.save();
+        c.setTransform(1, 0, 0, 1, 0, 0);
+        c.drawImage(shade!, 0, 0);
+        c.restore();
+      } else shades(c, f.o.dim, W, H);
+      let g: CanvasGradient;
       if (f.kiai > 0.01) {
         g = c.createLinearGradient(0, H, 0, H * 0.4);
         g.addColorStop(0, css(f.look.a, 0.35 * f.kiai));

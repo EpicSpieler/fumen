@@ -6,6 +6,7 @@ import { css, type Rgb } from "../../lib/vis/palette";
 import type { VisPrefs } from "../../lib/types";
 import { glowBox } from "../../ui/glow";
 import { still } from "../../ui/still";
+import { isLinux } from "../../lib/api";
 
 export interface Art {
   /** the cover, or null while there's none */
@@ -123,10 +124,73 @@ export function artCard(f: VisFrame, x: number, y: number, w: number, h: number,
   c.restore();
 }
 
+/**
+ * Linux: the background put together once (black, the cover, the dim, the vignette) at the canvas'
+ * own size, then copied over as it is each frame. Those four passes, each scaling a window's worth
+ * of pixels, took WebKitGTK about 40 ms a frame there; one plain copy takes a few. It doesn't swell
+ * with the beat there. Two kept: the song's and the one before it, for the crossfade.
+ */
+const plates: { art: Art | null; key: string; canvas: HTMLCanvasElement }[] = [];
+
+function plate(f: VisFrame, art: Art | null, dim: number): HTMLCanvasElement {
+  const { c, W, H } = f;
+  const mode = f.o.background;
+  const bw = c.canvas.width;
+  const bh = c.canvas.height;
+  const key = `${mode} ${dim} ${bw}x${bh} ${W}x${H}`;
+  const kept = plates.find((p) => p.art === art && p.key === key);
+  if (kept) return kept.canvas;
+  const canvas = document.createElement("canvas");
+  canvas.width = bw;
+  canvas.height = bh;
+  const x = canvas.getContext("2d", { alpha: false })!;
+  x.setTransform(bw / W, 0, 0, bh / H, 0, 0);
+  x.fillStyle = "#060608";
+  x.fillRect(0, 0, W, H);
+  if (mode !== "black") {
+    const img = art ? (mode === "blur" && art.blur ? art.blur : art.img) : null;
+    if (img) fitImage(x, img, 0, 0, W, H, mode === "blur" ? 1.12 : 1.02, 0, 0);
+    else {
+      const g = x.createLinearGradient(0, 0, W, H);
+      g.addColorStop(0, "#1d1c24");
+      g.addColorStop(1, "#121116");
+      x.fillStyle = g;
+      x.fillRect(0, 0, W, H);
+    }
+    x.fillStyle = `rgba(0,0,0,${dim})`;
+    x.fillRect(0, 0, W, H);
+  }
+  x.fillStyle = vignette(x, W, H);
+  x.fillRect(0, 0, W, H);
+  plates.push({ art, key, canvas });
+  if (plates.length > 2) plates.shift();
+  return canvas;
+}
+
+const vignette = (x: CanvasRenderingContext2D, W: number, H: number): CanvasGradient => {
+  const v = x.createRadialGradient(W / 2, H * 0.45, H * 0.2, W / 2, H * 0.45, Math.max(W, H) * 0.75);
+  v.addColorStop(0, "rgba(0,0,0,0)");
+  v.addColorStop(1, "rgba(0,0,0,.55)");
+  return v;
+};
+
 /** The whole canvas: the cover (blurred, as it is, or none) dimmed, a glow from below in kiai, a vignette. */
 export function background(f: VisFrame, o: { dim?: number; still?: boolean } = {}): void {
   const { c, W, H } = f;
   const mode = f.o.background;
+  if (isLinux) {
+    const dim = o.dim ?? f.o.dim;
+    c.save();
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    if (f.prevArt && f.artMix < 1) {
+      c.drawImage(plate(f, f.prevArt, dim), 0, 0);
+      c.globalAlpha = f.artMix;
+    }
+    c.drawImage(plate(f, f.art, dim), 0, 0);
+    c.restore();
+    kiaiGlow(f);
+    return;
+  }
   const push = o.still ? 0 : f.hit;
   c.fillStyle = "#060608";
   c.fillRect(0, 0, W, H);
@@ -136,26 +200,25 @@ export function background(f: VisFrame, o: { dim?: number; still?: boolean } = {
     c.fillStyle = `rgba(0,0,0,${o.dim ?? f.o.dim})`;
     c.fillRect(0, 0, W, H);
   }
-  // the gradients are smooth: drawn small once and scaled up, not filled over the window each frame
-  if (f.kiai > 0.01) {
-    const a = f.look.a;
-    const g = layer(`kiai ${W}x${H} ${a.map(Math.round)}`, W, H, (x) => {
-      const g = x.createRadialGradient(W / 2, H * 1.05, 0, W / 2, H * 1.05, H);
-      g.addColorStop(0, css(a, 0.32));
-      g.addColorStop(1, css(a, 0));
-      return g;
-    });
-    c.globalAlpha = f.kiai;
-    c.drawImage(still(g), 0, 0, W, H);
-    c.globalAlpha = 1;
-  }
-  const v = layer(`vignette ${W}x${H}`, W, H, (x) => {
-    const v = x.createRadialGradient(W / 2, H * 0.45, H * 0.2, W / 2, H * 0.45, Math.max(W, H) * 0.75);
-    v.addColorStop(0, "rgba(0,0,0,0)");
-    v.addColorStop(1, "rgba(0,0,0,.55)");
-    return v;
+  kiaiGlow(f);
+  c.drawImage(still(layer(`vignette ${W}x${H}`, W, H, (x) => vignette(x, W, H))), 0, 0, W, H);
+}
+
+/** In kiai, a glow from below in the look's colour. The gradients are smooth: drawn small once and
+ * scaled up, not filled over the window each frame. */
+function kiaiGlow(f: VisFrame): void {
+  if (f.kiai <= 0.01) return;
+  const { c, W, H } = f;
+  const a = f.look.a;
+  const g = layer(`kiai ${W}x${H} ${a.map(Math.round)}`, W, H, (x) => {
+    const g = x.createRadialGradient(W / 2, H * 1.05, 0, W / 2, H * 1.05, H);
+    g.addColorStop(0, css(a, 0.32));
+    g.addColorStop(1, css(a, 0));
+    return g;
   });
-  c.drawImage(still(v), 0, 0, W, H);
+  c.globalAlpha = f.kiai;
+  c.drawImage(still(g), 0, 0, W, H);
+  c.globalAlpha = 1;
 }
 
 /** a vis colour (0–255) as the glow's (0–1) */

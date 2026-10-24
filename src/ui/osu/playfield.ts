@@ -30,7 +30,7 @@
  * and when.
  */
 import { pixelRatio } from "../render-scale";
-import { isLinux } from "../../lib/api";
+import { stillsOn } from "../still";
 import type { Nested, OsuReplay } from "../../lib/osu-replay";
 import type { Mod } from "../../lib/mods";
 import type { ChartData } from "../../lib/types";
@@ -381,7 +381,7 @@ export class OsuPlayfield {
     const W = c.clientWidth;
     const H = c.clientHeight;
     if (!W || !H) return;
-    const dpr = pixelRatio();
+    const dpr = pixelRatio(W, H);
     const bw = Math.round(W * dpr);
     const bh = Math.round(H * dpr);
     if (c.width !== bw || c.height !== bh) {
@@ -919,7 +919,7 @@ class BodyCache {
       body = made;
       this.cache.set(id, body);
       // the canvas goes back to the spares when the body changes, so the bitmap is the body's
-      if (isLinux) {
+      if (stillsOn()) {
         createImageBitmap(canvas).then(
           (b) => {
             if (this.cache.get(id) === made) made.bitmap = b;
@@ -936,7 +936,7 @@ class BodyCache {
     const ctx = f.ctx;
     ctx.save();
     ctx.globalAlpha *= alpha;
-    ctx.drawImage(body.bitmap ?? body.canvas, body.x, body.y, body.w, body.h);
+    ctx.drawImage(body.bitmap && stillsOn() ? body.bitmap : body.canvas, body.x, body.y, body.w, body.h);
     ctx.restore();
   }
 }

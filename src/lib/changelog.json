@@ -1,5 +1,17 @@
 [
   {
+    "version": "1.3.14",
+    "date": "2026-10-24",
+    "en": [
+      "Linux: the visualizer puts its background together once instead of every frame, and canvases there get at most a Full HD screen's worth of pixels. On big screens that makes the visualizer several times faster, and busy parts of the playfield run better too.",
+      "New test in the frame meter (Ctrl+F12): no bitmaps. It should tell us why held sliders flicker on Linux."
+    ],
+    "de": [
+      "Linux: Der Visualizer baut seinen Hintergrund einmal zusammen statt jedes Bild neu, und Canvases bekommen dort höchstens so viele Pixel wie ein Full-HD-Bildschirm. Auf großen Bildschirmen ist der Visualizer dadurch um ein Vielfaches schneller, und volle Stellen im Playfield laufen auch besser.",
+      "Neuer Test im Frame-Meter (Strg+F12): no bitmaps. Damit finden wir raus, warum gehaltene Slider unter Linux flackern."
+    ]
+  },
+  {
     "version": "1.3.13",
     "date": "2026-10-24",
     "en": [
