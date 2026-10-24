@@ -12,6 +12,7 @@ const songUrl = inApp ? sessionStorage.getItem("fumen.renderTestSong") : "canvas
 let mode: "2d" | "webgl" = "2d";
 let size = 1;
 let sound: "off" | "audio" | "webaudio" = "off";
+let layers = 0;
 let canvas: HTMLCanvasElement | null = null;
 let raf = 0;
 let frames = 0;
@@ -73,6 +74,19 @@ function readAnalysers(): void {
   short.getFloatTimeDomainData(wave);
 }
 
+// ── layers: window-sized see-through ones over the canvas, each its own compositing layer ──
+function setLayers(n: number): void {
+  layers = n;
+  document.querySelectorAll(".layer").forEach((l) => l.remove());
+  const bar = document.querySelector(".bar")!;
+  for (let i = 0; i < n; i++) {
+    const l = document.createElement("div");
+    l.className = "layer";
+    l.style.background = `linear-gradient(${i * 45}deg, hsl(${i * 40} 60% 50% / .06), transparent 70%)`;
+    bar.before(l);
+  }
+}
+
 // ── drawing ──────────────────────────────────────────────────────────────
 function make(): void {
   cancelAnimationFrame(raf);
@@ -85,6 +99,7 @@ function make(): void {
   cv.height = Math.round(r.height * devicePixelRatio);
   document.querySelectorAll<HTMLElement>("[data-mode]").forEach((b) => b.classList.toggle("on", b.dataset.mode === mode));
   document.querySelectorAll<HTMLElement>("[data-size]").forEach((b) => b.classList.toggle("on", +b.dataset.size! === size));
+  document.querySelectorAll<HTMLElement>("[data-layers]").forEach((b) => b.classList.toggle("on", +b.dataset.layers! === layers));
   document.querySelectorAll<HTMLElement>("[data-sound]").forEach((b) => b.classList.toggle("on", b.dataset.sound === sound));
 
   let draw: (t: number) => void;
@@ -135,7 +150,7 @@ function make(): void {
     const now = performance.now();
     if (now - since >= 1000) {
       const heard = sound === "off" ? "no sound" : sound === "audio" ? "song" : "song + Web Audio";
-      fps.textContent = `${Math.round((frames * 1000) / (now - since))} fps · ${mode === "2d" ? "2D" : "WebGL"} · ${cv.width}×${cv.height} · ${heard}`;
+      fps.textContent = `${Math.round((frames * 1000) / (now - since))} fps · ${mode === "2d" ? "2D" : "WebGL"} · ${cv.width}×${cv.height} · ${heard} · ${layers} layers`;
       frames = 0;
       since = now;
     }
@@ -153,6 +168,7 @@ document.querySelector(".bar")!.addEventListener("click", (e) => {
   }
   if (b.dataset.mode) mode = b.dataset.mode as typeof mode;
   if (b.dataset.size) size = +b.dataset.size;
+  if (b.dataset.layers) setLayers(+b.dataset.layers);
   if (b.dataset.sound && !setSound(b.dataset.sound as typeof sound)) {
     fps.textContent = "No song: play one in Fumen first, then open the test again";
     return;
