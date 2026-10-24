@@ -3,7 +3,10 @@
 //
 //   node scripts/release.mjs 0.4.1                  that version
 //   node scripts/release.mjs patch|minor            the next one
-//   node scripts/release.mjs patch --notes "…"      notes (else the commits since the last release)
+//   node scripts/release.mjs patch --notes "…"      other notes on GitHub than the changelog entry
+//
+// Every version needs its entry in src/lib/changelog.json (English and German, written by hand):
+// the app shows it after the update, and GitHub gets the English lines.
 //
 // Needs a clean, pushed main; the updater's private key in ~/.tauri/fumen-updater.key (or
 // TAURI_SIGNING_PRIVATE_KEY, with TAURI_SIGNING_PRIVATE_KEY_PASSWORD if it has one); gh logged in;
@@ -60,23 +63,11 @@ if (!env.TAURI_SIGNING_PRIVATE_KEY) {
 }
 env.TAURI_SIGNING_PRIVATE_KEY_PASSWORD ??= "";
 
-// ── notes: the commits since the last release ────────────────────────────
-const lastTag = (() => {
-  try {
-    return out("git", ["describe", "--tags", "--abbrev=0", "--match", "v*"]);
-  } catch {
-    return null;
-  }
-})();
-const notes =
-  givenNotes ??
-  (lastTag
-    ? out("git", ["log", "--format=%s", `${lastTag}..HEAD`])
-        .split("\n")
-        .filter((s) => s && !/^(README|Release |PLAN|CI\b)/.test(s))
-        .map((s) => `- ${s}`)
-        .join("\n") || "Small fixes."
-    : "First release.");
+// ── notes: the version's entry in the changelog, which the app shows after the update ──
+const changelog = JSON.parse(readFileSync(join(root, "src", "lib", "changelog.json"), "utf8"));
+const entry = changelog.find((e) => e.version === version);
+if (!entry) fail(`No entry for ${version} in src/lib/changelog.json: the app shows it after the update.`);
+const notes = givenNotes ?? entry.en.join("\n\n");
 
 // ── version everywhere, then the build ───────────────────────────────────
 console.log(`→ Fumen ${current} → ${version}`);

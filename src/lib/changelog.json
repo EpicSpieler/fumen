@@ -1,0 +1,244 @@
+[
+  {
+    "version": "1.3.10",
+    "date": "2026-10-24",
+    "en": [
+      "There's a changelog now. After an update Fumen shows what's new, and you can read all of it again under Settings, About."
+    ],
+    "de": [
+      "Es gibt jetzt einen Changelog. Nach einem Update zeigt Fumen, was neu ist, und unter Einstellungen, Über kannst du alles nochmal nachlesen."
+    ]
+  },
+  {
+    "version": "1.3.9",
+    "date": "2026-10-24",
+    "en": [
+      "In fullscreen the app behind it isn't drawn anymore, so the playfield and visualizer run faster. On Linux that's about half again as fast."
+    ],
+    "de": [
+      "Im Vollbild wird die App dahinter nicht mehr mitgezeichnet. Playfield und Visualizer laufen dadurch schneller, unter Linux etwa anderthalbmal so schnell."
+    ]
+  },
+  {
+    "version": "1.3.8",
+    "date": "2026-10-24",
+    "en": [
+      "Linux: no more background behind the playfield. It cost half the frame rate there.",
+      "Linux: Settings, Inspector opens WebKit's developer tools, to help find what's still slow."
+    ],
+    "de": [
+      "Linux: kein Hintergrund mehr hinter dem Playfield. Der hat dort die Hälfte der Bildrate gekostet.",
+      "Linux: Einstellungen, Inspector öffnet die Entwicklertools von WebKit, damit wir finden, was noch langsam ist."
+    ]
+  },
+  {
+    "version": "1.3.7",
+    "date": "2026-10-23",
+    "en": [
+      "Linux: songs now play as a stream instead of from memory, and the app redraws a lot less while one plays. That should stop most of the stutter."
+    ],
+    "de": [
+      "Linux: Songs laufen jetzt als Stream statt aus dem Speicher, und die App zeichnet beim Abspielen viel weniger neu. Das sollte das meiste Ruckeln beheben."
+    ]
+  },
+  {
+    "version": "1.3.6",
+    "date": "2026-10-23",
+    "en": [
+      "Ctrl+F11 in fullscreen shows the frames per second. Ctrl+F12 then tries it without parts of the page, so we can see what's slow on Linux."
+    ],
+    "de": [
+      "Strg+F11 im Vollbild zeigt die Bilder pro Sekunde. Strg+F12 probiert es dann ohne einzelne Teile der Seite, damit wir sehen, was unter Linux bremst."
+    ]
+  },
+  {
+    "version": "1.3.5",
+    "date": "2026-10-23",
+    "en": [
+      "Linux: the playfield and visualizer do a lot less work per frame.",
+      "Add beatmaps: downloaded sets now say \"in line for the next import\" instead of \"waiting for osu!lazer\", which sounded like lazer had to do something."
+    ],
+    "de": [
+      "Linux: Playfield und Visualizer haben pro Bild viel weniger zu tun.",
+      "Beatmaps hinzufügen: Geladene Sets zeigen jetzt \"wartet auf den nächsten Import\" statt \"wartet auf osu!lazer\". Das klang so, als müsste lazer etwas tun."
+    ]
+  },
+  {
+    "version": "1.3.4",
+    "date": "2026-10-23",
+    "en": [
+      "Linux: the playfield runs much smoother. Its glows are drawn once and reused instead of blurred every frame."
+    ],
+    "de": [
+      "Linux: Das Playfield läuft viel flüssiger. Die Leuchteffekte werden einmal gezeichnet und wiederverwendet, statt jedes Bild neu weichgezeichnet."
+    ]
+  },
+  {
+    "version": "1.3.3",
+    "date": "2026-10-22",
+    "en": [
+      "Linux: the app doesn't stutter anymore. The blurred backgrounds are prepared once instead of drawn live."
+    ],
+    "de": [
+      "Linux: Die App ruckelt nicht mehr. Die unscharfen Hintergründe werden einmal vorbereitet statt ständig live gezeichnet."
+    ]
+  },
+  {
+    "version": "1.3.2",
+    "date": "2026-10-22",
+    "en": [
+      "Songs skip the silence at their start and don't stay silent anymore when you start one while Fumen is in the background.",
+      "New in Settings: fade in and fade out between songs.",
+      "Fullscreen has a volume slider. The playfield shows your combo, can change pitch with the speed (NC / DC), remembers a skin per ruleset and lets you search skins.",
+      "Browse keeps its filters next to the rulesets, and the accent colour comes from the artwork right away."
+    ],
+    "de": [
+      "Songs überspringen die Stille am Anfang und bleiben nicht mehr stumm, wenn du einen startest, während Fumen im Hintergrund ist.",
+      "Neu in den Einstellungen: Ein- und Ausblenden zwischen Songs.",
+      "Das Vollbild hat einen Lautstärkeregler. Das Playfield zeigt deine Combo, kann die Tonhöhe mit dem Tempo ändern (NC / DC), merkt sich einen Skin pro Modus und du kannst Skins suchen.",
+      "Entdecken behält die Filter neben den Modi, und die Akzentfarbe kommt sofort aus dem Cover."
+    ]
+  },
+  {
+    "version": "1.3.1",
+    "date": "2026-10-22",
+    "en": [
+      "Visualizer: you can set how blurry the background is in its settings, from sharp to very soft."
+    ],
+    "de": [
+      "Visualizer: In den Einstellungen kannst du jetzt einstellen, wie unscharf der Hintergrund ist, von scharf bis ganz weich."
+    ]
+  },
+  {
+    "version": "1.3.0",
+    "date": "2026-10-21",
+    "en": [
+      "The fullscreen visualizer is completely new. It follows each song's loudness and hits on every kick and snare, no matter how loud you play it.",
+      "Pulses and kiai come from the beatmap's own timing.",
+      "Six styles: Spektrum, Ring, Wave, Starfield, Stage and Hi-Fi. Pick one from the dropdown or press V.",
+      "Colours from the cover, your accent or your own pick, plus a panel for reaction, sensitivity, bars, flashes, background, title and a beat offset. Everything is saved."
+    ],
+    "de": [
+      "Der Vollbild-Visualizer ist komplett neu. Er folgt der Lautstärke jedes Songs und reagiert auf jede Kick und Snare, egal wie laut du hörst.",
+      "Pulse und Kiai kommen aus dem Timing der Beatmap.",
+      "Sechs Stile: Spektrum, Ring, Wave, Starfield, Stage und Hi-Fi. Auswahl übers Dropdown oder mit V.",
+      "Farben aus dem Cover, deiner Akzentfarbe oder selbst gewählt, dazu ein Panel für Reaktion, Empfindlichkeit, Balken, Blitze, Hintergrund, Titel und einen Beat-Offset. Alles wird gespeichert."
+    ]
+  },
+  {
+    "version": "1.2.0",
+    "date": "2026-10-21",
+    "en": [
+      "New Tournament page. Build map pools slot by slot with star rating, pp, BPM and length at each slot's mods.",
+      "Fill slots from your library or from osu! by search or link. Maps you don't have come from the mirrors.",
+      "Export a pool as a sheet, CSV, JSON, bot lines or a showcase image.",
+      "Matches: link the multiplayer room and the games come in as they're played, with bans, picks and points.",
+      "A stream overlay for OBS, served only from your PC."
+    ],
+    "de": [
+      "Neue Turnier-Seite. Map-Pools Slot für Slot bauen, mit Sternen, pp, BPM und Länge bei den Mods des Slots.",
+      "Slots aus deiner Bibliothek oder von osu! füllen, per Suche oder Link. Maps, die du nicht hast, kommen von den Mirrors.",
+      "Pools exportieren als Tabelle, CSV, JSON, Bot-Zeilen oder Showcase-Bild.",
+      "Matches: Multiplayer-Raum verlinken, und die Spiele kommen rein, während gespielt wird, mit Bans, Picks und Punkten.",
+      "Ein Stream-Overlay für OBS, das nur von deinem PC kommt."
+    ]
+  },
+  {
+    "version": "1.1.5",
+    "date": "2026-10-21",
+    "en": [
+      "pp for every difficulty. The chart panel shows the most a play is worth at the mods you pick, plus 99/98/97/95%.",
+      "There's a calculator for any play, with a graph of how much each judgement costs."
+    ],
+    "de": [
+      "pp für jeden Schwierigkeitsgrad. Das Chart-Panel zeigt, was ein Play mit deinen Mods maximal bringt, dazu 99/98/97/95%.",
+      "Dazu ein Rechner für beliebige Plays, mit einer Grafik, wie viel jedes Judgement kostet."
+    ]
+  },
+  {
+    "version": "1.1.4",
+    "date": "2026-10-19",
+    "en": [
+      "Browse: no more second box inside the search field, and the placeholders while loading match the real sets."
+    ],
+    "de": [
+      "Entdecken: kein zweites Kästchen mehr im Suchfeld, und die Platzhalter beim Laden sehen aus wie die echten Sets."
+    ]
+  },
+  {
+    "version": "1.1.3",
+    "date": "2026-10-18",
+    "en": [
+      "New home page made of tiles: where you left off, this session, your goals, recently played and added, quick picks, collections and more."
+    ],
+    "de": [
+      "Neue Startseite aus Kacheln: wo du aufgehört hast, diese Session, deine Ziele, zuletzt gespielt und hinzugefügt, Vorschläge, Sammlungen und mehr."
+    ]
+  },
+  {
+    "version": "1.1.2",
+    "date": "2026-10-18",
+    "en": [
+      "Fumen can put downloaded sets into osu!stable too, if you turn it on in Settings, osu!stable. It never replaces or removes anything there."
+    ],
+    "de": [
+      "Fumen kann geladene Sets jetzt auch in osu!stable packen, wenn du das in den Einstellungen unter osu!stable einschaltest. Dort wird nie etwas ersetzt oder gelöscht."
+    ]
+  },
+  {
+    "version": "1.1.1",
+    "date": "2026-10-17",
+    "en": [
+      "The companion window doesn't stay white anymore and is smaller. Hover it and clicks go through to the game. Hold Ctrl to click it."
+    ],
+    "de": [
+      "Das Begleitfenster bleibt nicht mehr weiß und ist kleiner. Mit der Maus drüber gehen Klicks durch ins Spiel. Halt Strg gedrückt, um es anzuklicken."
+    ]
+  },
+  {
+    "version": "1.1.0",
+    "date": "2026-10-17",
+    "en": [
+      "After every pass in osu!lazer Fumen opens a score page: where your accuracy went, your timing, the replay and a button to practise the worst part.",
+      "A companion window over the game with your session, your last play against your best, and a pool to work through. Both are under Settings, While you play."
+    ],
+    "de": [
+      "Nach jedem Pass in osu!lazer öffnet Fumen eine Score-Seite: wo deine Accuracy hin ist, dein Timing, das Replay und ein Knopf zum Üben der schlimmsten Stelle.",
+      "Ein Begleitfenster über dem Spiel mit deiner Session, deinem letzten Play gegen dein bestes und einem Pool zum Durchspielen. Beides unter Einstellungen, Beim Spielen."
+    ]
+  },
+  {
+    "version": "1.0.2",
+    "date": "2026-10-17",
+    "en": [
+      "Security update. Beatmaps from mirrors are checked before they go into osu!lazer, and your osu! login is encrypted for your Windows user.",
+      "On the first start Fumen says what its start ping is, and you can turn it off right there."
+    ],
+    "de": [
+      "Sicherheitsupdate. Beatmaps von Mirrors werden geprüft, bevor sie in osu!lazer kommen, und dein osu!-Login ist für deinen Windows-Benutzer verschlüsselt.",
+      "Beim ersten Start sagt Fumen, was der Start-Ping ist, und du kannst ihn direkt da ausschalten."
+    ]
+  },
+  {
+    "version": "1.0.1",
+    "date": "2026-10-16",
+    "en": [
+      "Typing in the fullscreen player doesn't end up in the library search behind it anymore.",
+      "Fumen sends one ping when it starts so we know how many people use it: a random id and the version, nothing else. You can turn it off under Settings, About."
+    ],
+    "de": [
+      "Tippen im Vollbild-Player landet nicht mehr in der Bibliothekssuche dahinter.",
+      "Fumen schickt beim Start einen Ping, damit wir wissen, wie viele es benutzen: eine zufällige ID und die Version, sonst nichts. Abschalten kannst du das unter Einstellungen, Über."
+    ]
+  },
+  {
+    "version": "1.0.0",
+    "date": "2026-10-16",
+    "en": [
+      "Fumen 1.0! Installer and auto updates, English and German, four themes, and a website at fumen.dertesti.dev."
+    ],
+    "de": [
+      "Fumen 1.0! Installer und automatische Updates, Englisch und Deutsch, vier Themes und eine Website unter fumen.dertesti.dev."
+    ]
+  }
+]

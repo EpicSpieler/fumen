@@ -14,6 +14,7 @@ import { attachSegIndicator, openMenu, toast, uiConfirm, uiPrompt } from "../ui/
 import { importSets, openImport } from "./import";
 import { icon } from "../ui/icons";
 import { ACCENT_PRESETS, applyAppearance } from "../ui/theme";
+import { openChangelog } from "./changelog";
 
 // the osu! login outlives the view: it waits for the browser while you look elsewhere
 let account: OsuAccount | null = null;
@@ -234,6 +235,13 @@ export class SettingsView {
               <div class="setting-title about-version">Fumen ${esc(this.version)}</div>
               <div class="setting-desc">${t("Fumen reads osu!lazer's database from a private copy. Beatmaps and collections you put into lazer go in through lazer's own code, only while lazer is closed, only on lazer versions tested with Fumen, and with a backup of its database first.")}</div>
             </div>
+          </div>
+          <div class="setting-row">
+            <div class="setting-text">
+              <div class="setting-title">${t("Changelog")}</div>
+              <div class="setting-desc">${t("What each update added or changed.")}</div>
+            </div>
+            <button class="btn s-changelog" type="button">${t("Open")}</button>
           </div>
           <div class="setting-row" data-row="update"></div>
           ${
@@ -533,6 +541,7 @@ export class SettingsView {
       return;
     }
     if (target.closest(".s-update-check")) return checkForUpdate(true);
+    if (target.closest(".s-changelog")) return openChangelog();
     if (target.closest(".s-inspector")) return void api.openInspector().catch((e) => toast(asApiError(e).message, { kind: "danger" }));
     if (target.closest(".s-update-install")) return installUpdate();
     if (target.closest(".s-login")) return loginWithOsu();

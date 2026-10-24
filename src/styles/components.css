@@ -508,3 +508,14 @@ body.has-player .toast-host { bottom: calc(var(--player-h) + 12px); }
 }
 .menu-search input::-webkit-search-cancel-button { -webkit-appearance: none; }
 .menu-item[hidden] { display: none; }
+
+/* Changelog (after an update, and Settings › About) */
+.changelog { width: 460px; max-height: min(620px, 100%); display: flex; flex-direction: column; overflow: hidden; }
+.changelog .dialog-title { padding-right: 32px; margin-bottom: 10px; }
+.changelog-list { overflow-y: auto; margin: 0 -8px; padding: 0 8px; }
+.changelog-entry + .changelog-entry { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--stroke); }
+.changelog-version { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; font-size: var(--fs-13); }
+.changelog-version span { color: var(--t3); font-size: var(--fs-12); }
+.changelog-entry ul { margin: 0; padding-left: 18px; }
+.changelog-entry li { font-size: var(--fs-13); color: var(--t2); line-height: 1.5; }
+.changelog-entry li + li { margin-top: 4px; }

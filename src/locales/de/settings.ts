@@ -100,6 +100,11 @@ export const settings: Record<string, string> = {
     "Unter Linux aktualisiert sich Fumen noch nicht selbst: Installier es einfach nochmal so wie beim ersten Mal (AppImage, .deb oder der Arch-Befehl von fumen.dertesti.dev).",
   Inspector: "Inspector",
   Open: "Öffnen",
+  Changelog: "Changelog",
+  "What each update added or changed.": "Was jedes Update neu gebracht oder geändert hat.",
+  "New in Fumen {version}": "Neu in Fumen {version}",
+  "All versions": "Alle Versionen",
+  "Got it": "Alles klar",
   "WebKit's developer tools. Its Timelines show what makes Fumen slow on this PC.":
     "Die Entwicklerwerkzeuge von WebKit. Ihre Timelines zeigen, was Fumen auf diesem PC langsam macht.",
   "On macOS, Fumen doesn't update itself yet: new versions are on fumen.dertesti.dev.":

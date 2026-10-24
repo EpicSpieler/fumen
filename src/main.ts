@@ -32,6 +32,9 @@ import { clearSkins, loadSkinList } from "./lib/skin/skins";
 import { events, loadPrefs, refreshStatus, reloadLibrary, setPrefs, setSnapshot, store } from "./lib/store";
 import type { ScanProgress } from "./lib/types";
 import { startPing } from "./lib/ping";
+import { newSinceLastRun } from "./lib/changelog";
+import { openChangelog } from "./views/changelog";
+import { getVersion } from "@tauri-apps/api/app";
 import { mountPlayerBar } from "./player";
 import { openFullscreen } from "./views/fullscreen";
 import { BrowseView } from "./views/browse";
@@ -885,7 +888,7 @@ async function boot(): Promise<void> {
   applyGroups();
   renderProfile();
 
-  let st;
+  let st: Awaited<ReturnType<typeof refreshStatus>> | undefined;
   try {
     st = await refreshStatus();
   } catch (e) {
@@ -915,7 +918,16 @@ async function boot(): Promise<void> {
   initOverlay();
   initLivePlays();
   document.body.classList.add("ready");
-  void startPing().catch((e) => console.warn("[ping]", asApiError(e).message));
+  void startPing()
+    .catch((e) => console.warn("[ping]", asApiError(e).message))
+    .finally(() => void showWhatsNew(!!st?.scannedAt));
+}
+
+/** After an update: what changed since the version Fumen last ran (after the start ping's notice). */
+async function showWhatsNew(known: boolean): Promise<void> {
+  if (!isTauri) return;
+  const version = await getVersion().catch(() => null);
+  if (version) openChangelog(newSinceLastRun(version, known), true);
 }
 
 /** Plays as they happen: with Fumen behind the game, its score page is waiting when you come back;
