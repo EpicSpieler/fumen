@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Canvas test · Fumen</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #08080b; color: #fff; font: 14px system-ui, sans-serif; overflow: hidden; }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  .bar { position: fixed; top: 12px; left: 12px; z-index: 1; display: flex; gap: 8px; flex-wrap: wrap; max-width: calc(100% - 44px); align-items: center; padding: 8px 10px; border-radius: 8px; background: rgba(0, 0, 0, .75); }
+  .bar button { font: inherit; color: #fff; background: #2a2a33; border: 0; border-radius: 6px; padding: 5px 10px; cursor: pointer; }
+  .bar button.on { background: #8b7cff; }
+  .bar .back { margin-left: 8px; background: #3a3a46; }
+  #fps { min-width: 220px; font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+<!-- Fumen's Linux test: how fast WebKit puts a window-filling canvas on screen, drawn every frame,
+     as a 2D canvas (what Fumen's playfield uses) or WebGL. The same page as
+     fumen.dertesti.dev/canvas-test.html, here in Fumen's own window (Settings › Render test):
+     fast there and slow here means Tauri's window, fast in both means Fumen's page. -->
+<div class="bar">
+  <span id="fps">…</span>
+  <button data-mode="2d">2D canvas</button>
+  <button data-mode="webgl">WebGL</button>
+  <button data-size="1">full size</button>
+  <button data-size="0.5">quarter</button>
+  <button class="back" type="button">Back to Fumen</button>
+</div>
+<script type="module" src="/src/canvas-test.ts"></script>
+</body>
+</html>

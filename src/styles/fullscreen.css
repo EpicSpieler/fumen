@@ -69,6 +69,12 @@ body.fs-open #app { visibility: hidden; transition: visibility 0s .25s; }
 .fs.test-no-bg .fs-bg { display: none; }
 /* … and "nothing behind": the app under the fullscreen view not drawn */
 body.fs-test-alone #app { visibility: hidden; }
+/* … and "no blur effects": no filter or backdrop blur anywhere */
+body.fs-test-no-blur *, body.fs-test-no-blur *::before, body.fs-test-no-blur *::after {
+  filter: none !important;
+  -webkit-backdrop-filter: none !important;
+          backdrop-filter: none !important;
+}
 .fs-visual { pointer-events: none; }
 .fs-vis-ctl { display: flex; align-items: center; gap: 6px; }
 .fs-style, .vp-style { background: rgba(255, 255, 255, .08); }

@@ -100,6 +100,9 @@ export const settings: Record<string, string> = {
     "Unter Linux aktualisiert sich Fumen noch nicht selbst: Installier es einfach nochmal so wie beim ersten Mal (AppImage, .deb oder der Arch-Befehl von fumen.dertesti.dev).",
   Inspector: "Inspector",
   Open: "Öffnen",
+  "Render test": "Rendertest",
+  "A plain moving canvas in Fumen's window with its frames per second, the same as the test page on fumen.dertesti.dev. Back to Fumen with the button at the top.":
+    "Ein einfaches bewegtes Canvas in Fumens Fenster mit Bildern pro Sekunde, genau wie die Testseite auf fumen.dertesti.dev. Zurück zu Fumen geht's mit dem Knopf oben.",
   Changelog: "Changelog",
   "What each update added or changed.": "Was jedes Update neu gebracht oder geändert hat.",
   "New in Fumen {version}": "Neu in Fumen {version}",

@@ -12,7 +12,7 @@ export default defineConfig({
   build: {
     target: "es2022",
     sourcemap: false,
-    // the main window and the companion window (src/companion.ts)
-    rollupOptions: { input: { main: "index.html", companion: "companion.html" } },
+    // the main window, the companion window (src/companion.ts) and Linux's render test (src/canvas-test.ts)
+    rollupOptions: { input: { main: "index.html", companion: "companion.html", canvasTest: "canvas-test.html" } },
   },
 });

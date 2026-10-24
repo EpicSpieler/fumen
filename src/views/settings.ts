@@ -252,6 +252,13 @@ export class SettingsView {
               <div class="setting-desc">${t("WebKit's developer tools. Its Timelines show what makes Fumen slow on this PC.")}</div>
             </div>
             <button class="btn s-inspector" type="button">${t("Open")}</button>
+          </div>
+          <div class="setting-row">
+            <div class="setting-text">
+              <div class="setting-title">${t("Render test")}</div>
+              <div class="setting-desc">${t("A plain moving canvas in Fumen's window with its frames per second, the same as the test page on fumen.dertesti.dev. Back to Fumen with the button at the top.")}</div>
+            </div>
+            <button class="btn s-render-test" type="button">${t("Open")}</button>
           </div>`
               : ""
           }
@@ -542,6 +549,7 @@ export class SettingsView {
     }
     if (target.closest(".s-update-check")) return checkForUpdate(true);
     if (target.closest(".s-changelog")) return openChangelog();
+    if (target.closest(".s-render-test")) return void (location.href = "/canvas-test.html");
     if (target.closest(".s-inspector")) return void api.openInspector().catch((e) => toast(asApiError(e).message, { kind: "danger" }));
     if (target.closest(".s-update-install")) return installUpdate();
     if (target.closest(".s-login")) return loginWithOsu();

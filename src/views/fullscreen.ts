@@ -1048,7 +1048,7 @@ class Fullscreen {
               this.test = 0;
               setRenderScale(1);
               this.el!.classList.remove("test-no-bg");
-              document.body.classList.remove("fs-test-alone");
+              document.body.classList.remove("fs-test-alone", "fs-test-no-blur");
             }
             this.el!.querySelector<HTMLElement>(".fs-fps")!.hidden = !this.meter;
             this.el!.querySelector<HTMLElement>(".fs-fps")!.textContent = "…";
@@ -1060,6 +1060,7 @@ class Fullscreen {
             setRenderScale(this.test === 3 ? 0.5 : 1);
             this.el!.classList.toggle("test-no-bg", this.test === 4);
             document.body.classList.toggle("fs-test-alone", this.test === 5);
+            document.body.classList.toggle("fs-test-no-blur", this.test === 6);
             this.meter = { frames: 0, draw: 0, worst: 0, since: performance.now() };
             this.el!.querySelector<HTMLElement>(".fs-fps")!.textContent = `[${METER_TESTS[this.test]}] …`;
             break;
@@ -1104,7 +1105,7 @@ function setBehindInert(on: boolean): void {
 }
 
 /** what the meter's tests leave out (Ctrl+F12), in English: they're for reports */
-const METER_TESTS = ["everything", "no side panel", "no drawing", "half resolution", "no background", "nothing behind"] as const;
+const METER_TESTS = ["everything", "no side panel", "no drawing", "half resolution", "no background", "nothing behind", "no blur effects"] as const;
 
 const fullscreen = new Fullscreen();
 

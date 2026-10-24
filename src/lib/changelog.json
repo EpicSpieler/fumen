@@ -1,5 +1,15 @@
 [
   {
+    "version": "1.3.11",
+    "date": "2026-10-24",
+    "en": [
+      "Linux: two more tests to find out why Fumen is slow there. Settings has a render test that runs the test page from the website inside Fumen's window, and Ctrl+F12 in the frame meter can now turn off all blur effects."
+    ],
+    "de": [
+      "Linux: zwei weitere Tests, um rauszufinden, warum Fumen dort langsam ist. In den Einstellungen gibt es einen Rendertest, der die Testseite von der Website in Fumens Fenster laufen lässt, und Strg+F12 im Frame-Meter kann jetzt alle Blur-Effekte ausschalten."
+    ]
+  },
+  {
     "version": "1.3.10",
     "date": "2026-10-24",
     "en": [
