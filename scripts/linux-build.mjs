@@ -5,6 +5,7 @@
 // pushed to main, so push first.
 //
 //   node scripts/linux-build.mjs
+//   node scripts/linux-build.mjs --run <id>     a build that's already running (or done) on GitHub
 //
 // No self-update on Linux yet: a new version is downloaded again. Needs gh logged in and SSH to the
 // VPS as for release.mjs ("vps", or VPS_HOST).
@@ -35,20 +36,36 @@ if (out("git", ["rev-parse", "origin/main"]) !== head) fail("Push main first: th
 
 // ── build ────────────────────────────────────────────────────────────────
 console.log(`→ Linux build of ${version} (${head.slice(0, 7)})`);
-const latestRun = () => JSON.parse(out(gh, ["run", "list", "--workflow", "linux.yml", "--limit", "1", "--json", "databaseId,headSha,createdAt"]))[0];
-const before = latestRun()?.databaseId;
-run(gh, ["workflow", "run", "linux.yml", "--ref", "main"]);
-let id;
-for (let i = 0; i < 30 && !id; i++) {
-  await new Promise((r) => setTimeout(r, 3000));
-  const r = latestRun();
-  if (r && r.databaseId !== before && r.headSha === head) id = r.databaseId;
+const runAt = process.argv.indexOf("--run");
+let id = runAt >= 0 ? process.argv[runAt + 1] : undefined;
+if (!id) {
+  const latestRun = () => JSON.parse(out(gh, ["run", "list", "--workflow", "linux.yml", "--limit", "1", "--json", "databaseId,headSha,createdAt"]))[0];
+  const before = latestRun()?.databaseId;
+  run(gh, ["workflow", "run", "linux.yml", "--ref", "main"]);
+  for (let i = 0; i < 30 && !id; i++) {
+    await new Promise((r) => setTimeout(r, 3000));
+    const r = latestRun();
+    if (r && r.databaseId !== before && r.headSha === head) id = r.databaseId;
+  }
+  if (!id) fail("The build didn't show up on GitHub.");
 }
-if (!id) fail("The build didn't show up on GitHub.");
-try {
-  run(gh, ["run", "watch", String(id), "--exit-status", "--interval", "30"]);
-} catch {
-  fail(`The Linux build failed: gh run view ${id} --log-failed`);
+// watching can fail on GitHub's side (a 502) while the build goes on: then it's asked again
+for (;;) {
+  try {
+    run(gh, ["run", "watch", String(id), "--exit-status", "--interval", "30"]);
+    break;
+  } catch {
+    let state;
+    try {
+      state = JSON.parse(out(gh, ["run", "view", String(id), "--json", "status,conclusion"]));
+    } catch {
+      state = { status: "unknown" };
+    }
+    if (state.status === "completed" && state.conclusion === "success") break;
+    if (state.status === "completed") fail(`The Linux build failed: gh run view ${id} --log-failed`);
+    console.log("  (lost track of the build, watching again)");
+    await new Promise((r) => setTimeout(r, 15000));
+  }
 }
 
 // ── the packages, onto the server ────────────────────────────────────────
