@@ -226,7 +226,7 @@ export class Visualizer {
     const W = c0.clientWidth;
     const H = c0.clientHeight;
     if (!W || !H) return false;
-    const dpr = pixelRatio(W, H, 2);
+    const dpr = pixelRatio(2);
     const bw = Math.round(W * dpr);
     const bh = Math.round(H * dpr);
     if (c0.width !== bw || c0.height !== bh) {

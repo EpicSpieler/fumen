@@ -381,7 +381,7 @@ export class OsuPlayfield {
     const W = c.clientWidth;
     const H = c.clientHeight;
     if (!W || !H) return;
-    const dpr = pixelRatio(W, H);
+    const dpr = pixelRatio();
     const bw = Math.round(W * dpr);
     const bh = Math.round(H * dpr);
     if (c.width !== bw || c.height !== bh) {

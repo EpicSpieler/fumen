@@ -1,5 +1,15 @@
 [
   {
+    "version": "1.3.15",
+    "date": "2026-10-24",
+    "en": [
+      "Linux: canvases are drawn at full size again. Scaling them up cost more there than the pixels saved, so the playfield dropped back to 12 fps in 1.3.14. The faster visualizer background stays."
+    ],
+    "de": [
+      "Linux: Canvases werden wieder in voller Größe gezeichnet. Das Hochskalieren hat dort mehr gekostet als die gesparten Pixel, deshalb ist das Playfield in 1.3.14 wieder auf 12 fps gefallen. Der schnellere Visualizer-Hintergrund bleibt."
+    ]
+  },
+  {
     "version": "1.3.14",
     "date": "2026-10-24",
     "en": [

@@ -35,7 +35,7 @@ export function fitCanvas(c: HTMLCanvasElement): { ctx: CanvasRenderingContext2D
   const w = c.clientWidth;
   const h = c.clientHeight;
   if (!w || !h) return null;
-  const dpr = pixelRatio(w, h);
+  const dpr = pixelRatio();
   const bw = Math.round(w * dpr);
   const bh = Math.round(h * dpr);
   if (c.width !== bw || c.height !== bh) {
