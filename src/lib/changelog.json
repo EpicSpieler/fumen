@@ -1,5 +1,15 @@
 [
   {
+    "version": "1.3.17",
+    "date": "2026-10-25",
+    "en": [
+      "Playfield: with skins that animate their follow points (the lines between circles) or the slider follow circle, the animation ran at 60 frames a second and looked like flickering. It now runs at the skin's own frame rate like in osu!lazer, or once a second when the skin doesn't set one."
+    ],
+    "de": [
+      "Playfield: Bei Skins mit animierten Follow Points (die Linien zwischen den Circles) oder animiertem Slider-Follow-Circle lief die Animation mit 60 Bildern pro Sekunde und sah aus wie Flackern. Jetzt läuft sie wie in osu!lazer mit der Framerate des Skins, oder einmal pro Sekunde, wenn der Skin keine angibt."
+    ]
+  },
+  {
     "version": "1.3.16",
     "date": "2026-10-24",
     "en": [

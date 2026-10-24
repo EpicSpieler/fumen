@@ -142,8 +142,8 @@ export class LegacyOsuRenderer implements OsuRenderer {
       const b = c.texture("sliderb");
       if (b) r.balls.push(b);
     }
-    r.followCircle = c.animation("sliderfollowcircle", true, true);
-    r.followPointAnim = c.animation("followpoint", true, true);
+    r.followCircle = c.animation("sliderfollowcircle", true, true, { applyConfigFrameRate: true });
+    r.followPointAnim = c.animation("followpoint", true, true, { applyConfigFrameRate: true });
     r.judgements = ["hit300", "hit100", "hit50", "hit0"].map((name) => c.animation(name, true, false));
     r.newSpinner = !!r.t["spinner-top"] && !r.t["spinner-background"];
     r.oldSpinner = !!r.t["spinner-background"];
