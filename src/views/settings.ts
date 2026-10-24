@@ -15,6 +15,7 @@ import { importSets, openImport } from "./import";
 import { icon } from "../ui/icons";
 import { ACCENT_PRESETS, applyAppearance } from "../ui/theme";
 import { openChangelog } from "./changelog";
+import { player } from "../player";
 
 // the osu! login outlives the view: it waits for the browser while you look elsewhere
 let account: OsuAccount | null = null;
@@ -256,7 +257,7 @@ export class SettingsView {
           <div class="setting-row">
             <div class="setting-text">
               <div class="setting-title">${t("Render test")}</div>
-              <div class="setting-desc">${t("A plain moving canvas in Fumen's window with its frames per second, the same as the test page on fumen.dertesti.dev. Back to Fumen with the button at the top.")}</div>
+              <div class="setting-desc">${t("A plain moving canvas in Fumen's window with its frames per second, the same as the test page on fumen.dertesti.dev, with or without the song that's loaded. Back to Fumen with the button at the top.")}</div>
             </div>
             <button class="btn s-render-test" type="button">${t("Open")}</button>
           </div>`
@@ -549,7 +550,11 @@ export class SettingsView {
     }
     if (target.closest(".s-update-check")) return checkForUpdate(true);
     if (target.closest(".s-changelog")) return openChangelog();
-    if (target.closest(".s-render-test")) return void (location.href = "/canvas-test.html");
+    if (target.closest(".s-render-test")) {
+      // the song that's loaded, for the test with sound
+      if (player.audio.currentSrc) sessionStorage.setItem("fumen.renderTestSong", player.audio.currentSrc);
+      return void (location.href = "/canvas-test.html");
+    }
     if (target.closest(".s-inspector")) return void api.openInspector().catch((e) => toast(asApiError(e).message, { kind: "danger" }));
     if (target.closest(".s-update-install")) return installUpdate();
     if (target.closest(".s-login")) return loginWithOsu();

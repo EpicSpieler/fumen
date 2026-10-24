@@ -101,8 +101,8 @@ export const settings: Record<string, string> = {
   Inspector: "Inspector",
   Open: "Öffnen",
   "Render test": "Rendertest",
-  "A plain moving canvas in Fumen's window with its frames per second, the same as the test page on fumen.dertesti.dev. Back to Fumen with the button at the top.":
-    "Ein einfaches bewegtes Canvas in Fumens Fenster mit Bildern pro Sekunde, genau wie die Testseite auf fumen.dertesti.dev. Zurück zu Fumen geht's mit dem Knopf oben.",
+  "A plain moving canvas in Fumen's window with its frames per second, the same as the test page on fumen.dertesti.dev, with or without the song that's loaded. Back to Fumen with the button at the top.":
+    "Ein einfaches bewegtes Canvas in Fumens Fenster mit Bildern pro Sekunde, genau wie die Testseite auf fumen.dertesti.dev, mit oder ohne den geladenen Song. Zurück zu Fumen geht's mit dem Knopf oben.",
   Changelog: "Changelog",
   "What each update added or changed.": "Was jedes Update neu gebracht oder geändert hat.",
   "New in Fumen {version}": "Neu in Fumen {version}",

@@ -16,7 +16,7 @@
 </head>
 <body>
 <!-- Fumen's Linux test: how fast WebKit puts a window-filling canvas on screen, drawn every frame,
-     as a 2D canvas (what Fumen's playfield uses) or WebGL. The same page as
+     as a 2D canvas (what Fumen's playfield uses) or WebGL, with or without a song playing. The same page as
      fumen.dertesti.dev/canvas-test.html, here in Fumen's own window (Settings › Render test):
      fast there and slow here means Tauri's window, fast in both means Fumen's page. -->
 <div class="bar">
@@ -25,6 +25,9 @@
   <button data-mode="webgl">WebGL</button>
   <button data-size="1">full size</button>
   <button data-size="0.5">quarter</button>
+  <button data-sound="off">no sound</button>
+  <button data-sound="audio">song</button>
+  <button data-sound="webaudio">song + Web Audio</button>
   <button class="back" type="button">Back to Fumen</button>
 </div>
 <script type="module" src="/src/canvas-test.ts"></script>

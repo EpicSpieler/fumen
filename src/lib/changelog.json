@@ -1,5 +1,15 @@
 [
   {
+    "version": "1.3.12",
+    "date": "2026-10-24",
+    "en": [
+      "Linux: the render test can now play the song you have loaded, plain or through Web Audio like the visualizer does. That shows if the music is what slows Fumen down there."
+    ],
+    "de": [
+      "Linux: Der Rendertest kann jetzt den geladenen Song abspielen, einfach so oder über Web Audio wie der Visualizer. So sehen wir, ob die Musik Fumen dort ausbremst."
+    ]
+  },
+  {
     "version": "1.3.11",
     "date": "2026-10-24",
     "en": [
