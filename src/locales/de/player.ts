@@ -20,6 +20,7 @@ export const player: Record<string, string> = {
   // fullscreen
   "osu!, osu!taiko, osu!catch and osu!mania": "osu!, osu!taiko, osu!catch und osu!mania",
   "Now playing, fullscreen": "Läuft gerade, Vollbild",
+  "Report copied, paste it where you send it": "Bericht kopiert, füg ihn dort ein, wo du ihn hinschickst",
   View: "Ansicht",
   Visualizer: "Visualizer",
   Playfield: "Spielfeld",

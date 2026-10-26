@@ -180,6 +180,52 @@ fn open_inspector(window: tauri::WebviewWindow) {
     drop(window);
 }
 
+/// Linux: the system for a performance report (the render test's "Copy report"), as label and
+/// value pairs; what can't be read is left out. Empty elsewhere.
+#[tauri::command]
+fn system_info() -> Vec<(String, String)> {
+    #[allow(unused_mut)]
+    let mut out: Vec<(String, String)> = Vec::new();
+    #[cfg(target_os = "linux")]
+    {
+        let read = |p: &str| std::fs::read_to_string(p).ok();
+        let env = |k: &str| std::env::var(k).ok().filter(|v| !v.is_empty());
+        let mut add = |k: &str, v: Option<String>| {
+            if let Some(v) = v {
+                out.push((k.to_string(), v.trim().to_string()));
+            }
+        };
+        let os = read("/etc/os-release").and_then(|s| {
+            s.lines().find_map(|l| l.strip_prefix("PRETTY_NAME=")).map(|v| v.trim_matches('"').to_string())
+        });
+        add("System", os);
+        add("Kernel", read("/proc/sys/kernel/osrelease"));
+        add("Session", env("XDG_SESSION_TYPE"));
+        add("Desktop", env("XDG_CURRENT_DESKTOP"));
+        let (major, minor, micro) = unsafe {
+            use webkit2gtk::ffi;
+            (ffi::webkit_get_major_version(), ffi::webkit_get_minor_version(), ffi::webkit_get_micro_version())
+        };
+        add("WebKitGTK", Some(format!("{major}.{minor}.{micro}")));
+        // "NVRM version: NVIDIA UNIX x86_64 Kernel Module  580.95.05  ..." → the driver's number
+        let nvidia = read("/proc/driver/nvidia/version")
+            .and_then(|s| s.lines().next().and_then(|l| l.split_whitespace().find(|w| w.chars().next().is_some_and(|c| c.is_ascii_digit()) && w.contains('.')).map(str::to_string)));
+        add("NVIDIA driver", nvidia);
+        let cpu = read("/proc/cpuinfo").and_then(|s| s.lines().find_map(|l| l.strip_prefix("model name").and_then(|v| v.split_once(':')).map(|(_, v)| v.to_string())));
+        add("CPU", cpu);
+        let ram = read("/proc/meminfo").and_then(|s| {
+            s.lines().find_map(|l| l.strip_prefix("MemTotal:")).and_then(|v| v.split_whitespace().next()?.parse::<u64>().ok()).map(|kb| format!("{:.0} GB", kb as f64 / 1048576.0))
+        });
+        add("RAM", ram);
+        let installed = if env("APPIMAGE").is_some() { "AppImage" } else { "package (.deb or Arch)" };
+        add("Installed as", Some(installed.to_string()));
+        for k in ["WEBKIT_DISABLE_DMABUF_RENDERER", "WEBKIT_DISABLE_COMPOSITING_MODE", "GDK_BACKEND", "__NV_PRIME_RENDER_OFFLOAD"] {
+            add(k, env(k));
+        }
+    }
+    out
+}
+
 /// Linux: where the player loads songs from (media_server.rs); null elsewhere or when it didn't start.
 #[tauri::command]
 fn media_base() -> Option<String> {
@@ -1915,6 +1961,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             media_base,
             open_inspector,
+            system_info,
             get_settings,
             library_care,
             update_settings,

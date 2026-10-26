@@ -106,6 +106,8 @@ export const api = {
   openCompanion: () => invoke<void>("open_companion"),
   /** Linux: WebKit's inspector */
   openInspector: () => invoke<void>("open_inspector"),
+  /** Linux: the system for a performance report, as label and value pairs (empty elsewhere) */
+  systemInfo: () => invoke<[string, string][]>("system_info"),
   closeCompanion: () => invoke<void>("close_companion"),
   fitCompanion: (height: number) => invoke<void>("fit_companion", { height }),
   showMain: () => invoke<void>("show_main"),

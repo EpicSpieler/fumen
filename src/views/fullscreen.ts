@@ -29,7 +29,8 @@ import { setPrefs, store } from "../lib/store";
 import type { ChartData, ReplayEntry, SkinList, VisStyle } from "../lib/types";
 import type { Section } from "../lib/practice";
 import { bindVolume, dragSlider, player, volumeHtml } from "../player";
-import { attachSegIndicator, createSelect, openMenu, reduceMotion, type MenuEntry, type SelectHandle } from "../ui/controls";
+import { attachSegIndicator, createSelect, openMenu, reduceMotion, toast, type MenuEntry, type SelectHandle } from "../ui/controls";
+import { systemLines } from "../lib/report";
 import { icon } from "../ui/icons";
 import { ArgonRenderer } from "../ui/mania/argon";
 import { createRenderer, ManiaPlayfield } from "../ui/mania/playfield";
@@ -73,6 +74,8 @@ class Fullscreen {
   private meter: { frames: number; draw: number; worst: number; since: number } | null = null;
   /** Ctrl+F12 with the meter on: leaves a part out, to see which one is slow (index into METER_TESTS) */
   private test = 0;
+  /** Ctrl+Shift+F12: every test in turn, its frames counted here while it runs */
+  private run: { frames: number; draw: number; worst: number; since: number } | null = null;
   private offs: (() => void)[] = [];
   private colors = new AccentColors();
   /** where the window controls live outside the overlay */
@@ -780,12 +783,64 @@ class Fullscreen {
     } else this.lastFrame = 0;
   }
 
+  /** Switches the meter to one of its tests (0: everything). */
+  private setTest(i: number): void {
+    this.test = i;
+    setRenderScale(i === 3 ? 0.5 : 1);
+    this.el!.classList.toggle("test-no-bg", i === 4);
+    document.body.classList.toggle("fs-test-alone", i === 5);
+    document.body.classList.toggle("fs-test-no-blur", i === 6);
+    setStills(i !== 7);
+    this.meter = { frames: 0, draw: 0, worst: 0, since: performance.now() };
+    this.el!.querySelector<HTMLElement>(".fs-fps")!.textContent = `[${METER_TESTS[i]}] …`;
+  }
+
+  /** Ctrl+Shift+F12: runs every meter test for a few seconds and copies a report with the
+   * numbers and the system, for Linux players to send in (fumen.dertesti.dev/linux). */
+  private async runTests(): Promise<void> {
+    const box = this.el!.querySelector<HTMLElement>(".fs-fps")!;
+    const meterWasOn = !!this.meter;
+    box.hidden = false;
+    const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    const rows: string[] = [];
+    for (let i = 0; i < METER_TESTS.length && this.isOpen; i++) {
+      this.setTest(i);
+      this.run = null;
+      await wait(700); // the change settles first
+      const r = (this.run = { frames: 0, draw: 0, worst: 0, since: performance.now() });
+      await wait(3000);
+      const secs = (performance.now() - r.since) / 1000;
+      const name = METER_TESTS[i];
+      rows.push(r.frames ? `${name}: ${Math.round(r.frames / secs)} fps · draw ${(r.draw / r.frames).toFixed(1)} ms · worst ${r.worst.toFixed(1)} ms` : `${name}: nothing drawn (was the song playing?)`);
+    }
+    this.run = null;
+    this.setTest(0);
+    if (!meterWasOn) {
+      this.meter = null;
+      box.hidden = true;
+    }
+    if (!this.isOpen) return; // closed halfway
+    const shown = this.mode === "visual" ? `visualizer, ${visPrefs().style}` : `playfield, ${MODE_LABEL[this.data?.mode as 0 | 1 | 2 | 3] ?? "?"}`;
+    const text = ["Fumen frame meter report", ...(await systemLines()), `Showing: ${shown}`, "", ...rows].join("\n");
+    try {
+      await navigator.clipboard.writeText(text);
+      toast(t("Report copied, paste it where you send it"), { kind: "success" });
+    } catch {
+      toast(t("Couldn't access the clipboard"), { kind: "danger" });
+    }
+  }
+
   /** Counts a frame for the meter (`ms` spent drawing it) and shows the numbers twice a second. */
   private measure(now: number, ms: number): void {
     const m = this.meter!;
     m.frames++;
     m.draw += ms;
     m.worst = Math.max(m.worst, ms);
+    if (this.run) {
+      this.run.frames++;
+      this.run.draw += ms;
+      this.run.worst = Math.max(this.run.worst, ms);
+    }
     if (now - m.since < 500) return;
     const box = this.el!.querySelector<HTMLElement>(".fs-fps")!;
     // the song's reported time going back (song-clock.ts), when there were any
@@ -1050,28 +1105,17 @@ class Fullscreen {
           case "F11":
             if (!e.ctrlKey) return;
             e.preventDefault();
+            if (this.run) return;
             this.meter = this.meter ? null : { frames: 0, draw: 0, worst: 0, since: performance.now() };
-            if (!this.meter && this.test) {
-              this.test = 0;
-              setRenderScale(1);
-              this.el!.classList.remove("test-no-bg");
-              document.body.classList.remove("fs-test-alone", "fs-test-no-blur");
-              setStills(true);
-            }
+            if (!this.meter && this.test) this.setTest(0);
             this.el!.querySelector<HTMLElement>(".fs-fps")!.hidden = !this.meter;
             this.el!.querySelector<HTMLElement>(".fs-fps")!.textContent = "…";
             break;
           case "F12":
-            if (!e.ctrlKey || !this.meter) return;
+            if (!e.ctrlKey || this.run) return;
             e.preventDefault();
-            this.test = (this.test + 1) % METER_TESTS.length;
-            setRenderScale(this.test === 3 ? 0.5 : 1);
-            this.el!.classList.toggle("test-no-bg", this.test === 4);
-            document.body.classList.toggle("fs-test-alone", this.test === 5);
-            document.body.classList.toggle("fs-test-no-blur", this.test === 6);
-            setStills(this.test !== 7);
-            this.meter = { frames: 0, draw: 0, worst: 0, since: performance.now() };
-            this.el!.querySelector<HTMLElement>(".fs-fps")!.textContent = `[${METER_TESTS[this.test]}] …`;
+            if (e.shiftKey) void this.runTests();
+            else if (this.meter) this.setTest((this.test + 1) % METER_TESTS.length);
             break;
           case "F3":
           case "F4":

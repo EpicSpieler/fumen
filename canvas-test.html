@@ -15,6 +15,15 @@
   /* extra window-sized layers over the canvas, each composited on its own (as Fumen's fullscreen stacks them) */
   .layer { position: fixed; inset: 0; pointer-events: none; will-change: transform; }
   #fps { min-width: 220px; font-variant-numeric: tabular-nums; }
+  .bar .run { margin-left: 8px; background: #3d8b5c; }
+  .report { position: fixed; inset: 0; z-index: 2; display: grid; place-items: center; background: rgba(0, 0, 0, .7); }
+  .report[hidden] { display: none; }
+  .report > div { width: min(640px, calc(100% - 32px)); padding: 16px; border-radius: 10px; background: #18181f; }
+  .report p { margin: 0 0 10px; opacity: .8; }
+  .report textarea { width: 100%; height: 300px; box-sizing: border-box; padding: 10px; border: 0; border-radius: 6px; background: #0e0e13; color: #fff; font: 12.5px ui-monospace, monospace; resize: vertical; }
+  .report .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px; }
+  .report button { font: inherit; color: #fff; background: #2a2a33; border: 0; border-radius: 6px; padding: 6px 12px; cursor: pointer; }
+  .report .copy { background: #8b7cff; }
 </style>
 </head>
 <body>
@@ -37,7 +46,15 @@
   <button data-layers="2">2</button>
   <button data-layers="4">4</button>
   <button data-layers="8">8</button>
+  <button class="run" type="button">Run all and copy report</button>
   <button class="back" type="button">Back to Fumen</button>
+</div>
+<div class="report" hidden>
+  <div>
+    <p data-said>Report copied. Paste it where you send it.</p>
+    <textarea readonly spellcheck="false"></textarea>
+    <div class="row"><button class="copy" type="button">Copy again</button><button class="close" type="button">Close</button></div>
+  </div>
 </div>
 <script type="module" src="/src/canvas-test.ts"></script>
 </body>

@@ -1,0 +1,29 @@
+name: Linux report
+description: Fumen runs slowly or looks wrong on Linux
+labels: [linux]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for testing Fumen on Linux. The steps are on https://fumen.dertesti.dev/linux. Both reports below are copied by Fumen itself, so just paste them.
+  - type: textarea
+    id: render-test
+    attributes:
+      label: Render test report
+      description: Settings › About › Render test › "Run all and copy report" (play a song first)
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: frame-meter
+    attributes:
+      label: Frame meter report
+      description: Fullscreen with a song playing, Ctrl+Shift+F12. One for the playfield and one for the visualizer if both are slow.
+      render: text
+  - type: textarea
+    id: words
+    attributes:
+      label: What's slow or wrong
+      description: What you see, how bad it is, and anything you already tried.
+    validations:
+      required: true
