@@ -92,7 +92,7 @@ nothing), and Fumen trades the code (later the refresh token) for tokens at the 
 | 1.2 | Tournament | **Pool builder**: slots by kind (RC/LN/HB/SV/EX/TB for osu!mania, NM/HD/HR/DT/FM/TB elsewhere), SR/pp/BPM/length at the slot's mods, maps you don't own from osu! (charts off the mirrors), similar maps to fill or replace a slot, export to JSON/CSV/sheet + RPRO bot, a showcase image; **matches**: schedule, mp-link parsing + match results, picks / bans and mod strengths per player, OBS overlay served locally (pools were 0.5, tournament 0.6) |
 | 1.3 | Visualizer | **The fullscreen visualizer anew**: an analysis that reacts at once and follows each song's level, the beat and kiai from the beatmap's timing, six styles (Spektrum, Ring, Wave, Starfield, Stage, Hi-Fi), colours from the cover, everything adjustable and kept |
 | 1.4 | Progress | Skills reworked (the page open again); plays grouped into sittings and a weekly report (time, skills that moved, goals closer); share cards for the week, pools, skills and goals; Discord Rich Presence |
-| Later | Ideas, no version | Skins (browser on the same moment of a chart, side by side, mixing into one `.osk`); Linux and macOS (moved from 1.0); goals, skills and pools on fumen.dertesti.dev for the phone; mapping lens (spikes, pattern heatmap, spread check, the analyser's leftovers) |
+| Later | Ideas, no version | Skins (browser on the same moment of a chart, side by side, mixing into one `.osk`); macOS (moved from 1.0), Linux out of testing; goals, skills and pools on fumen.dertesti.dev for the phone; mapping lens (spikes, pattern heatmap, spread check, the analyser's leftovers) |
 
 The public roadmap at https://fumen.dertesti.dev/roadmap (`site/public/roadmap.js`) shows this
 table; keep the two in step (and raise the `?v=` on roadmap.js / .css in roadmap.html, Cloudflare caches them). Before 1.0 is what serves the vision directly (understand a chart, organise, practise with intent);
@@ -635,7 +635,9 @@ through the overlay server; a small visualizer in the player bar. Storyboards: n
   - Everywhere: Linux and macOS builds (Tauri, the .NET sidecar and lazer all run there; the
     importer's host folder differs). Linux started 2026-10-22 for a tester: AppImage and .deb built
     on GitHub (`npm run linux`, linux.yml, import tested against lazer's AppImage), downloads at
-    /download/linux and /download/linux-deb, not on the homepage yet. lazer found as an AppImage
+    /download/linux, /download/linux-deb and /download/linux-arch. On the homepage since 1.3.18
+    (2026-10-27) as "in testing", with fumen.dertesti.dev/linux (install, and the reports to send:
+    render test "Run all and copy report", Ctrl+Shift+F12 in fullscreen, a GitHub issue form). lazer found as an AppImage
     (unpacked once into ~/.cache/dev.fumen.app), the Flatpak or a package's folder (lazer_linux.rs);
     audio plays from memory there (GStreamer can't read fumen://). No self-update on Linux yet.
     Also: a read-only view of goals, skills and pools on fumen.dertesti.dev, synced from the app on
