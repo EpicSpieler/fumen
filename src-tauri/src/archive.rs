@@ -26,7 +26,7 @@ pub fn check_set(path: &Path, set: u32) -> Result<(), String> {
     let mut charts = Vec::new();
     for i in 0..zip.len() {
         let entry = zip.by_index_raw(i).map_err(|e| e.to_string())?;
-        let name = entry.name().replace('\\', "/");
+        let name = entry.name().map_err(|_| "a file name that isn't readable".to_string())?.replace('\\', "/");
         if !safe_name(&name) {
             return Err(format!("a file that leaves the set's folder ({name})"));
         }
