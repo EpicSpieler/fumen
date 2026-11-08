@@ -15,6 +15,7 @@ mod hitsounds;
 mod lazer;
 mod lazer_import;
 mod lazer_linux;
+mod launch;
 mod matches;
 mod mirror_search;
 mod mma;
@@ -1361,6 +1362,32 @@ async fn lazer_import_status(app: AppHandle) -> Result<lazer_import::Status> {
     .map_err(|e| Error::known("internal", e.to_string()))?
 }
 
+/// Starts osu!: "lazer" or "stable" (from its folder, found or picked in Settings, whether or not
+/// its library is shown).
+#[tauri::command]
+fn launch_osu(state: State<'_, AppState>, client: String) -> Result<()> {
+    match client.as_str() {
+        "stable" => {
+            let dir = state.settings().stable_override().or_else(paths::default_stable_dir);
+            let dir = dir.filter(|d| d.join("osu!.exe").is_file());
+            let Some(dir) = dir else { return Err(Error::known("stable-not-found", "osu!stable wasn't found. Pick its folder in Settings.")) };
+            launch::stable(&dir)
+        }
+        _ => launch::lazer(),
+    }
+}
+
+/// Asks a running osu!lazer to close (its own way out); how many of its windows were asked.
+#[tauri::command]
+async fn close_lazer() -> Result<usize> {
+    tauri::async_runtime::spawn_blocking(|| match lazer_import::installed() {
+        Some(l) => launch::close_lazer(&l.dir),
+        None => 0,
+    })
+    .await
+    .map_err(|e| Error::known("internal", e.to_string()))
+}
+
 /// lazer sets in the library that lazer's importer left without details (no star rating, or
 /// objects but no length and BPM): the ones an older Fumen imported. The importer decides for
 /// itself which to finish; this is for showing.
@@ -1977,6 +2004,8 @@ pub fn run() {
             get_skins,
             get_skin_files,
             lazer_import_status,
+            launch_osu,
+            close_lazer,
             repair_lazer_sets,
             compare_player,
             cancel_compare,

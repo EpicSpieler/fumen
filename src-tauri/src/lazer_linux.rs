@@ -137,6 +137,53 @@ pub fn running() -> bool {
     })
 }
 
+/// The `osu!` processes' ids.
+fn lazer_pids() -> Vec<String> {
+    let Ok(procs) = std::fs::read_dir("/proc") else { return Vec::new() };
+    procs
+        .flatten()
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .filter(|name| name.bytes().all(|b| b.is_ascii_digit()))
+        .filter(|pid| std::fs::read_to_string(format!("/proc/{pid}/comm")).is_ok_and(|c| is_lazer_process(&c)))
+        .collect()
+}
+
+/// Asks lazer to quit (SIGTERM, which it takes like its window's close button); how many
+/// processes were asked.
+pub fn close() -> usize {
+    lazer_pids()
+        .iter()
+        .filter(|pid| std::process::Command::new("kill").arg("-TERM").arg(pid.as_str()).status().is_ok_and(|s| s.success()))
+        .count()
+}
+
+/// How lazer is started: the Flatpak, the newest AppImage, or a package's `osu-lazer` / `osu!`.
+pub fn launch_command() -> Option<std::process::Command> {
+    let home = PathBuf::from(std::env::var_os("HOME")?);
+    let flatpak = [home.join(".local/share/flatpak/app/sh.ppy.osu"), PathBuf::from("/var/lib/flatpak/app/sh.ppy.osu")];
+    if flatpak.iter().any(|d| d.is_dir()) {
+        let mut c = std::process::Command::new("flatpak");
+        c.args(["run", "sh.ppy.osu"]);
+        return Some(c);
+    }
+    let image = appimage_dirs(&home)
+        .iter()
+        .filter_map(|d| std::fs::read_dir(d).ok())
+        .flat_map(|r| r.flatten())
+        .filter(|e| is_lazer_appimage(&e.file_name().to_string_lossy()) && e.path().is_file())
+        .filter_map(|e| Some((e.metadata().ok()?.modified().ok()?, e.path())))
+        .max_by_key(|(t, _)| *t)
+        .map(|(_, p)| p);
+    if let Some(image) = image {
+        return Some(std::process::Command::new(image));
+    }
+    let path = std::env::var_os("PATH")?;
+    std::env::split_paths(&path)
+        .flat_map(|d| [d.join("osu-lazer"), d.join("osu!")])
+        .find(|p| p.is_file())
+        .map(std::process::Command::new)
+}
+
 /// lazer's data folder: `$XDG_DATA_HOME/osu` (`~/.local/share/osu`), or the Flatpak's.
 pub fn data_dir() -> Option<PathBuf> {
     let home = PathBuf::from(std::env::var_os("HOME")?);

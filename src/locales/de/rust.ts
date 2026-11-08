@@ -121,4 +121,11 @@ export const rust: Record<string, string> = {
   // rarely seen
   "No executable dir": "Kein Programmordner",
   "Dropped for newer thumbnails": "Für neuere Vorschaubilder verworfen",
+
+  // starting osu! (launch.rs)
+  "{what} couldn't be started: {error}": "{what} konnte nicht gestartet werden: {error}",
+  "osu!lazer wasn't found (no Flatpak, AppImage or package).": "osu!lazer wurde nicht gefunden (kein Flatpak, AppImage oder Paket).",
+  "osu!lazer can't be started from here.": "osu!lazer kann von hier aus nicht gestartet werden.",
+  "osu!stable's osu!.exe wasn't found in its folder.": "Die osu!.exe von osu!stable liegt nicht in seinem Ordner.",
+  "osu!stable can only be started from Fumen on Windows.": "osu!stable lässt sich nur unter Windows aus Fumen starten.",
 };
