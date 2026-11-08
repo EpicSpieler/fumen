@@ -55,7 +55,21 @@ body.fs-open #app, body.fs-open .ambient { visibility: hidden; transition: visib
 .fs-top-r { display: flex; align-items: center; justify-content: flex-end; gap: 14px; }
 .fs-top:has(.win-controls) { padding-top: 6px; padding-right: 6px; }
 :root.mac .fs-top { padding-left: 92px; }
-.fs-exit .ic { width: 20px; height: 20px; }
+/* back to the app: top left, away from the window's own close button */
+.fs-left { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.fs-exit {
+  flex: none;
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 32px; padding: 0 14px 0 10px;
+  border-radius: var(--r-full);
+  background: rgba(255, 255, 255, .08);
+  color: var(--t1);
+  font-size: var(--fs-12); font-weight: 600;
+  transition: background .15s var(--ease-std), transform .22s var(--ease-spring);
+}
+.fs-exit:hover { background: rgba(255, 255, 255, .14); }
+.fs-exit:active { transform: scale(.97); }
+.fs-exit .ic { width: 16px; height: 16px; }
 
 .fs-body { position: relative; min-height: 0; }
 .fs-visual, .fs-field { position: absolute; inset: 0; }
@@ -188,6 +202,8 @@ body.fs-test-no-blur *, body.fs-test-no-blur *::before, body.fs-test-no-blur *::
   scrollbar-width: none;
   transition: opacity .2s var(--ease-std);
 }
+/* when it's taller than the window it scrolls; nothing in it gets squashed (the graph went flat) */
+.fs-info > * { flex-shrink: 0; }
 .fs-info.dim { opacity: .35; pointer-events: none; }
 .fs-info.off { visibility: hidden; opacity: 0; }
 .fs-diff {

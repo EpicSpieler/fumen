@@ -24,7 +24,7 @@ export const player: Record<string, string> = {
   View: "Ansicht",
   Visualizer: "Visualizer",
   Playfield: "Spielfeld",
-  "Leave fullscreen": "Vollbild verlassen",
+  "Back": "Zurück",
   Difficulty: "Schwierigkeitsgrad",
   "This second": "Diese Sekunde",
   Notes: "Noten",

@@ -183,7 +183,10 @@ class Fullscreen {
       <div class="fs-bg" aria-hidden="true"><img alt="" /></div>
       <canvas class="fs-vis" aria-hidden="true"></canvas>
       <header class="fs-top" data-tauri-drag-region>
-        <div class="fs-now" data-tauri-drag-region><div class="fs-now-title" data-tauri-drag-region></div><div class="fs-now-sub" data-tauri-drag-region></div></div>
+        <div class="fs-left" data-tauri-drag-region>
+          <button class="fs-exit" type="button" aria-label="${t("Back")}">${icon("arrow-left")}<span>${t("Back")}</span></button>
+          <div class="fs-now" data-tauri-drag-region><div class="fs-now-title" data-tauri-drag-region></div><div class="fs-now-sub" data-tauri-drag-region></div></div>
+        </div>
         <div class="seg-pill fs-modes" role="tablist" aria-label="${t("View")}">
           <button type="button" role="tab" data-mode="visual">${t("Visualizer")}</button>
           <button type="button" role="tab" data-mode="field">${t("Playfield")}</button>
@@ -192,9 +195,7 @@ class Fullscreen {
           <div class="fs-vis-ctl">
             <span class="fs-style-host"></span>
             <button class="icon-btn fs-tune" type="button" data-tip="${t("Customize the visualizer")}" aria-label="${t("Customize the visualizer")}" aria-expanded="false">${icon("sliders")}</button>
-          </div>
-          <button class="icon-btn fs-exit" type="button" data-tip="${t("Leave fullscreen")}" aria-label="${t("Leave fullscreen")}">${icon("fullscreen-exit")}</button>
-        </div>
+          </div>        </div>
       </header>
       <main class="fs-body">
         <div class="fs-fps num" aria-hidden="true" hidden></div>
