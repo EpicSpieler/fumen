@@ -511,6 +511,8 @@ export interface UiPrefs {
   companion: boolean;
   /** the collection the companion window works through ("f:<id>" / "l:<id>") */
   companionPool: string | null;
+  /** play along with osu! through tosu (lib/tosu-follow) */
+  followOsu: boolean;
 }
 
 export type VisStyle = "spectrum" | "ring" | "wave" | "stars" | "stage" | "hifi";

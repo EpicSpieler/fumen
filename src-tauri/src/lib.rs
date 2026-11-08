@@ -288,6 +288,19 @@ fn watch_plays(app: &AppHandle) {
     }
 }
 
+/// The library difficulty with this MD5 (lazer's before stable's), for following what osu! plays.
+#[tauri::command]
+fn map_by_md5(state: State<'_, AppState>, md5: String) -> Result<Option<String>> {
+    Ok(state
+        .db()
+        .query_row(
+            "SELECT m.id FROM maps m JOIN sets s ON s.id = m.set_id WHERE m.md5 = ?1 ORDER BY s.source = 'stable' LIMIT 1",
+            [&md5],
+            |r| r.get(0),
+        )
+        .optional()?)
+}
+
 /// The plays since `since` (unix ms), newest first.
 #[tauri::command]
 async fn live_plays(app: AppHandle, since: i64) -> Result<Vec<live::LivePlay>> {
@@ -2051,6 +2064,7 @@ pub fn run() {
             get_replay,
             live_plays,
             live_play,
+            map_by_md5,
             live_replay,
             pool_choices,
             pool_rows,

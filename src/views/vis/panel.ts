@@ -2,11 +2,13 @@
  * colours, how it reacts, the beat, kiai and flashes, the background, the title. Every change is
  * saved at once (prefs `visualizer`). */
 import { t } from "../../lib/i18n";
-import { DEFAULT_PREFS } from "../../lib/store";
+import { DEFAULT_PREFS, setPrefs } from "../../lib/store";
 import type { VisPrefs } from "../../lib/types";
 import { attachSegIndicator, updateRange } from "../../ui/controls";
 import { icon } from "../../ui/icons";
 import { OWN_COLORS, setVis, visPrefs } from "./visualizer";
+import { follow, type FollowStatus } from "../../lib/tosu-follow";
+import { esc } from "../../lib/format";
 
 type Num = "reaction" | "sensitivity" | "pulse" | "bars" | "blur" | "dim" | "offset";
 type Seg = "colors" | "flashes" | "background";
@@ -52,6 +54,7 @@ export function panelHtml(): string {
       <button class="icon-btn sm vp-close" type="button" aria-label="${t("Close")}">${icon("x")}</button>
     </div>
     <div class="vp-row"><span class="fs-k">${t("Style")}</span><span class="vp-style-host"></span></div>
+    <label class="vp-switch vp-follow"><span><b>${t("Follow osu!")}</b><i class="vp-follow-status"></i></span><input type="checkbox" role="switch" data-follow /></label>
     ${seg(SEGS[0])}
     ${RANGES.slice(0, 4).map(range).join("")}
     ${seg(SEGS[1])}
@@ -84,7 +87,7 @@ export function bindPanel(host: HTMLElement, changed: () => void): () => void {
     const el = host.querySelector<HTMLInputElement>(`#vp-${key}`)!;
     el.addEventListener("input", () => set({ [key]: +el.value / scale } as Partial<VisPrefs>));
   }
-  host.querySelectorAll<HTMLInputElement>("input[role=switch]").forEach((el) => el.addEventListener("change", () => set({ [el.dataset.vis as Flag]: el.checked } as Partial<VisPrefs>)));
+  host.querySelectorAll<HTMLInputElement>("input[role=switch][data-vis]").forEach((el) => el.addEventListener("change", () => set({ [el.dataset.vis as Flag]: el.checked } as Partial<VisPrefs>)));
   host.querySelector(".vp-reset")!.addEventListener("click", () => set({ ...DEFAULT_PREFS.visualizer, style: visPrefs().style }));
 
   const render = () => {
@@ -106,8 +109,36 @@ export function bindPanel(host: HTMLElement, changed: () => void): () => void {
       updateRange(el);
       host.querySelector(`[data-val="${key}"]`)!.textContent = show(v);
     }
-    host.querySelectorAll<HTMLInputElement>("input[role=switch]").forEach((el) => (el.checked = o[el.dataset.vis as Flag]));
+    host.querySelectorAll<HTMLInputElement>("input[role=switch][data-vis]").forEach((el) => (el.checked = o[el.dataset.vis as Flag]));
   };
   render();
+
+  const followSwitch = host.querySelector<HTMLInputElement>("input[data-follow]")!;
+  followSwitch.addEventListener("change", () => setPrefs({ followOsu: followSwitch.checked }));
+  // the panel is built before it's in the page: it lets go once it was there and is gone
+  let shown = false;
+  const showFollow = (st: FollowStatus) => {
+    if (host.isConnected) shown = true;
+    else if (shown) return off();
+    followSwitch.checked = st.kind !== "off";
+    host.querySelector(".vp-follow-status")!.innerHTML = followText(st);
+  };
+  const off = follow.bus.on("status", showFollow);
+  showFollow(follow.status);
   return render;
+}
+
+function followText(st: FollowStatus): string {
+  switch (st.kind) {
+    case "off":
+      return t("Plays along with what osu! plays, through tosu");
+    case "connecting":
+      return t("Waiting for tosu (tosu.app) to run");
+    case "waiting":
+      return t("tosu is there, osu! has no song yet");
+    case "following":
+      return esc(st.title);
+    case "missing":
+      return `${t("Not in your library")}: ${esc(st.title)}`;
+  }
 }

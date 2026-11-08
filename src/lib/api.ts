@@ -101,6 +101,8 @@ export const api = {
   /** plays as they happened (live.rs): since a time, one, and its replay */
   livePlays: (since: number) => invoke<LivePlay[]>("live_plays", { since }),
   livePlay: (id: string) => invoke<LivePlay | null>("live_play", { id }),
+  /** the library difficulty with this MD5 */
+  mapByMd5: (md5: string) => invoke<string | null>("map_by_md5", { md5 }),
   liveReplay: (id: string) => invoke<ReplayData>("live_replay", { id }),
   poolChoices: () => invoke<PoolChoice[]>("pool_choices"),
   poolRows: (id: string, since: number) => invoke<PoolRow[]>("pool_rows", { id, since }),
