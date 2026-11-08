@@ -70,6 +70,7 @@ export const DEFAULT_PREFS: UiPrefs = {
   companion: false,
   companionPool: null,
   followOsu: false,
+  tosuAutostart: true,
 };
 
 export const store = {

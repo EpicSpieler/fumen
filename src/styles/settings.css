@@ -37,6 +37,7 @@
 .setting-actions { display: flex; align-items: center; gap: 8px; flex: none; }
 .setting-row > .btn, .setting-row > .seg-pill, .setting-row > input { flex: none; }
 .is-missing { color: var(--warning); }
+.s-tosu-on { color: var(--success, var(--accent)); font-weight: 600; }
 
 .swatches { display: flex; flex-wrap: wrap; gap: 10px; }
 .swatch {

@@ -67,6 +67,17 @@ export const live: Record<string, string> = {
   "When you pass a map in osu!lazer, Fumen opens its score: where the accuracy went, the timing, the replay. Only while Fumen isn't the window in front; otherwise it offers it.":
     "Wenn du in osu!lazer eine Map schaffst, öffnet Fumen ihren Score: wo die Accuracy geblieben ist, das Timing, das Replay. Nur solange Fumen nicht das Fenster im Vordergrund ist, sonst bietet es ihn an.",
   "Companion window": "Begleitfenster",
+  "Start tosu with osu!": "tosu mit osu! starten",
+  "When osu! runs and tosu doesn't, Fumen starts it in the background.": "Läuft osu! ohne tosu, startet Fumen tosu im Hintergrund.",
+  Running: "Läuft",
+  "Fumen hears it": "Fumen ist verbunden",
+  "Not running. It starts with osu! when that's on below, or start it now.": "Läuft nicht. Es startet mit osu!, wenn das unten an ist, oder starte es jetzt.",
+  "Not found. tosu is a free app that reads osu! while it runs, made for stream overlays. Get it from tosu.app, unzip it anywhere and pick tosu.exe here; Fumen remembers it.":
+    "Nicht gefunden. tosu ist eine kostenlose App, die osu! beim Spielen ausliest, gemacht für Stream-Overlays. Lade es von tosu.app, entpacke es irgendwo und wähle hier tosu.exe aus; Fumen merkt es sich.",
+  "Get tosu": "tosu holen",
+  Start: "Starten",
+  "Pick tosu.exe": "tosu.exe wählen",
+  "Where is tosu?": "Wo liegt tosu?",
   "With tosu (tosu.app) running next to osu!, Fumen plays along with what osu! plays, without sound. The visualizer opens when you start a map, and a pass in osu!lazer opens its score.": "Läuft tosu (tosu.app) neben osu!, spielt Fumen stumm mit, was osu! gerade spielt. Startest du eine Map, geht der Visualizer auf, und ein Pass in osu!lazer öffnet den Score.",
   "A small window in the corner, on top of the game: this session, your last play and a pool to work through. It shows over osu!lazer in borderless or windowed mode. With the cursor over it, clicks go through to the game; hold Ctrl to click it.":
     "Ein kleines Fenster in der Ecke, über dem Spiel: diese Session, dein letzter Play und ein Pool zum Durchspielen. Über osu!lazer ist es im randlosen oder Fenstermodus zu sehen. Mit der Maus darüber gehen Klicks durch ins Spiel; halte Strg, um es anzuklicken.",

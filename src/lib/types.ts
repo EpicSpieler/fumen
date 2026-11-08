@@ -452,6 +452,8 @@ export interface Settings {
   stableImport: boolean;
   /** the start ping, so fumen.dertesti.dev can count the people using Fumen */
   startPing: boolean;
+  /** where tosu is (picked, or remembered from seeing it run) */
+  tosuPath: string | null;
   ui: Partial<UiPrefs>;
 }
 
@@ -513,6 +515,8 @@ export interface UiPrefs {
   companionPool: string | null;
   /** play along with osu! through tosu (lib/tosu-follow) */
   followOsu: boolean;
+  /** Fumen starts tosu when osu! runs without it (while following) */
+  tosuAutostart: boolean;
 }
 
 export type VisStyle = "spectrum" | "ring" | "wave" | "stars" | "stage" | "hifi";

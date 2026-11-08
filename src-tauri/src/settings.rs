@@ -24,12 +24,14 @@ pub struct Settings {
     pub stable_import: bool,
     /// The start ping (ping.rs): counted among the people using Fumen.
     pub start_ping: bool,
+    /// Where tosu is (tosu.rs): picked, or remembered from seeing it run.
+    pub tosu_path: Option<String>,
     pub ui: Map<String, Value>,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Settings { lazer_path: None, auto_rescan: true, stable_path: None, use_stable: true, stable_import: false, start_ping: true, ui: Map::new() }
+        Settings { lazer_path: None, auto_rescan: true, stable_path: None, use_stable: true, stable_import: false, start_ping: true, tosu_path: None, ui: Map::new() }
     }
 }
 

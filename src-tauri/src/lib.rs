@@ -44,6 +44,7 @@ mod taiko;
 #[cfg(test)]
 mod test_http;
 mod thumbs;
+mod tosu;
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -286,6 +287,65 @@ fn watch_plays(app: &AppHandle) {
     if let Some(w) = watcher {
         *live = Some((storage, w));
     }
+}
+
+// ── tosu (tosu.rs): what osu! plays, for following it ───────────────────────
+
+/// The saved tosu path, when it still is tosu.
+fn saved_tosu(state: &AppState) -> Option<std::path::PathBuf> {
+    let s = state.settings.lock().unwrap_or_else(|e| e.into_inner());
+    s.tosu_path.as_deref().map(std::path::PathBuf::from).filter(|p| tosu::is_tosu(p))
+}
+
+/// Whether tosu runs and where it is. A running tosu's place is remembered for starting it later.
+#[tauri::command]
+async fn tosu_status(app: AppHandle) -> Result<tosu::TosuStatus> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let running = tosu::running();
+        let seen = running.clone().filter(|p| tosu::is_tosu(p));
+        let saved = saved_tosu(&state);
+        if let Some(seen) = &seen {
+            if saved.as_ref() != Some(seen) {
+                let mut s = state.settings.lock().unwrap_or_else(|e| e.into_inner());
+                s.tosu_path = Some(seen.to_string_lossy().into_owned());
+                s.save(&state.settings_path)?;
+            }
+        }
+        let path = seen.or(saved).or_else(tosu::guess);
+        Ok(tosu::TosuStatus { running: running.is_some(), path: path.map(|p| p.to_string_lossy().into_owned()) })
+    })
+    .await
+    .map_err(|e| Error::known("internal", e.to_string()))?
+}
+
+/// Remembers the tosu the user picked.
+#[tauri::command]
+fn set_tosu_path(state: State<'_, AppState>, path: String) -> Result<Settings> {
+    if !tosu::is_tosu(std::path::Path::new(&path)) {
+        return Err(Error::known("tosu-not-found", "That file isn't tosu."));
+    }
+    let mut s = state.settings.lock().unwrap_or_else(|e| e.into_inner());
+    s.tosu_path = Some(path);
+    s.save(&state.settings_path)?;
+    Ok(s.clone())
+}
+
+/// Starts tosu (the remembered one, else the one found), unless it runs already.
+#[tauri::command]
+async fn start_tosu(app: AppHandle) -> Result<()> {
+    tauri::async_runtime::spawn_blocking(move || {
+        if tosu::running().is_some() {
+            return Ok(());
+        }
+        let state = app.state::<AppState>();
+        let path = saved_tosu(&state)
+            .or_else(tosu::guess)
+            .ok_or_else(|| Error::known("tosu-not-found", "tosu wasn't found. Pick tosu.exe in Settings."))?;
+        tosu::start(&path)
+    })
+    .await
+    .map_err(|e| Error::known("internal", e.to_string()))?
 }
 
 /// The library difficulty with this MD5 (lazer's before stable's), for following what osu! plays.
@@ -2065,6 +2125,9 @@ pub fn run() {
             live_plays,
             live_play,
             map_by_md5,
+            tosu_status,
+            set_tosu_path,
+            start_tosu,
             live_replay,
             pool_choices,
             pool_rows,

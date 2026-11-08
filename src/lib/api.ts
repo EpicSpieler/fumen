@@ -103,6 +103,10 @@ export const api = {
   livePlay: (id: string) => invoke<LivePlay | null>("live_play", { id }),
   /** the library difficulty with this MD5 */
   mapByMd5: (md5: string) => invoke<string | null>("map_by_md5", { md5 }),
+  /** tosu (tosu.app), which Fumen follows osu! through */
+  tosuStatus: () => invoke<{ running: boolean; path: string | null }>("tosu_status"),
+  setTosuPath: (path: string) => invoke<Settings>("set_tosu_path", { path }),
+  startTosu: () => invoke<void>("start_tosu"),
   liveReplay: (id: string) => invoke<ReplayData>("live_replay", { id }),
   poolChoices: () => invoke<PoolChoice[]>("pool_choices"),
   poolRows: (id: string, since: number) => invoke<PoolRow[]>("pool_rows", { id, since }),

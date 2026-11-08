@@ -1,7 +1,9 @@
 /* settings.ts — osu! account, library source, appearance, about. Adjacent rows merge into one group. */
 import { getVersion } from "@tauri-apps/api/app";
 import { open } from "@tauri-apps/plugin-dialog";
-import { api, asApiError, isLinux } from "../lib/api";
+import { api, asApiError, isLinux, isTauri } from "../lib/api";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import { follow } from "../lib/tosu-follow";
 import { lang, LANGS, switchLang, t, tn } from "../lib/i18n";
 import { esc, fixed, MODE_LABEL, num, relativeTime } from "../lib/format";
 import { collectionEvents, fumenCollections, loadCollections, putIntoLazer, saveCollectionDb } from "../lib/collections";
@@ -78,7 +80,11 @@ export class SettingsView {
       events.on("scan", () => this.renderLibrary()),
       updateEvents.on("change", () => this.renderUpdate()),
       collectionEvents.on("collections", () => this.renderCollections()),
+      follow.bus.on("status", () => void this.renderTosu()),
     );
+    // tosu comes and goes on its own
+    const tosuTimer = window.setInterval(() => void this.renderTosu(), 3000);
+    this.offs.push(() => clearInterval(tosuTimer));
     this.el.addEventListener("click", (e) => void this.onClick(e));
     shown = this;
     void this.loadAccount();
@@ -234,6 +240,14 @@ export class SettingsView {
             </div>
             <input type="checkbox" role="switch" data-pref="followOsu" aria-label="${t("Follow osu!")}" ${p.followOsu ? "checked" : ""} />
           </div>
+          <div class="setting-row" data-row="tosu" hidden></div>
+          <div class="setting-row" data-row="tosu-auto" hidden>
+            <div class="setting-text">
+              <div class="setting-title">${t("Start tosu with osu!")}</div>
+              <div class="setting-desc">${t("When osu! runs and tosu doesn't, Fumen starts it in the background.")}</div>
+            </div>
+            <input type="checkbox" role="switch" data-pref="tosuAutostart" aria-label="${t("Start tosu with osu!")}" ${p.tosuAutostart ? "checked" : ""} />
+          </div>
         </section>
 
         <section class="settings-section">
@@ -284,6 +298,41 @@ export class SettingsView {
     this.renderCollections();
     this.renderAccount();
     this.renderUpdate();
+    void this.renderTosu();
+  }
+
+  /** Where tosu is and whether it runs, under Follow osu! (while that's on). */
+  private async renderTosu(): Promise<void> {
+    const row = this.el.querySelector<HTMLElement>('[data-row="tosu"]');
+    const auto = this.el.querySelector<HTMLElement>('[data-row="tosu-auto"]');
+    if (!row || !auto) return;
+    const on = store.prefs.followOsu;
+    row.hidden = auto.hidden = !on;
+    if (!on) return;
+    const st = isTauri ? await api.tosuStatus().catch(() => null) : { running: follow.connected, path: null };
+    if (!st) return;
+    const running = st.running || follow.connected;
+    const where = st.path ? `<br><span class="setting-path">${esc(st.path)}</span>` : "";
+    const desc = running
+      ? `<span class="s-tosu-on">${t("Running")}</span>${follow.connected ? ` · ${t("Fumen hears it")}` : ""}${where}`
+      : st.path
+        ? `${t("Not running. It starts with osu! when that's on below, or start it now.")}${where}`
+        : t("Not found. tosu is a free app that reads osu! while it runs, made for stream overlays. Get it from tosu.app, unzip it anywhere and pick tosu.exe here; Fumen remembers it.");
+    const html = `
+      <div class="setting-text">
+        <div class="setting-title">tosu</div>
+        <div class="setting-desc">${desc}</div>
+      </div>
+      <div class="setting-actions">
+        ${st.path || running ? "" : `<button class="btn btn-ghost btn-sm s-tosu-get" type="button">${icon("external")}${t("Get tosu")}</button>`}
+        ${!running && st.path ? `<button class="btn btn-sm s-tosu-start" type="button">${icon("play")}${t("Start")}</button>` : ""}
+        <button class="btn btn-sm s-tosu-pick" type="button">${icon("folder")}${st.path ? t("Change") : t("Pick tosu.exe")}</button>
+      </div>`;
+    // the poll rewrites only when something changed (a hovered button stays put)
+    if (row.dataset.html !== html) {
+      row.dataset.html = html;
+      row.innerHTML = html;
+    }
   }
 
   private renderUpdate(): void {
@@ -605,6 +654,22 @@ export class SettingsView {
       store.settings = await api.updateSettings({ stablePath: null });
       return void this.stableChanged();
     }
+    if (target.closest(".s-tosu-get")) return void openUrl("https://tosu.app");
+    if (target.closest(".s-tosu-start")) {
+      await api.startTosu().catch((err) => toast(asApiError(err).message, { kind: "danger" }));
+      setTimeout(() => void this.renderTosu(), 1500);
+      return;
+    }
+    if (target.closest(".s-tosu-pick")) {
+      const file = await open({ title: t("Where is tosu?"), filters: isLinux ? [] : [{ name: "tosu", extensions: ["exe"] }] });
+      if (typeof file !== "string") return;
+      try {
+        store.settings = await api.setTosuPath(file);
+      } catch (err) {
+        toast(asApiError(err).message, { kind: "danger" });
+      }
+      return void this.renderTosu();
+    }
     if (target.closest(".s-reset-path")) {
       store.settings = await api.updateSettings({ lazerPath: null });
       await refreshStatus();
@@ -616,6 +681,7 @@ export class SettingsView {
     if (input.dataset.pref) {
       setPrefs({ [input.dataset.pref]: input.checked } as never);
       applyAppearance();
+      if (input.dataset.pref === "followOsu") void this.renderTosu();
     } else if ("prefCompanion" in input.dataset) {
       setPrefs({ companion: input.checked });
       void (input.checked ? api.openCompanion() : api.closeCompanion()).catch((err) => toast(asApiError(err).message, { kind: "danger" }));

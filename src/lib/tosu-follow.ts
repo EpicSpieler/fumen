@@ -58,6 +58,8 @@ class Follow {
   private osuGone = false;
   /** Fumen saw osu! run (a check that never finds it can't tell that it closed) */
   private osuSeen = false;
+  /** tosu was started for this run of osu! (prefs tosuAutostart) */
+  private tosuTried = false;
   private clock = new TosuClock();
   /** a map just started: Fumen waits at the beginning until osu!'s time really starts there */
   private hold = new StartHold();
@@ -113,6 +115,7 @@ class Follow {
     clearInterval(this.osuTimer);
     this.osuGone = false;
     this.osuSeen = false;
+    this.tosuTried = false;
     const ws = this.ws;
     this.ws = null;
     ws?.close();
@@ -154,18 +157,24 @@ class Follow {
 
   /** osu! closed: like tosu going (the visualizer closes, Fumen has its sound back). */
   private async checkOsu(): Promise<void> {
-    if (!this.ws) return;
     const r = await api.osuRunning().catch(() => null);
     if (!r || !this.on) return;
     const gone = !r.lazer && !r.stable;
     if (!gone) {
       this.osuSeen = true;
       this.osuGone = false;
+      // osu! runs without tosu: start it (once per run of osu!)
+      if (!this.now && store.prefs.tosuAutostart && !this.tosuTried) {
+        this.tosuTried = true;
+        void api.startTosu().catch((e) => console.warn("[tosu] start", e));
+      }
     } else if (this.osuSeen && !this.osuGone) {
       this.osuGone = true;
       this.osuSeen = false;
+      this.tosuTried = false;
+      const was = this.connected;
       this.lost();
-      this.set({ kind: "waiting" });
+      if (was) this.set({ kind: "waiting" });
     }
   }
 

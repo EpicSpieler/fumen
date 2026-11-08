@@ -124,6 +124,10 @@ export const rust: Record<string, string> = {
 
   // starting osu! (launch.rs)
   "{what} couldn't be started: {error}": "{what} konnte nicht gestartet werden: {error}",
+  // tosu (tosu.rs)
+  "That isn't tosu.": "Das ist nicht tosu.",
+  "That file isn't tosu.": "Diese Datei ist nicht tosu.",
+  "tosu wasn't found. Pick tosu.exe in Settings.": "tosu wurde nicht gefunden. Wähle tosu.exe in den Einstellungen.",
   "osu!lazer wasn't found (no Flatpak, AppImage or package).": "osu!lazer wurde nicht gefunden (kein Flatpak, AppImage oder Paket).",
   "osu!lazer can't be started from here.": "osu!lazer kann von hier aus nicht gestartet werden.",
   "osu!stable's osu!.exe wasn't found in its folder.": "Die osu!.exe von osu!stable liegt nicht in seinem Ordner.",
