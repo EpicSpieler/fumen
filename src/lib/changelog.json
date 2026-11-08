@@ -3,24 +3,22 @@
     "version": "1.3.19",
     "date": "2026-11-08",
     "en": [
-      "Fullscreen: a Back button sits top left now instead of the fullscreen icon, so getting back to the app is easier to find, mostly from the playfield.",
-      "Playfield: when the side panel is taller than the window it scrolls, instead of squashing the notes per second graph flat.",
-      "Replays: hitsounds now play when the replay actually hit the note, early or late, and not at all for notes that were never pressed.",
-      "There is a Play button at the bottom of the sidebar that starts osu!lazer. While osu! is open it turns into a Close button. If osu!stable is found, the small arrow next to it lets you pick stable instead.",
-      "Adding and deleting beatmaps need osu!lazer closed. Where Fumen tells you that, there is now a Close osu!lazer button. It closes lazer the normal way and also answers its \"Are you sure?\" question.",
-      "Visualizer: maps with a background video play it in place of the cover, in time with the song. You can turn it off with Video in the visualizer settings. Videos of osu!stable maps show up after the next stable scan.",
-      "Visualizer: Stage no longer shows the BPM and beat counter in the top left, and it is the style new users start with.",
-      "Visualizer: over a video the beat pulse stays off, so the picture stays calm. In Stage the controls slide down as they fade out, the light strip goes down with them to the bottom edge, and the title follows a little behind."
+      "New: Play button in the sidebar to start or close osu! (lazer or stable).",
+      "New: Close osu!lazer button where adding or deleting beatmaps needs it closed.",
+      "New: Visualizer plays the beatmap video if there is one.",
+      "New: Stage is the default visualizer style, with a cleaner look.",
+      "Changed: Back button in fullscreen instead of the fullscreen icon.",
+      "Fix: Replay hitsounds now match the replay.",
+      "Fix: Notes per second graph no longer gets squashed in the playfield."
     ],
     "de": [
-      "Vollbild: Oben links gibt es jetzt einen Zurück-Knopf statt des Vollbild-Symbols. So findet man leichter zurück in die App, vor allem aus dem Playfield.",
-      "Playfield: Wenn die Seitenleiste höher als das Fenster ist, scrollt sie jetzt, statt den Graphen der Noten pro Sekunde platt zu drücken.",
-      "Replays: Hitsounds kommen jetzt dann, wenn das Replay die Note wirklich getroffen hat, früh oder spät, und gar nicht bei Noten, die nie gedrückt wurden.",
-      "Unten in der Seitenleiste gibt es einen Play-Knopf, der osu!lazer startet. Solange osu! offen ist, wird daraus ein Schließen-Knopf. Wenn osu!stable gefunden wird, kannst du über den kleinen Pfeil daneben stattdessen stable wählen.",
-      "Beatmaps hinzufügen und löschen geht nur, wenn osu!lazer zu ist. Wo Fumen das sagt, gibt es jetzt einen Knopf osu!lazer schließen. Er beendet lazer ganz normal und bestätigt dabei auch die Frage \"Bist du sicher?\".",
-      "Visualizer: Maps mit Hintergrundvideo spielen es statt des Covers ab, passend zum Song. Abschalten kannst du das mit Video in den Visualizer-Einstellungen. Videos von osu!stable-Maps erscheinen nach dem nächsten stable-Scan.",
-      "Visualizer: Stage zeigt oben links keine BPM und keinen Taktzähler mehr und ist der Stil, mit dem neue Nutzer starten.",
-      "Visualizer: Über einem Video bleibt der Beat-Puls aus, damit das Bild ruhig bleibt. In Stage gleitet die Steuerleiste beim Ausblenden nach unten, der Lichtstreifen geht mit ihr bis an den unteren Rand, und der Titel folgt etwas verzögert."
+      "Neu: Play-Knopf in der Seitenleiste, startet oder schließt osu! (lazer oder stable).",
+      "Neu: Knopf zum Schließen von osu!lazer, wo Hinzufügen oder Löschen es braucht.",
+      "Neu: Der Visualizer spielt das Video der Beatmap ab, wenn es eins gibt.",
+      "Neu: Stage ist der Standard-Stil im Visualizer, mit aufgeräumterem Look.",
+      "Geändert: Zurück-Knopf im Vollbild statt des Vollbild-Symbols.",
+      "Fix: Replay-Hitsounds passen jetzt zum Replay.",
+      "Fix: Der Graph der Noten pro Sekunde wird im Playfield nicht mehr zusammengedrückt."
     ]
   },
   {
