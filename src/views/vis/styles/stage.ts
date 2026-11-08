@@ -1,4 +1,4 @@
-/* Bühne: the cover fills everything and zooms on the beat; a big title and a strip of light. */
+/* Bühne: the cover fills everything and zooms on the beat; a big title and a strip of light (both going down while the transport slides away). */
 import { isLinux } from "../../../lib/api";
 import { bars, css, drawArt, text, type Style, type VisFrame } from "../draw";
 
@@ -22,6 +22,8 @@ export function stage(): Style {
   /** Linux: the shades at the canvas' size, and what they were made for */
   let shade: HTMLCanvasElement | null = null;
   let shadeKey = "";
+  /** the title's drop: it follows the light strip down and up, a little behind */
+  let textDrop = 0;
   return {
     draw(f: VisFrame): boolean {
       const { c, x, y, w, h, W, H } = f;
@@ -74,12 +76,16 @@ export function stage(): Style {
       }
       c.fill();
       const mx = x + w * 0.05;
+      const settled = Math.abs(f.drop - textDrop) < 0.3;
+      textDrop = settled ? f.drop : textDrop + (f.drop - textDrop) * (1 - Math.exp(-f.dt / 0.2));
       if (f.o.title) {
-        text(c, f.meta.title, mx, y + h * 0.74, h * 0.1, { weight: 700, color: "#fff", maxW: w * 0.88 });
-        text(c, f.meta.artist, mx, y + h * 0.805, h * 0.036, { weight: 550, color: "rgba(255,255,255,.82)", maxW: w * 0.7 });
-        text(c, f.meta.version, mx, y + h * 0.85, h * 0.024, { weight: 500, color: "rgba(255,255,255,.55)", maxW: w * 0.7 });
+        const ty = y + textDrop;
+        text(c, f.meta.title, mx, ty + h * 0.74, h * 0.1, { weight: 700, color: "#fff", maxW: w * 0.88 });
+        text(c, f.meta.artist, mx, ty + h * 0.805, h * 0.036, { weight: 550, color: "rgba(255,255,255,.82)", maxW: w * 0.7 });
+        text(c, f.meta.version, mx, ty + h * 0.85, h * 0.024, { weight: 500, color: "rgba(255,255,255,.55)", maxW: w * 0.7 });
       }
-      return false;
+      // still gliding after the strip
+      return !settled;
     },
   };
 }
