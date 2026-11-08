@@ -609,7 +609,7 @@ patch was skipped: it all came at once.
 - [x] Docs, website, release 1.3.0
 
 Later, not in 1.3: the beatmap's video behind the visualizer; the visualizer as an OBS source
-through the overlay server; a small visualizer in the player bar. Storyboards: no.
+through the overlay server; a small visualizer in the player bar. Storyboards: not then; on the Later list since 2026-11-08.
 
 ## After 1.0
 
