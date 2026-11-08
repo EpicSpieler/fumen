@@ -17,6 +17,7 @@ import { Emitter, events, refreshStatus, reloadLibrary, store } from "../lib/sto
 import type { ImportProgress, ImportStage, ImportSummary, LazerImportStatus, OsuAccount, PlayedFound } from "../lib/types";
 import { attachSegIndicator, closeAnimated, reduceMotion, toast, uiConfirm } from "../ui/controls";
 import { icon } from "../ui/icons";
+import { closeLazerHtml, wireCloseLazer } from "../ui/osu-launch";
 import { fromRust, t, tn } from "../lib/i18n";
 
 type Mode = "links" | "played";
@@ -244,6 +245,10 @@ class ImportDialog {
     this.overallEl = el.querySelector(".imp-overall")!;
     this.rowsEl = el.querySelector(".imp-rows")!;
     this.lazerEl = el.querySelector(".imp-lazer")!;
+    wireCloseLazer(this.lazerEl, async () => {
+      await this.refreshStatus();
+      return this.status?.reason === "running";
+    });
     this.repairEl = el.querySelector(".imp-repair")!;
     this.repairEl.addEventListener("click", (e) => {
       if ((e.target as Element).closest('[data-act="repair"]')) void this.repair();
@@ -425,7 +430,7 @@ class ImportDialog {
     el.innerHTML =
       st.ready && st.version
         ? `${ic}<span class="meta-line imp-lazer-text"><span>osu!lazer ${esc(short(st.version))}</span><span>${t("Tested with Fumen")}</span><span>${t("Closed")}</span></span>`
-        : `${ic}<span class="imp-lazer-text">${esc(st.message ?? t("Importing isn't possible right now."))}</span>`;
+        : `${ic}<span class="imp-lazer-text">${esc(st.message ?? t("Importing isn't possible right now."))}</span>${st.reason === "running" ? closeLazerHtml() : ""}`;
     this.renderRepair();
     if (st.reason === "untested") {
       el.dataset.tip = st.testedVersions.length

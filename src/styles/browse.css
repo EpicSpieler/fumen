@@ -47,6 +47,7 @@
 }
 .br-lazer .ic { flex: none; width: 16px; height: 16px; color: var(--accent-ink); }
 .br-lazer .btn { flex: none; margin-left: auto; }
+.br-lazer .close-lazer + .btn { margin-left: 0; }
 
 .br-summary {
   display: flex;

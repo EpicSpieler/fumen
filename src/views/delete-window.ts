@@ -13,6 +13,7 @@ import type { LazerImportStatus } from "../lib/types";
 import { closeAnimated, toast } from "../ui/controls";
 import { dissolve } from "../ui/dissolve";
 import { icon } from "../ui/icons";
+import { closeLazerHtml, wireCloseLazer } from "../ui/osu-launch";
 import { VirtualList } from "../ui/virtual";
 import { t, tn } from "../lib/i18n";
 
@@ -126,6 +127,10 @@ class DeleteWindow {
         </div>
       </div>`;
     this.el = el;
+    wireCloseLazer(el.querySelector<HTMLElement>(".dw-lazer")!, async () => {
+      await this.refreshStatus();
+      return this.status?.reason === "running";
+    });
     const listEl = el.querySelector<HTMLElement>(".dw-list")!;
     // the list keeps its height from start to end: nothing in the window moves
     el.querySelector<HTMLElement>(".dw-list-wrap")!.style.height = `${Math.min(LIST_MAX, rows.length * ROW_H)}px`;
@@ -317,7 +322,7 @@ class DeleteWindow {
     el.innerHTML =
       st.ready && st.version
         ? `${ic}<span class="meta-line imp-lazer-text"><span>osu!lazer ${esc(short(st.version))}</span><span>${t("Tested with Fumen")}</span><span>${t("Closed")}</span></span>`
-        : `${ic}<span class="imp-lazer-text">${esc(why)}</span>`;
+        : `${ic}<span class="imp-lazer-text">${esc(why)}</span>${st.reason === "running" ? closeLazerHtml() : ""}`;
   }
 
   private renderNote(): void {

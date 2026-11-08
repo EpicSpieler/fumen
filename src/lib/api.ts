@@ -122,6 +122,10 @@ export const api = {
     if (raw instanceof ArrayBuffer) return JSON.parse(new TextDecoder().decode(raw)) as [string, string][];
     return raw;
   },
+  /** starts osu!lazer or osu!stable */
+  launchOsu: (client: "lazer" | "stable") => invoke<void>("launch_osu", { client }),
+  /** asks a running osu!lazer to close; how many of its windows were asked */
+  closeLazer: () => invoke<number>("close_lazer"),
   /** whether sets can be imported into osu!lazer right now */
   lazerImportStatus: () => invoke<LazerImportStatus>("lazer_import_status").then((s) => ({ ...s, message: s.message && fromRust(s.message) })),
   /** downloads the sets behind osu! links and imports them into lazer, or puts them into osu!stable's

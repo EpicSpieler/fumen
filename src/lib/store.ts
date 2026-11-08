@@ -44,6 +44,7 @@ export const DEFAULT_PREFS: UiPrefs = {
   playfieldSkin: null,
   modeSkins: {},
   hitsoundVolume: 0.6,
+  launchClient: "lazer",
   fullscreenMode: "visual",
   visualizer: {
     style: "spectrum",

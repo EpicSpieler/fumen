@@ -37,6 +37,7 @@ import { openChangelog } from "./views/changelog";
 import { getVersion } from "@tauri-apps/api/app";
 import { mountPlayerBar } from "./player";
 import { openFullscreen } from "./views/fullscreen";
+import { launchHtml, renderLaunch } from "./ui/osu-launch";
 import { BrowseView } from "./views/browse";
 import { ScoreView } from "./views/score";
 import { CareView } from "./views/care";
@@ -115,6 +116,7 @@ app.innerHTML = `
       <div class="side-list"></div>
     </section>
     <div class="side-foot">
+      ${launchHtml()}
       <button class="side-update" type="button" hidden>
         <span class="side-update-bar"></span>
         ${icon("download", "side-update-ic")}
@@ -541,6 +543,7 @@ function applySidebar(): void {
     if (collapsed) el.dataset.tip = label;
     else delete el.dataset.tip;
   });
+  renderLaunch(app);
 }
 function setSidebarCollapsed(collapsed: boolean): void {
   if (collapsed === store.prefs.sidebarCollapsed) return;
@@ -760,6 +763,7 @@ refreshBtn.addEventListener("click", async () => {
 });
 events.on("scan", renderLibraryState);
 events.on("status", renderLibraryState);
+events.on("status", () => renderLaunch(app));
 events.on("importing", renderLibraryState);
 // the import's window, minimized to the sidebar, comes back from there
 $(".profile-sub").addEventListener("click", () => {

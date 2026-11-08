@@ -64,4 +64,12 @@ export const shell: Record<string, string> = {
   Lime: "Limette",
   Teal: "Petrol",
   Sky: "Himmelblau",
+
+  // starting osu!, closing lazer (ui/osu-launch)
+  "Pick which osu! to start": "Wähl, welches osu! starten soll",
+  "Play {name}": "{name} spielen",
+  "Starting {name}…": "{name} startet…",
+  "Close osu!lazer": "osu!lazer schließen",
+  "Closing…": "Wird geschlossen…",
+  "osu!lazer is still open. It may be asking something (downloads running?), have a look at it.": "osu!lazer ist noch offen. Vielleicht fragt es gerade etwas (laufen Downloads?), schau mal rein.",
 };

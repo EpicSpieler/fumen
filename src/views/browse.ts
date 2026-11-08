@@ -16,6 +16,7 @@ import type { FoundMap, FoundSet, LazerImportStatus, MirrorQuery, MirrorSort } f
 import { player } from "../player";
 import { attachSegIndicator, createSelect, openMenu, toast, uiConfirm, type MenuEntry, type SelectOption } from "../ui/controls";
 import { icon } from "../ui/icons";
+import { closeLazerHtml, wireCloseLazer } from "../ui/osu-launch";
 import { starRange } from "../ui/star-range";
 import { openSet } from "./actions";
 import { importEvents, importSets, importTarget, openImport, setImportState, type SetImport } from "./import";
@@ -175,6 +176,10 @@ export class BrowseView {
       <div class="br-summary"></div>
       <div class="br-list"></div>
       <div class="br-foot"></div>`;
+    wireCloseLazer(this.el.querySelector<HTMLElement>(".br-lazer")!, async () => {
+      await this.refreshStatus();
+      return this.status?.reason === "running";
+    });
     const sort = createSelect(SORTS, this.q.sort, (v) => {
       this.q.sort = v;
       this.search();
@@ -345,7 +350,7 @@ export class BrowseView {
       s.reason === "running"
         ? t("osu!lazer is open. Fumen adds sets with lazer's own code while it's closed, so close it to add these.")
         : s.message ?? t("osu!lazer can't take sets right now.");
-    el.innerHTML = `${icon("info")}<span>${esc(text)}</span>${s.reason === "running" ? `<button class="btn btn-ghost btn-sm br-recheck" type="button">${t("Check again")}</button>` : ""}`;
+    el.innerHTML = `${icon("info")}<span>${esc(text)}</span>${s.reason === "running" ? `${closeLazerHtml()}<button class="btn btn-ghost btn-sm br-recheck" type="button">${t("Check again")}</button>` : ""}`;
   }
 
   private renderList(): void {

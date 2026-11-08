@@ -311,6 +311,32 @@ body.dragging-maps .side-item[data-fumen], body.dragging-maps .side-box-add { ou
 .profile-sub.is-link:hover { color: var(--t1); }
 .profile-settings.active { color: var(--accent-ink); background: var(--accent-dim-hover); }
 
+/* Play osu!: starts lazer (or stable, picked in its menu) */
+.side-play { display: flex; align-items: center; gap: 2px; margin-bottom: 8px; padding: 2px; border-radius: var(--r-lg); background: var(--fill-mod); }
+.side-play-go {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  height: 36px;
+  padding: 0 10px;
+  border-radius: calc(var(--r-lg) - 2px);
+  color: var(--t1);
+  font-size: var(--fs-12);
+  font-weight: 600;
+  text-align: left;
+  transition: background .12s var(--ease-std), transform .22s var(--ease-spring);
+}
+.side-play-go:hover { background: var(--tint-hover); }
+.side-play-go:active { transform: scale(.98); }
+.side-play-ic { flex: none; width: 16px; height: 16px; color: var(--accent-ink); }
+.side-play-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.side-play-pick { display: grid; place-items: center; flex: none; width: 28px; height: 36px; border-radius: calc(var(--r-lg) - 2px); color: var(--t3); transition: background .12s var(--ease-std), color .12s var(--ease-std); }
+.side-play-pick:hover { background: var(--tint-hover); color: var(--t1); }
+.side-play-pick[hidden] { display: none; }
+.side-play-pick .ic { width: 14px; height: 14px; }
+
 /* update: a button above the profile while there's one to install */
 .side-update {
   position: relative;
@@ -358,6 +384,9 @@ body.sidebar-collapsed .side-box.closed .side-list { display: flex; }
 body.sidebar-collapsed .profile { flex-direction: column; gap: 6px; padding: 0; }
 body.sidebar-collapsed .side-update { justify-content: center; padding: 0; }
 body.sidebar-collapsed .side-update-text { display: none; }
+body.sidebar-collapsed .side-play { padding: 0; background: none; }
+body.sidebar-collapsed .side-play-go { justify-content: center; padding: 0; }
+body.sidebar-collapsed :is(.side-play-label, .side-play-pick) { display: none; }
 
 /* ---------- Content ---------- */
 .content {

@@ -493,6 +493,8 @@ export interface UiPrefs {
   playfieldSkin: string | null;
   /** the playfield's skin per ruleset ("0"–"3"), over `playfieldSkin` */
   modeSkins: Record<string, string>;
+  /** which osu! the sidebar's Play button starts */
+  launchClient: "lazer" | "stable";
   /** volume of the playfield's hitsounds, 0–1, relative to the music */
   hitsoundVolume: number;
   /** fullscreen view used last */

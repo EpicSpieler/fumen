@@ -28,6 +28,7 @@
 }
 .imp-lazer-ic { flex: none; width: 16px; height: 16px; }
 .imp-lazer-text { min-width: 0; line-height: 1.45; }
+.imp-lazer .close-lazer { flex: none; margin-left: auto; }
 .imp-lazer.ok .imp-lazer-ic { color: var(--success); }
 .imp-lazer.wait { background: var(--warning-soft); color: var(--t1); }
 .imp-lazer.wait .imp-lazer-ic { color: var(--warning); }

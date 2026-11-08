@@ -374,6 +374,14 @@ export async function invoke<T>(cmd: string, args: Record<string, unknown> = {},
       const unfinished = Number(localStorage.getItem("fumen-preview-unfinished") ?? "0");
       return { ready: !reason, reason, message, version, tested: mode !== "untested", running: mode === "running", testedVersions: [version], unfinished } as T;
     }
+    case "close_lazer": {
+      // lazer closes a moment later, as the real one does after its exit animation
+      if (localStorage.getItem("fumen-preview-lazer") !== "running") return 0 as T;
+      setTimeout(() => localStorage.setItem("fumen-preview-lazer", "ready"), 2500);
+      return 1 as T;
+    }
+    case "launch_osu":
+      return null as T;
     case "repair_lazer_sets": {
       const finished = Number(localStorage.getItem("fumen-preview-unfinished") ?? "0");
       await new Promise((r) => setTimeout(r, 1800));
