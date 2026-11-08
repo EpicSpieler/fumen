@@ -16,6 +16,7 @@ mod lazer;
 mod lazer_import;
 mod lazer_linux;
 mod launch;
+mod video;
 mod matches;
 mod mirror_search;
 mod mma;
@@ -753,6 +754,19 @@ async fn get_hitsounds(app: AppHandle, id: String) -> Result<hitsounds::Sounds> 
         let files = state.files();
         let conn = state.db();
         hitsounds::for_map(&conn, &files, &id)
+    })
+    .await
+    .map_err(|e| Error::known("internal", e.to_string()))?
+}
+
+/// A library difficulty's background video (its key and the song ms it starts at), if it has one.
+#[tauri::command]
+async fn map_video(app: AppHandle, id: String) -> Result<Option<video::Video>> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let files = state.files();
+        let conn = state.db();
+        video::for_map(&conn, &files, &id)
     })
     .await
     .map_err(|e| Error::known("internal", e.to_string()))?
@@ -2006,6 +2020,7 @@ pub fn run() {
             lazer_import_status,
             launch_osu,
             close_lazer,
+            map_video,
             repair_lazer_sets,
             compare_player,
             cancel_compare,

@@ -546,6 +546,8 @@ fn background_of(osu: &Path) -> Option<String> {
 }
 
 const SOUND_EXTENSIONS: [&str; 5] = ["wav", "ogg", "mp3", "flac", "osb"];
+/// videos get keys too (the visualizer plays a difficulty's video, src/video.rs)
+const VIDEO_EXTENSIONS: [&str; 4] = ["mp4", "webm", "m4v", "mov"];
 
 /// What a set's folder holds that Fumen uses.
 #[derive(Default)]
@@ -594,6 +596,8 @@ fn scan_folder(songs: &Path, folder: &str, maps: &[&DbMap]) -> Option<Folder> {
             if let Some(k) = key_of(&name, &mut out) {
                 out.sounds.push((name, k));
             }
+        } else if VIDEO_EXTENSIONS.contains(&ext.as_str()) {
+            key_of(&name, &mut out);
         }
     }
     for m in maps {
