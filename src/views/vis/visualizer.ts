@@ -284,13 +284,13 @@ export class Visualizer {
     return el;
   }
 
-  /** The video's colours, read from a 48×27 copy of its frame twice a second; null without one. */
+  /** The video's colours, read from a 48×27 copy of its frame eight times a second; null without one. */
   private readVideoColours(video: HTMLVideoElement | null, now: number): void {
     if (!video || this.o.colors !== "cover") {
       this.videoPalette = null;
       return;
     }
-    if (now - this.videoRead < 0.5) return;
+    if (now - this.videoRead < 0.125) return;
     this.videoRead = now;
     try {
       if (!this.videoSample) {
@@ -378,8 +378,8 @@ export class Visualizer {
     // colours glide to where they're going
     this.readVideoColours(video, now);
     const goal = this.targetLook();
-    // a new video colour is there within the half second until the next read, so it never trails
-    const k = this.look ? 1 - Math.exp(-dt / (this.videoPalette ? 0.15 : 0.25)) : 1;
+    // video colours glide a little so the many small changes stay calm
+    const k = this.look ? 1 - Math.exp(-dt / (this.videoPalette ? 0.2 : 0.25)) : 1;
     const a = this.look ? mix(this.look.a, goal.a, k) : goal.a;
     const b = this.look ? mix(this.look.b, goal.b, k) : goal.b;
     this.look = lookOf({ a, b });
