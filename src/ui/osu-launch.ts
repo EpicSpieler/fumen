@@ -1,7 +1,8 @@
 /* osu-launch.ts — starting osu! from Fumen and closing osu!lazer.
  *
  * The sidebar's Play button starts osu!lazer, or osu!stable when that's picked in its menu (Windows,
- * with stable found). Where Fumen needs lazer closed (adding and deleting beatmaps), a "Close
+ * with stable found). While that osu! runs (checked every couple of seconds while Fumen is on
+ * screen) it's a Close button instead. Where Fumen needs lazer closed (adding and deleting beatmaps), a "Close
  * osu!lazer" button asks it to close the way its own close button does; the dialogs see it go
  * through their usual status checks.
  */
@@ -34,6 +35,35 @@ export function launchHtml(): string {
 }
 
 let starting = false;
+/** which osu! runs, as last checked */
+let running = { lazer: false, stable: false };
+/** the one the button is closing, until it's gone or the wait is over */
+let sideClosing: Client | null = null;
+let sideRoot: HTMLElement | null = null;
+let pollTimer = 0;
+
+/** Checks which osu! runs and shows it on the button. */
+async function poll(): Promise<void> {
+  try {
+    const now = await api.osuRunning();
+    const changed = now.lazer !== running.lazer || now.stable !== running.stable;
+    running = now;
+    if (sideClosing && !running[sideClosing]) sideClosing = null;
+    if (changed && sideRoot) renderLaunch(sideRoot);
+  } catch {
+    // the preview, or the check failed: the button stays as it is
+  }
+}
+
+function startPolling(): void {
+  const tick = () => {
+    if (!document.hidden) void poll();
+  };
+  pollTimer = window.setInterval(tick, 2000);
+  document.addEventListener("visibilitychange", tick);
+  window.addEventListener("focus", tick);
+  tick();
+}
 
 async function launch(c: Client): Promise<void> {
   if (starting) return;
@@ -45,26 +75,66 @@ async function launch(c: Client): Promise<void> {
     toast(asApiError(e).message, { kind: "danger", timeout: 5000 });
   } finally {
     // a double click shouldn't start it twice
-    setTimeout(() => (starting = false), 1500);
+    setTimeout(() => {
+      starting = false;
+      void poll();
+    }, 1500);
   }
+}
+
+/** Closes the osu! the button shows, then waits up to 15 s for it to go. */
+async function closeSide(c: Client): Promise<void> {
+  if (sideClosing) return;
+  sideClosing = c;
+  if (sideRoot) renderLaunch(sideRoot);
+  let asked = 0;
+  try {
+    asked = await api.closeOsu(c);
+  } catch (e) {
+    toast(asApiError(e).message, { kind: "danger", timeout: 5000 });
+  }
+  if (asked) {
+    for (let i = 0; i < 15 && running[c]; i++) {
+      await new Promise((r) => setTimeout(r, 1000));
+      await poll();
+    }
+    if (running[c])
+      toast(c === "lazer" ? t("osu!lazer is still open. It may be asking something (downloads running?), have a look at it.") : t("osu!stable is still open, have a look at it."), {
+        timeout: 7000,
+      });
+  }
+  sideClosing = null;
+  await poll();
+  if (sideRoot) renderLaunch(sideRoot);
 }
 
 /** Wires the sidebar's Play button (call again when the library status changes). */
 export function renderLaunch(root: HTMLElement): void {
   const box = root.querySelector<HTMLElement>(".side-play");
   if (!box) return;
+  sideRoot = root;
   const c = client();
-  const label = t("Play {name}", { name: NAMES[c] });
+  const open = running[c];
+  const closingNow = sideClosing === c;
+  const label = closingNow ? t("Closing…") : open ? t("Close {name}", { name: NAMES[c] }) : t("Play {name}", { name: NAMES[c] });
   box.querySelector(".side-play-label")!.textContent = label;
-  const go = box.querySelector<HTMLElement>(".side-play-go")!;
+  const go = box.querySelector<HTMLButtonElement>(".side-play-go")!;
   go.setAttribute("aria-label", label);
+  go.disabled = closingNow;
+  box.classList.toggle("running", open);
+  go.querySelector(".side-play-ic use")?.setAttribute("href", open ? "#i-stop" : "#i-play");
   // collapsed sidebar: the label is the tip
   if (document.body.classList.contains("sidebar-collapsed")) go.dataset.tip = label;
   else delete go.dataset.tip;
   box.querySelector<HTMLElement>(".side-play-pick")!.hidden = !stableKnown();
   if (box.dataset.wired) return;
   box.dataset.wired = "1";
-  go.addEventListener("click", () => void launch(client()));
+  go.addEventListener("click", () => {
+    const k = client();
+    if (running[k]) void closeSide(k);
+    else void launch(k);
+  });
+  if (!pollTimer) startPolling();
   const pick = box.querySelector<HTMLElement>(".side-play-pick")!;
   pick.addEventListener("click", () => {
     const now = client();

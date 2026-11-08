@@ -1394,9 +1394,26 @@ fn launch_osu(state: State<'_, AppState>, client: String) -> Result<()> {
 /// Asks a running osu!lazer to close (its own way out); how many of its windows were asked.
 #[tauri::command]
 async fn close_lazer() -> Result<usize> {
-    tauri::async_runtime::spawn_blocking(|| match lazer_import::installed() {
-        Some(l) => launch::close_lazer(&l.dir),
-        None => 0,
+    close_osu("lazer".into()).await
+}
+
+/// Asks a running osu! ("lazer" or "stable") to close; how many of its windows were asked.
+#[tauri::command]
+async fn close_osu(client: String) -> Result<usize> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let lazer = lazer_import::installed();
+        launch::close(&client, lazer.as_ref().map(|l| l.dir.as_path()))
+    })
+    .await
+    .map_err(|e| Error::known("internal", e.to_string()))
+}
+
+/// Which osu! runs right now (the sidebar's Play button turns into Close).
+#[tauri::command]
+async fn osu_running() -> Result<launch::Running> {
+    tauri::async_runtime::spawn_blocking(|| {
+        let lazer = lazer_import::installed();
+        launch::running(lazer.as_ref().map(|l| l.dir.as_path()))
     })
     .await
     .map_err(|e| Error::known("internal", e.to_string()))
@@ -2020,6 +2037,8 @@ pub fn run() {
             lazer_import_status,
             launch_osu,
             close_lazer,
+            close_osu,
+            osu_running,
             map_video,
             repair_lazer_sets,
             compare_player,

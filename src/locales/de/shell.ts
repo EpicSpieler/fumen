@@ -70,6 +70,8 @@ export const shell: Record<string, string> = {
   "Play {name}": "{name} spielen",
   "Starting {name}…": "{name} startet…",
   "Close osu!lazer": "osu!lazer schließen",
+  "Close {name}": "{name} schließen",
+  "osu!stable is still open, have a look at it.": "osu!stable ist noch offen, schau mal rein.",
   "Closing…": "Wird geschlossen…",
   "osu!lazer is still open. It may be asking something (downloads running?), have a look at it.": "osu!lazer ist noch offen. Vielleicht fragt es gerade etwas (laufen Downloads?), schau mal rein.",
 };

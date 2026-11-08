@@ -1,6 +1,7 @@
-//! Starting osu! from Fumen (lazer or stable, the sidebar's Play button) and asking lazer to
-//! close (importing and deleting need it closed). Closing is always lazer's own way out, as its
-//! window's close button does it, never a kill: lazer writes its database on the way out.
+//! Starting osu! from Fumen (lazer or stable, the sidebar's Play button, which turns into Close
+//! while that osu! runs) and asking it to close (importing and deleting need lazer closed).
+//! Closing is always the game's own way out, as its window's close button does it, never a kill:
+//! lazer writes its database on the way out.
 
 use std::path::Path;
 use std::process::{Command, Stdio};
@@ -70,47 +71,77 @@ pub fn stable(dir: &Path) -> Result<()> {
     }
 }
 
-/// Asks a running osu!lazer to close; how many of its windows (or processes) were asked. It may
-/// still ask something first (downloads running), so the caller watches whether it went.
-pub fn close_lazer(install: &Path) -> usize {
+
+/// Which osu! is running right now.
+#[derive(Debug, Clone, Copy, Default, serde::Serialize)]
+pub struct Running {
+    pub lazer: bool,
+    pub stable: bool,
+}
+
+/// Which osu! runs (`install`: lazer's install, to tell its `osu!.exe` from stable's). stable only
+/// counts on Windows.
+pub fn running(install: Option<&Path>) -> Running {
     #[cfg(windows)]
     {
-        windows_close(install)
+        let (lazer, stable) = osu_pids(install);
+        Running { lazer: !lazer.is_empty(), stable: !stable.is_empty() }
+    }
+    #[cfg(not(windows))]
+    {
+        Running { lazer: install.is_some_and(crate::lazer_import::lazer_running), stable: false }
+    }
+}
+
+/// Asks a running osu! ("lazer" or "stable") to close; how many of its windows (or processes)
+/// were asked. It may still ask something first (lazer with downloads running), so the caller
+/// watches whether it went.
+pub fn close(client: &str, install: Option<&Path>) -> usize {
+    #[cfg(windows)]
+    {
+        let (lazer, stable) = osu_pids(install);
+        windows_close(if client == "stable" { stable } else { lazer })
     }
     #[cfg(target_os = "macos")]
     {
         let _ = install;
+        if client == "stable" {
+            return 0;
+        }
         let ok = Command::new("/usr/bin/osascript").args(["-e", "tell application \"osu!\" to quit"]).status().is_ok_and(|s| s.success());
         usize::from(ok)
     }
     #[cfg(target_os = "linux")]
     {
         let _ = install;
+        if client == "stable" {
+            return 0;
+        }
         crate::lazer_linux::close()
     }
     #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
     {
-        let _ = install;
+        let _ = (client, install);
         0
     }
 }
 
-/// lazer's processes: `osu!.exe` from lazer's install folder (stable's has the same name).
+/// The running `osu!.exe` processes, lazer's (from its install folder) and stable's (any other).
 #[cfg(windows)]
-fn lazer_pids(install: &Path) -> Vec<u32> {
+fn osu_pids(install: Option<&Path>) -> (Vec<u32>, Vec<u32>) {
     use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
     use windows_sys::Win32::System::Diagnostics::ToolHelp::{
         CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W, TH32CS_SNAPPROCESS,
     };
     use windows_sys::Win32::System::Threading::{OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION};
 
-    let lazer_root = install.parent().unwrap_or(install).to_string_lossy().to_lowercase();
-    let mut pids = Vec::new();
+    let lazer_root = install.map(|i| i.parent().unwrap_or(i).to_string_lossy().to_lowercase());
+    let (mut lazer, mut stable) = (Vec::new(), Vec::new());
     // SAFETY: plain Win32 calls on handles opened and closed here; buffers sized as documented
     unsafe {
         let snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
         if snap == INVALID_HANDLE_VALUE {
-            return pids;
+            return (lazer, stable);
         }
         let mut entry: PROCESSENTRY32W = std::mem::zeroed();
         entry.dwSize = std::mem::size_of::<PROCESSENTRY32W>() as u32;
@@ -122,10 +153,13 @@ fn lazer_pids(install: &Path) -> Vec<u32> {
                 if !proc.is_null() {
                     let mut buf = [0u16; 1024];
                     let mut size = buf.len() as u32;
-                    if QueryFullProcessImageNameW(proc, PROCESS_NAME_WIN32, buf.as_mut_ptr(), &mut size) != 0
-                        && String::from_utf16_lossy(&buf[..size as usize]).to_lowercase().starts_with(&lazer_root)
-                    {
-                        pids.push(entry.th32ProcessID);
+                    if QueryFullProcessImageNameW(proc, PROCESS_NAME_WIN32, buf.as_mut_ptr(), &mut size) != 0 {
+                        let path = String::from_utf16_lossy(&buf[..size as usize]).to_lowercase();
+                        if lazer_root.as_ref().is_some_and(|r| path.starts_with(r.as_str())) {
+                            lazer.push(entry.th32ProcessID);
+                        } else {
+                            stable.push(entry.th32ProcessID);
+                        }
                     }
                     CloseHandle(proc);
                 }
@@ -134,12 +168,12 @@ fn lazer_pids(install: &Path) -> Vec<u32> {
         }
         CloseHandle(snap);
     }
-    pids
+    (lazer, stable)
 }
 
-/// Posts WM_CLOSE to lazer's visible top-level windows: what its close button does.
+/// Posts WM_CLOSE to the processes' visible top-level windows: what their close button does.
 #[cfg(windows)]
-fn windows_close(install: &Path) -> usize {
+fn windows_close(pids: Vec<u32>) -> usize {
     use windows_sys::Win32::Foundation::{HWND, LPARAM};
     use windows_sys::Win32::UI::WindowsAndMessaging::{EnumWindows, GetWindowThreadProcessId, IsWindowVisible, PostMessageW, WM_CLOSE};
 
@@ -160,7 +194,7 @@ fn windows_close(install: &Path) -> usize {
         1
     }
 
-    let mut search = Search { pids: lazer_pids(install), asked: 0 };
+    let mut search = Search { pids, asked: 0 };
     if search.pids.is_empty() {
         return 0;
     }

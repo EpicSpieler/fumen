@@ -127,6 +127,10 @@ export const api = {
   mapVideo: (id: string) => invoke<MapVideo | null>("map_video", { id }),
   /** starts osu!lazer or osu!stable */
   launchOsu: (client: "lazer" | "stable") => invoke<void>("launch_osu", { client }),
+  /** which osu! runs right now */
+  osuRunning: () => invoke<{ lazer: boolean; stable: boolean }>("osu_running"),
+  /** asks a running osu! to close; how many of its windows were asked */
+  closeOsu: (client: "lazer" | "stable") => invoke<number>("close_osu", { client }),
   /** asks a running osu!lazer to close; how many of its windows were asked */
   closeLazer: () => invoke<number>("close_lazer"),
   /** whether sets can be imported into osu!lazer right now */
