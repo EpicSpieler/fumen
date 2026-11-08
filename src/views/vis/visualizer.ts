@@ -144,8 +144,8 @@ export class Visualizer {
   private mapId: string | null = null;
   /** pauses the video once frames stop coming (the playfield tab, fullscreen closed) */
   private videoRest = 0;
-  /** how far the transport has gone (0 shown … 1 hidden while idle), eased the way it fades */
-  private sink = 0;
+  /** the floor's drop on the last frame: it moves while the transport slides */
+  private lastDrop = 0;
   private accent = { at: -Infinity, a: [139, 124, 255] as Rgb, b: [201, 193, 255] as Rgb };
 
   constructor(
@@ -299,7 +299,7 @@ export class Visualizer {
   }
 
   /** Draws one frame into the canvas; `box` is the part between the bars. True while it still moves. */
-  frame(dt: number, box: { top: number; bottom: number; idle: boolean }): boolean {
+  frame(dt: number, box: { top: number; bottom: number; drop: number }): boolean {
     const c0 = this.canvas;
     const W = c0.clientWidth;
     const H = c0.clientHeight;
@@ -353,9 +353,9 @@ export class Visualizer {
     this.look = lookOf({ a, b });
     const settling = Math.abs(a[0] - goal.a[0]) + Math.abs(a[1] - goal.a[1]) + Math.abs(b[2] - goal.b[2]) > 1.5;
     if (this.artMix < 1) this.artMix = Math.min(1, this.artMix + dt / 0.5);
-    // the transport fading out while idle: what sits on the floor can go down to the edge
-    const sinkTo = box.idle ? 1 : 0;
-    this.sink = Math.abs(sinkTo - this.sink) < 0.001 ? sinkTo : this.sink + (sinkTo - this.sink) * (1 - Math.exp(-dt / (reduce ? 0.05 : 0.13)));
+    // the transport sliding away while idle (Stage): what sits on the floor goes with it
+    const dropping = box.drop !== this.lastDrop;
+    this.lastDrop = box.drop;
 
     const f: VisFrame = {
       c,
@@ -381,7 +381,7 @@ export class Visualizer {
       prevArt: this.prevArt,
       artMix: this.artMix,
       video,
-      drop: box.bottom * this.sink,
+      drop: box.drop,
       meta: this.meta,
       o,
     };
@@ -407,6 +407,6 @@ export class Visualizer {
         c.globalAlpha = 1;
       }
     }
-    return moving || (!!video && playing) || this.sink !== sinkTo || this.a.moving || this.kiai > 0.01 || this.flashT > 0.01 || this.artMix < 1 || !!this.fade || settling;
+    return moving || (!!video && playing) || dropping || this.a.moving || this.kiai > 0.01 || this.flashT > 0.01 || this.artMix < 1 || !!this.fade || settling;
   }
 }

@@ -141,8 +141,10 @@ body.fs-test-no-blur *, body.fs-test-no-blur *::before, body.fs-test-no-blur *::
 .vp-reset { align-self: flex-start; }
 
 /* cinema: while the visualizer plays untouched, the bars and the cursor go */
-.fs-top, .fs-bar { transition: opacity .4s var(--ease-std); }
+.fs-top, .fs-bar { transition: opacity .4s var(--ease-std), transform .4s var(--ease-std); }
 .fs.idle .fs-top, .fs.idle .fs-bar { opacity: 0; }
+/* Stage: the transport slides down as it fades, the light strip on the floor riding along (views/vis) */
+.fs[data-mode="visual"][data-vis="stage"].idle .fs-bar { transform: translateY(100%); }
 .fs.idle { cursor: none; }
 
 /* ---------- Playfield ---------- */

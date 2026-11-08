@@ -57,7 +57,7 @@ export interface VisFrame {
   artMix: number;
   /** the beatmap's video at this moment, drawn in place of the sharp cover; null when there's none */
   video: HTMLVideoElement | null;
-  /** how far below the content box its floor may go now (the transport hidden while idle), px */
+  /** how far below the content box its floor goes now: as far as the transport has slid away (Stage, idle), px */
   drop: number;
   meta: { title: string; artist: string; version: string };
   o: VisPrefs;

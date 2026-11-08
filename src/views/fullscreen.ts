@@ -896,7 +896,12 @@ class Fullscreen {
     // the content keeps clear of the top bar and the transport, the picture runs under them
     const top = el.querySelector<HTMLElement>(".fs-top")!.offsetHeight;
     const bottom = el.querySelector<HTMLElement>(".fs-bar")!.offsetHeight;
-    return this.vis.frame(dt, { top, bottom, idle: el.classList.contains("idle") });
+    // Stage: the transport slides down as it fades (the CSS), and the light strip rides on it
+    const style = visPrefs().style;
+    if (el.dataset.vis !== style) el.dataset.vis = style;
+    const bar = el.querySelector<HTMLElement>(".fs-bar")!;
+    const drop = Math.max(0, Math.min(bottom, bar.getBoundingClientRect().top - bar.offsetTop));
+    return this.vis.frame(dt, { top, bottom, drop });
   }
 
   private setStyle(style: VisStyle): void {
