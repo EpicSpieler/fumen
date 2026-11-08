@@ -55,6 +55,8 @@ export interface VisFrame {
   /** the art before a track change and how far the new one has faded in */
   prevArt: Art | null;
   artMix: number;
+  /** the beatmap's video at this moment, drawn in place of the sharp cover; null when there's none */
+  video: HTMLVideoElement | null;
   meta: { title: string; artist: string; version: string };
   o: VisPrefs;
 }
@@ -79,8 +81,8 @@ export function bars(f: VisFrame, n: number, mirror: boolean): Float32Array {
 }
 
 function fitImage(c: CanvasRenderingContext2D, img: CanvasImageSource & { width: number; height: number }, x: number, y: number, w: number, h: number, zoom: number, px: number, py: number): void {
-  const iw = (img as HTMLImageElement).naturalWidth || img.width;
-  const ih = (img as HTMLImageElement).naturalHeight || img.height;
+  const iw = (img as HTMLVideoElement).videoWidth || (img as HTMLImageElement).naturalWidth || img.width;
+  const ih = (img as HTMLVideoElement).videoHeight || (img as HTMLImageElement).naturalHeight || img.height;
   if (!iw || !ih) return;
   const s = Math.max(w / iw, h / ih) * zoom;
   const dw = iw * s;
@@ -92,7 +94,7 @@ function fitImage(c: CanvasRenderingContext2D, img: CanvasImageSource & { width:
 export function drawArt(f: VisFrame, x: number, y: number, w: number, h: number, o: { blur?: boolean; zoom?: number; px?: number; py?: number } = {}): void {
   const c = f.c;
   const pick = (a: Art) => (o.blur && a.blur ? still(a.blur) : a.img);
-  const cur = pick(f.art);
+  const cur = !o.blur && f.video ? f.video : pick(f.art);
   const prev = f.prevArt && f.artMix < 1 ? pick(f.prevArt) : null;
   const zoom = o.zoom ?? 1;
   if (!cur && !prev) {

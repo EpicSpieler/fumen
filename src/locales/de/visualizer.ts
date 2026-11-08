@@ -47,4 +47,6 @@ export const visualizer: Record<string, string> = {
   "Visualizer settings": "Visualizer-Einstellungen",
   "Visualizer style (V)": "Visualizer-Stil (V)",
   Style: "Stil",
+  Video: "Video",
+  "The beatmap's video in place of the cover, when it has one": "Das Video der Beatmap statt des Covers, wenn sie eins hat",
 };

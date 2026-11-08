@@ -22,6 +22,7 @@ import type {
   ImportSummary,
   PlayedFound,
   LazerImportStatus,
+  MapVideo,
   RepairSummary,
   LazerInstall, StableInstall,
   LibraryStatus,
@@ -122,6 +123,8 @@ export const api = {
     if (raw instanceof ArrayBuffer) return JSON.parse(new TextDecoder().decode(raw)) as [string, string][];
     return raw;
   },
+  /** a difficulty's background video, if it has one */
+  mapVideo: (id: string) => invoke<MapVideo | null>("map_video", { id }),
   /** starts osu!lazer or osu!stable */
   launchOsu: (client: "lazer" | "stable") => invoke<void>("launch_osu", { client }),
   /** asks a running osu!lazer to close; how many of its windows were asked */

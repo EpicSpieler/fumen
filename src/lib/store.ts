@@ -61,6 +61,7 @@ export const DEFAULT_PREFS: UiPrefs = {
     blur: 0.4,
     dim: 0.55,
     title: true,
+    video: true,
     offset: 0,
   },
   defaultsApplied: false,

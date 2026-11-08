@@ -10,7 +10,7 @@ import { OWN_COLORS, setVis, visPrefs } from "./visualizer";
 
 type Num = "reaction" | "sensitivity" | "pulse" | "bars" | "blur" | "dim" | "offset";
 type Seg = "colors" | "flashes" | "background";
-type Flag = "kiai" | "mirror" | "title";
+type Flag = "kiai" | "mirror" | "title" | "video";
 
 /** sliders: setting, label, min, max, scale to the input's numbers, ends, shown value */
 const RANGES: [Num, string, number, number, number, string, string, (v: number) => string][] = [
@@ -33,6 +33,7 @@ const FLAGS: [Flag, string, string][] = [
   ["kiai", t("Kiai effects"), t("Brighter and livelier in the beatmap's kiai")],
   ["mirror", t("Mirrored"), t("Bass in the middle, highs to both sides")],
   ["title", t("Title"), ""],
+  ["video", t("Video"), t("The beatmap's video in place of the cover, when it has one")],
 ];
 
 export function panelHtml(): string {

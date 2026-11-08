@@ -6,8 +6,12 @@
  * setting). The look: the cover's colours (lib/vis/palette), the accent, or a pair of your own,
  * gliding on a track change while the old cover fades out under the new one. A style change
  * crossfades too. Nothing moves while the song is paused once things have settled.
+ *
+ * A difficulty with a background video (and the Video setting on) plays it, muted, in place of the
+ * sharp cover, kept on the song's time; the blurred background stays the cover. Videos the webview
+ * can't play (old .avi / .flv) just leave the cover.
  */
-import { thumbUrl } from "../../lib/api";
+import { api, fileUrl, mediaUrl, thumbUrl } from "../../lib/api";
 import { loadChart } from "../../lib/charts";
 import { outputLatency } from "../../lib/eq";
 import { t } from "../../lib/i18n";
@@ -134,6 +138,12 @@ export class Visualizer {
   private lastFlash = 0;
   /** the previous style's last picture while the new one fades in */
   private fade: { snap: HTMLCanvasElement; k: number } | null = null;
+  /** the difficulty's video: for which map, the element once it can show a frame, its start (song ms) */
+  private video: { map: string; el: HTMLVideoElement; offset: number; ready: boolean } | null = null;
+  /** the difficulty the track is on */
+  private mapId: string | null = null;
+  /** pauses the video once frames stop coming (the playfield tab, fullscreen closed) */
+  private videoRest = 0;
   private accent = { at: -Infinity, a: [139, 124, 255] as Rgb, b: [201, 193, 255] as Rgb };
 
   constructor(
@@ -154,6 +164,8 @@ export class Visualizer {
       if (this.art.img instanceof HTMLImageElement) this.art = { ...this.art, blur: blurCopy(this.art.img, this.blurred) };
       this.kick();
     }
+    if (!this.o.video && this.video) this.dropVideo();
+    else if (this.o.video && !this.video && this.mapId) this.loadVideo(this.mapId);
     if (this.o.style === this.styleId) return;
     const def = STYLES.find((s) => s.id === this.o.style) ?? STYLES[0];
     if (this.canvas.width && this.canvas.height && !reduceMotion()) {
@@ -185,6 +197,11 @@ export class Visualizer {
         else swap({ img: null, blur: null }, null);
       });
     } else swap({ img: null, blur: null }, null);
+    if (o.mapId !== this.mapId) {
+      this.mapId = o.mapId;
+      this.dropVideo();
+      if (o.mapId && this.o.video) this.loadVideo(o.mapId);
+    }
     if (!o.mapId) this.timing = null;
     else if (this.timing?.map !== o.mapId) {
       const map = o.mapId;
@@ -199,6 +216,65 @@ export class Visualizer {
     }
     this.lastBeat = Number.NaN;
     this.a.reset();
+  }
+
+  private loadVideo(map: string): void {
+    void api
+      .mapVideo(map)
+      .then((v) => {
+        if (!v || this.mapId !== map || this.video || !this.o.video) return;
+        const el = document.createElement("video");
+        el.muted = true;
+        el.playsInline = true;
+        el.preload = "auto";
+        el.crossOrigin = "anonymous";
+        const video = { map, el, offset: v.offset, ready: false };
+        el.addEventListener("loadeddata", () => {
+          video.ready = true;
+          this.kick();
+        });
+        // a seek while paused shows its frame
+        el.addEventListener("seeked", () => this.kick());
+        // a format the webview can't play: the cover stays
+        el.addEventListener("error", () => this.video === video && this.dropVideo());
+        el.src = mediaUrl(v.file) ?? fileUrl(v.file);
+        this.video = video;
+      })
+      .catch(() => {});
+  }
+
+  private dropVideo(): void {
+    const v = this.video;
+    if (!v) return;
+    this.video = null;
+    v.el.pause();
+    v.el.removeAttribute("src");
+    v.el.load();
+  }
+
+  /** The video kept on the song's time (`songMs` as heard); the element while it has a frame to show. */
+  private syncVideo(songMs: number, playing: boolean, rate: number): HTMLVideoElement | null {
+    const v = this.video;
+    if (!v || !v.ready) return null;
+    const el = v.el;
+    clearTimeout(this.videoRest);
+    this.videoRest = window.setTimeout(() => el.pause(), 300);
+    const at = (songMs - v.offset) / 1000;
+    // before it starts and after it ends: the cover
+    if (at < 0 || (el.duration && at > el.duration)) {
+      if (!el.paused) el.pause();
+      return null;
+    }
+    if (el.playbackRate !== rate) el.playbackRate = rate;
+    const off = Math.abs(el.currentTime - at);
+    if (playing) {
+      if (el.paused) void el.play().catch(() => {});
+      if (off > 0.25 && !el.seeking) el.currentTime = at;
+    } else {
+      if (!el.paused) el.pause();
+      if (off > 0.05 && !el.seeking) el.currentTime = at;
+    }
+    return el;
   }
 
   private accentColors(): { a: Rgb; b: Rgb } {
@@ -273,6 +349,7 @@ export class Visualizer {
     this.look = lookOf({ a, b });
     const settling = Math.abs(a[0] - goal.a[0]) + Math.abs(a[1] - goal.a[1]) + Math.abs(b[2] - goal.b[2]) > 1.5;
     if (this.artMix < 1) this.artMix = Math.min(1, this.artMix + dt / 0.5);
+    const video = this.syncVideo((player.audio.currentTime - outputLatency() * rate) * 1000, playing, rate);
 
     const f: VisFrame = {
       c,
@@ -297,6 +374,7 @@ export class Visualizer {
       art: this.art,
       prevArt: this.prevArt,
       artMix: this.artMix,
+      video,
       meta: this.meta,
       o,
     };
@@ -322,6 +400,6 @@ export class Visualizer {
         c.globalAlpha = 1;
       }
     }
-    return moving || this.a.moving || this.kiai > 0.01 || this.flashT > 0.01 || this.artMix < 1 || !!this.fade || settling;
+    return moving || (!!video && playing) || this.a.moving || this.kiai > 0.01 || this.flashT > 0.01 || this.artMix < 1 || !!this.fade || settling;
   }
 }

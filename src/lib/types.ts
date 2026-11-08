@@ -515,6 +515,12 @@ export interface UiPrefs {
 
 export type VisStyle = "spectrum" | "ring" | "wave" | "stars" | "stage" | "hifi";
 
+/** A difficulty's background video: its file's key and the song ms it starts at. */
+export interface MapVideo {
+  file: string;
+  offset: number;
+}
+
 export interface VisPrefs {
   style: VisStyle;
   /** from the cover, the app's accent, or one of the pairs in views/vis (`own`) */
@@ -537,6 +543,8 @@ export interface VisPrefs {
   /** 0–0.9 */
   dim: number;
   title: boolean;
+  /** the beatmap's video in place of the cover, when it has one */
+  video: boolean;
   /** ms added to the song's time for the beat (later = positive) */
   offset: number;
 }

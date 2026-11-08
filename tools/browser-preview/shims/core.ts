@@ -380,6 +380,11 @@ export async function invoke<T>(cmd: string, args: Record<string, unknown> = {},
       setTimeout(() => localStorage.setItem("fumen-preview-lazer", "ready"), 2500);
       return 1 as T;
     }
+    case "map_video": {
+      // localStorage "fumen-preview-video": {"file": <lazer hash>, "offset": ms}, for any difficulty
+      const v = localStorage.getItem("fumen-preview-video");
+      return (v ? JSON.parse(v) : null) as T;
+    }
     case "launch_osu":
       return null as T;
     case "repair_lazer_sets": {
