@@ -896,7 +896,7 @@ class Fullscreen {
     // the content keeps clear of the top bar and the transport, the picture runs under them
     const top = el.querySelector<HTMLElement>(".fs-top")!.offsetHeight;
     const bottom = el.querySelector<HTMLElement>(".fs-bar")!.offsetHeight;
-    return this.vis.frame(dt, { top, bottom });
+    return this.vis.frame(dt, { top, bottom, idle: el.classList.contains("idle") });
   }
 
   private setStyle(style: VisStyle): void {
@@ -923,6 +923,8 @@ class Fullscreen {
     el.classList.remove("idle");
     clearTimeout(this.idleTimer);
     if (!this.isOpen) return;
+    // the visualizer follows the transport back up, also while paused
+    this.kick();
     this.idleTimer = window.setTimeout(() => {
       const panel = el.querySelector<HTMLElement>(".fs-vis-panel")!;
       if (this.isOpen && this.mode === "visual" && player.playing && panel.hidden && !document.querySelector(".menu")) el.classList.add("idle");

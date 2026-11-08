@@ -61,7 +61,8 @@ export function stage(): Style {
       const m = Math.max(48, Math.min(220, Math.round(f.o.bars * 2.5)));
       const v = bars(f, m, f.o.mirror);
       const sw = w / m;
-      const floor = y + h;
+      // down to the window's edge while the transport is hidden, gliding as it fades
+      const floor = y + h + f.drop;
       g = c.createLinearGradient(0, floor - h * 0.09, 0, floor);
       g.addColorStop(0, css(f.look.ink, 0.9));
       g.addColorStop(1, css(f.look.a, 0.5));

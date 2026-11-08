@@ -9,7 +9,8 @@
       "There is a Play button at the bottom of the sidebar that starts osu!lazer. While osu! is open it turns into a Close button. If osu!stable is found, the small arrow next to it lets you pick stable instead.",
       "Adding and deleting beatmaps need osu!lazer closed. Where Fumen tells you that, there is now a Close osu!lazer button. It closes lazer the normal way and also answers its \"Are you sure?\" question.",
       "Visualizer: maps with a background video play it in place of the cover, in time with the song. You can turn it off with Video in the visualizer settings. Videos of osu!stable maps show up after the next stable scan.",
-      "Visualizer: Stage no longer shows the BPM and beat counter in the top left, and it is the style new users start with."
+      "Visualizer: Stage no longer shows the BPM and beat counter in the top left, and it is the style new users start with.",
+      "Visualizer: over a video the beat pulse stays off, so the picture stays calm. In Stage the light strip glides down to the bottom edge when the controls fade out, and back up when they return."
     ],
     "de": [
       "Vollbild: Oben links gibt es jetzt einen Zurück-Knopf statt des Vollbild-Symbols. So findet man leichter zurück in die App, vor allem aus dem Playfield.",
@@ -18,7 +19,8 @@
       "Unten in der Seitenleiste gibt es einen Play-Knopf, der osu!lazer startet. Solange osu! offen ist, wird daraus ein Schließen-Knopf. Wenn osu!stable gefunden wird, kannst du über den kleinen Pfeil daneben stattdessen stable wählen.",
       "Beatmaps hinzufügen und löschen geht nur, wenn osu!lazer zu ist. Wo Fumen das sagt, gibt es jetzt einen Knopf osu!lazer schließen. Er beendet lazer ganz normal und bestätigt dabei auch die Frage \"Bist du sicher?\".",
       "Visualizer: Maps mit Hintergrundvideo spielen es statt des Covers ab, passend zum Song. Abschalten kannst du das mit Video in den Visualizer-Einstellungen. Videos von osu!stable-Maps erscheinen nach dem nächsten stable-Scan.",
-      "Visualizer: Stage zeigt oben links keine BPM und keinen Taktzähler mehr und ist der Stil, mit dem neue Nutzer starten."
+      "Visualizer: Stage zeigt oben links keine BPM und keinen Taktzähler mehr und ist der Stil, mit dem neue Nutzer starten.",
+      "Visualizer: Über einem Video bleibt der Beat-Puls aus, damit das Bild ruhig bleibt. In Stage gleitet der Lichtstreifen an den unteren Rand, wenn die Steuerleiste ausblendet, und wieder hoch, wenn sie zurückkommt."
     ]
   },
   {

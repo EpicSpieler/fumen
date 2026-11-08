@@ -144,6 +144,8 @@ export class Visualizer {
   private mapId: string | null = null;
   /** pauses the video once frames stop coming (the playfield tab, fullscreen closed) */
   private videoRest = 0;
+  /** how far the transport has gone (0 shown … 1 hidden while idle), eased the way it fades */
+  private sink = 0;
   private accent = { at: -Infinity, a: [139, 124, 255] as Rgb, b: [201, 193, 255] as Rgb };
 
   constructor(
@@ -297,7 +299,7 @@ export class Visualizer {
   }
 
   /** Draws one frame into the canvas; `box` is the part between the bars. True while it still moves. */
-  frame(dt: number, box: { top: number; bottom: number }): boolean {
+  frame(dt: number, box: { top: number; bottom: number; idle: boolean }): boolean {
     const c0 = this.canvas;
     const W = c0.clientWidth;
     const H = c0.clientHeight;
@@ -325,7 +327,9 @@ export class Visualizer {
     const newBeat = !!beat && beat.key !== this.lastBeat;
     this.lastBeat = beat ? beat.key : Number.NaN;
     const pulse = beat ? (playing ? Math.exp(-(beat.phase * beat.length) / rate / 1000 / 0.12) * (beat.inBar === 0 ? 1 : 0.65) : 0) : this.a.kick;
-    const amount = o.pulse * (reduce ? 0.3 : 1);
+    // a video moves on its own: no beat pulse over it
+    const video = this.syncVideo((player.audio.currentTime - outputLatency() * rate) * 1000, playing, rate);
+    const amount = video ? 0 : o.pulse * (reduce ? 0.3 : 1);
     const hit = Math.min(1, Math.max(pulse, this.a.kick * 0.8)) * amount;
     const kiaiOn = !!tm && o.kiai && playing && inKiai(tm.kiai, songMs);
     const target = kiaiOn ? 1 : 0;
@@ -349,7 +353,9 @@ export class Visualizer {
     this.look = lookOf({ a, b });
     const settling = Math.abs(a[0] - goal.a[0]) + Math.abs(a[1] - goal.a[1]) + Math.abs(b[2] - goal.b[2]) > 1.5;
     if (this.artMix < 1) this.artMix = Math.min(1, this.artMix + dt / 0.5);
-    const video = this.syncVideo((player.audio.currentTime - outputLatency() * rate) * 1000, playing, rate);
+    // the transport fading out while idle: what sits on the floor can go down to the edge
+    const sinkTo = box.idle ? 1 : 0;
+    this.sink = Math.abs(sinkTo - this.sink) < 0.001 ? sinkTo : this.sink + (sinkTo - this.sink) * (1 - Math.exp(-dt / (reduce ? 0.05 : 0.13)));
 
     const f: VisFrame = {
       c,
@@ -375,6 +381,7 @@ export class Visualizer {
       prevArt: this.prevArt,
       artMix: this.artMix,
       video,
+      drop: box.bottom * this.sink,
       meta: this.meta,
       o,
     };
@@ -400,6 +407,6 @@ export class Visualizer {
         c.globalAlpha = 1;
       }
     }
-    return moving || (!!video && playing) || this.a.moving || this.kiai > 0.01 || this.flashT > 0.01 || this.artMix < 1 || !!this.fade || settling;
+    return moving || (!!video && playing) || this.sink !== sinkTo || this.a.moving || this.kiai > 0.01 || this.flashT > 0.01 || this.artMix < 1 || !!this.fade || settling;
   }
 }
