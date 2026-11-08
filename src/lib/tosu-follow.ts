@@ -1,11 +1,12 @@
 /* tosu-follow.ts — Fumen plays along with osu!: the song osu! plays (from tosu, lib/tosu) plays in
  * Fumen's player without sound, at osu!'s place and rate, so the visualizer shows it live. It runs
  * in the background while prefs `followOsu` is on; Fumen is only quiet while tosu is there.
- * main.ts opens the visualizer when a map starts (`play`) and the score page after a pass. */
+ * main.ts opens the visualizer when a map starts (`play`), closes it when you leave the map or osu!
+ * (`leave`), and opens the score page after a pass. */
 import { api, isTauri } from "./api";
 import { startAnalyser } from "./eq";
 import { Emitter, store } from "./store";
-import { readTosu, STATE, TosuClock, type TosuNow } from "./tosu";
+import { readTosu, StartHold, STATE, TosuClock, type TosuNow } from "./tosu";
 import { player } from "../player";
 
 /** tosu's address; the browser preview can point it at tools/browser-preview/fake-tosu.mjs */
@@ -29,6 +30,8 @@ const TICK = 100;
 const DRIFT = 90;
 /** ms between new looks for a song that wasn't in the library (it may be imported meanwhile) */
 const LOOK_AGAIN = 2000;
+/** ms between checks that osu! still runs (tosu may keep its last state when it's closed) */
+const OSU_CHECK = 2000;
 /** ms between tries to start the song when it wouldn't (no click in Fumen yet, say) */
 const PLAY_AGAIN = 1000;
 
@@ -43,13 +46,21 @@ export type FollowStatus =
   | { kind: "missing"; title: string };
 
 class Follow {
-  /** `play`: a map started in osu! and Fumen plays along (its index in the library) */
-  readonly bus = new Emitter<{ status: FollowStatus; play: number }>();
+  /** `play`: a map started in osu! and Fumen plays along (its index in the library); `leave`:
+   * out of the map again (to song select or a menu), or osu! / tosu went */
+  readonly bus = new Emitter<{ status: FollowStatus; play: number; leave: null }>();
   status: FollowStatus = { kind: "off" };
   private ws: WebSocket | null = null;
   private retry = 0;
   private tick = 0;
+  private osuTimer = 0;
+  /** osu! was closed: what tosu still says is left alone until it runs again */
+  private osuGone = false;
+  /** Fumen saw osu! run (a check that never finds it can't tell that it closed) */
+  private osuSeen = false;
   private clock = new TosuClock();
+  /** a map just started: Fumen waits at the beginning until osu!'s time really starts there */
+  private hold = new StartHold();
   private now: TosuNow | null = null;
   /** the MD5 Fumen plays along to, and its library difficulty (null: not in the library) */
   private md5 = "";
@@ -92,12 +103,16 @@ class Follow {
     this.set({ kind: "connecting" });
     this.connect();
     this.tick = window.setInterval(() => this.sync(), TICK);
+    if (isTauri) this.osuTimer = window.setInterval(() => void this.checkOsu(), OSU_CHECK);
   }
 
   stop(): void {
     if (!this.on) return;
     clearTimeout(this.retry);
     clearInterval(this.tick);
+    clearInterval(this.osuTimer);
+    this.osuGone = false;
+    this.osuSeen = false;
     const ws = this.ws;
     this.ws = null;
     ws?.close();
@@ -126,6 +141,8 @@ class Follow {
   /** tosu is gone (or following stopped): Fumen's song stops and Fumen has its sound again. */
   private lost(): void {
     if (this.now && this.mapIdx !== null && player.now?.map === this.mapIdx && player.playing) player.audio.pause();
+    if (this.now) this.bus.emit("leave", null);
+    this.hold.clear();
     this.now = null;
     this.md5 = "";
     this.mapIdx = null;
@@ -133,6 +150,23 @@ class Follow {
     this.yielded = false;
     this.clock.reset();
     player.setSilent(false);
+  }
+
+  /** osu! closed: like tosu going (the visualizer closes, Fumen has its sound back). */
+  private async checkOsu(): Promise<void> {
+    if (!this.ws) return;
+    const r = await api.osuRunning().catch(() => null);
+    if (!r || !this.on) return;
+    const gone = !r.lazer && !r.stable;
+    if (!gone) {
+      this.osuSeen = true;
+      this.osuGone = false;
+    } else if (this.osuSeen && !this.osuGone) {
+      this.osuGone = true;
+      this.osuSeen = false;
+      this.lost();
+      this.set({ kind: "waiting" });
+    }
   }
 
   private connect(): void {
@@ -165,6 +199,7 @@ class Follow {
   }
 
   private read(now: TosuNow): void {
+    if (this.osuGone) return;
     const before = this.now;
     if (!before) {
       // osu! plays the music now; the analysers still hear Fumen's copy
@@ -172,10 +207,16 @@ class Follow {
       player.setSilent(true);
     }
     this.now = now;
+    const t = performance.now();
     if (now.state === STATE.play && before?.state !== STATE.play) {
       this.started = true;
       this.takeBack();
-    } else if (now.state !== STATE.play) this.started = false;
+      this.hold.begin(now.live, before && before.md5 === now.md5 ? before.live : null, t);
+    } else if (now.state !== STATE.play) {
+      this.started = false;
+      this.hold.clear();
+    } else this.hold.update(now.live, t);
+    if (before && inMap(before.state) && !inMap(now.state)) this.bus.emit("leave", null);
     if (now.md5 !== this.md5) {
       this.takeBack();
       this.md5 = now.md5;
@@ -209,7 +250,7 @@ class Follow {
     this.mapIdx = idx;
     this.set({ kind: "following", title });
     const m = store.snap!.maps[idx];
-    const at = Math.max(0, this.clock.at(performance.now()) / 1000 || 0);
+    const at = this.hold.on ? 0 : Math.max(0, this.clock.at(performance.now()) / 1000 || 0);
     if (player.now?.set === m.set) player.selectMap(idx);
     else player.playSet(m.set, idx, [m.set], { at });
   }
@@ -226,6 +267,12 @@ class Follow {
     if (Math.abs(player.rate - now.rate) > 0.001) player.setRate(now.rate);
     if (player.pitch !== now.pitch) player.setPitch(now.pitch);
     const a = player.audio;
+    // a map starting: at the beginning, still, whatever the menu's music does
+    if (this.hold.on) {
+      if (player.playing) a.pause();
+      if (a.currentTime > 0.05 && !a.seeking) a.currentTime = 0;
+      return;
+    }
     // the results screen and paused play keep the song still in osu! too
     const moving = this.clock.running(t) && now.state !== STATE.resultScreen;
     if (!moving) {
@@ -237,6 +284,12 @@ class Follow {
     }
     const at = this.clock.at(t);
     if (!Number.isFinite(at)) return;
+    // lazer's lead-in: the map runs, the song hasn't begun
+    if (at < 0) {
+      if (player.playing) a.pause();
+      if (a.currentTime > 0.05 && !a.seeking) a.currentTime = 0;
+      return;
+    }
     if (!player.playing) {
       if (t - this.playTried < PLAY_AGAIN) return;
       this.playTried = t;
@@ -247,5 +300,8 @@ class Follow {
     if (Math.abs(a.currentTime * 1000 - at) > DRIFT && !a.seeking) a.currentTime = at / 1000;
   }
 }
+
+/** in a map: playing it or on its results */
+const inMap = (state: number): boolean => state === STATE.play || state === STATE.resultScreen;
 
 export const follow = new Follow();

@@ -2,9 +2,10 @@
 //   node tools/browser-preview/fake-tosu.mjs [port]
 // On another port than 24050 (when the real tosu runs), point the preview at it:
 //   localStorage["fumen-preview-tosu"] = "ws://127.0.0.1:<port>/websocket/v2"
-// It plays a script like a round of osu!: map 9 in song select, started with DT, a pause, the
-// results, map 5 in song select, a map that isn't in the library, then over again (the preview
-// shim takes "preview:<index>" as the MD5).
+// It plays a script like a round of osu!lazer (the preview shim takes "preview:<index>" as the
+// MD5): map 9 in song select; started with DT, the menu's music running on for a moment before the
+// lead-in; a pause; the results; back to song select; map 5 started and quit; a map that isn't in
+// the library; then over again.
 import { createServer } from "node:http";
 import { createHash } from "node:crypto";
 
@@ -13,14 +14,19 @@ const PORT = Number(process.argv[2]) || 24050;
  * 2 play, 7 results), rate, paused, the song's place there (ms) or null to go on] */
 const SCRIPT = [
   [0, 9, 5, 1, false, 40000],
-  [5, 9, 2, 1.5, false, 0],
+  [5, 9, 2, 1, false, null],
+  [6.5, 9, 2, 1.5, false, -1500],
   [12, 9, 2, 1.5, true, null],
   [14, 9, 2, 1.5, false, null],
   [20, 9, 7, 1, true, null],
-  [24, 5, 5, 1, false, 30000],
-  [29, null, 2, 1, false, 0],
+  [23, 9, 5, 1, false, 40000],
+  [26, 5, 5, 1, false, 30000],
+  [29, 5, 2, 1, false, null],
+  [30.5, 5, 2, 1, false, 0],
+  [35, 5, 5, 1, false, 30000],
+  [38, null, 2, 1, false, 0],
 ];
-const LENGTH = 33;
+const LENGTH = 41;
 
 function frame(text) {
   const data = Buffer.from(text);

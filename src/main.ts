@@ -945,6 +945,7 @@ function initLivePlays(): void {
     // playing along with osu!: a pass goes from the visualizer to its score
     if (follow.connected && p.md5 === follow.current) {
       closeFullscreen();
+      followOpened = false;
       return show();
     }
     if (store.prefs.scoreAuto && !document.hasFocus()) return show();
@@ -957,12 +958,24 @@ function initLivePlays(): void {
   if (store.prefs.companion) void api.openCompanion().catch((e) => console.warn("[companion]", asApiError(e).message));
 }
 
-/** Follow osu! (prefs followOsu): runs in the background; a map started in osu! opens the visualizer. */
+/** Follow osu! (prefs followOsu): runs in the background; a map started in osu! opens the visualizer,
+ * and leaving the map (or osu!) closes it again when it was the one that opened it. */
 function initFollow(): void {
   const apply = () => (store.prefs.followOsu ? follow.start() : follow.stop());
   apply();
   events.on("prefs", (p) => "followOsu" in p && apply());
-  follow.bus.on("play", () => !fullscreenOpen() && openFullscreen("visual"));
+  follow.bus.on("play", () => {
+    if (fullscreenOpen()) return;
+    openFullscreen("visual");
+    followOpened = fullscreenOpen();
+  });
+  follow.bus.on("leave", () => {
+    if (followOpened && fullscreenOpen()) closeFullscreen();
+    followOpened = false;
+  });
 }
+
+/** the visualizer is open because a map started in osu! (initFollow) */
+let followOpened = false;
 
 void boot();

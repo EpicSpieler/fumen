@@ -84,3 +84,57 @@ export class TosuClock {
     return this.live + Math.min(now - this.movedAt, STALL) * this.rate;
   }
 }
+
+/** a jump back in osu!'s time bigger than this (ms) is a new start, not a wobble */
+const JUMP = 300;
+/** a map starts this close to the song's beginning (ms; lazer starts there, with a skip button) */
+const NEAR_START = 3000;
+/** ms after which waiting for the start gives up and follows anyway */
+export const HOLD_MAX = 10_000;
+
+/**
+ * Starting a map: the menu's music runs on into the loading screen for a second or two, so osu!'s
+ * time still says the middle of the song. Fumen waits at the beginning until osu! jumps back to it
+ * ("menu" → "start") and its time moves from there (done).
+ */
+export class StartHold {
+  private phase: "menu" | "start" | null = null;
+  private prev = 0;
+  private since = 0;
+
+  get on(): boolean {
+    return this.phase !== null;
+  }
+
+  /** A map was started at `live`; `before` is osu!'s time just before (same song), if known. */
+  begin(live: number, before: number | null, now: number): void {
+    this.since = now;
+    this.prev = live;
+    // without a time from before, near the beginning already counts as back there
+    const back = before === null ? live < NEAR_START : this.isStart(live, before);
+    this.phase = back ? "start" : "menu";
+  }
+
+  update(live: number, now: number): void {
+    if (!this.phase) return;
+    if (now - this.since > HOLD_MAX) {
+      this.phase = null;
+      return;
+    }
+    if (this.phase === "menu") {
+      if (this.isStart(live, this.prev)) this.phase = "start";
+    } else if (live > this.prev) {
+      this.phase = null;
+      return;
+    }
+    this.prev = live;
+  }
+
+  clear(): void {
+    this.phase = null;
+  }
+
+  private isStart(live: number, before: number): boolean {
+    return live < 0 || (live < before - JUMP && live < NEAR_START);
+  }
+}
