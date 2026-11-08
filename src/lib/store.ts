@@ -47,7 +47,7 @@ export const DEFAULT_PREFS: UiPrefs = {
   launchClient: "lazer",
   fullscreenMode: "visual",
   visualizer: {
-    style: "spectrum",
+    style: "stage",
     colors: "cover",
     own: 0,
     reaction: 0.7,
@@ -111,6 +111,9 @@ export async function refreshStatus(): Promise<LibraryStatus> {
 export function loadPrefs(settings: Settings): void {
   store.settings = settings;
   store.prefs = { ...DEFAULT_PREFS, ...(settings.ui as Partial<UiPrefs>) };
+  // Stage became the visualizer's default (1.3.19); whoever used Fumen before keeps Spectrum
+  const ui = (settings.ui ?? {}) as Partial<UiPrefs>;
+  if (Object.keys(ui).length && !ui.visualizer) store.prefs.visualizer = { ...DEFAULT_PREFS.visualizer, style: "spectrum" };
   // the difficulty table became the set list (0.2)
   if ((store.prefs.layout as string) === "table") store.prefs.layout = "list";
 }

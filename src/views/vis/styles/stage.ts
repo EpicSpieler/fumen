@@ -1,6 +1,5 @@
-/* Bühne: the cover fills everything and zooms on the beat; a big title, a bar counter, a strip of light. */
+/* Bühne: the cover fills everything and zooms on the beat; a big title and a strip of light. */
 import { isLinux } from "../../../lib/api";
-import { t } from "../../../lib/i18n";
 import { bars, css, drawArt, text, type Style, type VisFrame } from "../draw";
 
 /** Darker toward the bottom and the left, over the cover dimmed. */
@@ -78,23 +77,6 @@ export function stage(): Style {
         text(c, f.meta.title, mx, y + h * 0.74, h * 0.1, { weight: 700, color: "#fff", maxW: w * 0.88 });
         text(c, f.meta.artist, mx, y + h * 0.805, h * 0.036, { weight: 550, color: "rgba(255,255,255,.82)", maxW: w * 0.7 });
         text(c, f.meta.version, mx, y + h * 0.85, h * 0.024, { weight: 500, color: "rgba(255,255,255,.55)", maxW: w * 0.7 });
-      }
-      // the bar counter
-      const b = f.beat;
-      if (b) {
-        const s = h * 0.018;
-        const gap = h * 0.012;
-        const ty = y + h * 0.04;
-        const meter = Math.min(b.meter, 8);
-        for (let i = 0; i < meter; i++) {
-          c.fillStyle = f.playing && b.inBar === i ? css(f.look.a, 0.55 + 0.45 * f.pulse) : "rgba(255,255,255,.22)";
-          c.beginPath();
-          c.roundRect(mx + i * (s + gap), ty, s, s, s * 0.3);
-          c.fill();
-        }
-        const lx = mx + meter * (s + gap) + gap;
-        text(c, `${Math.round(b.bpm)} BPM`, lx, ty + s * 0.85, h * 0.022, { color: "rgba(255,255,255,.75)" });
-        if (f.kiai > 0.05) text(c, t("Kiai"), lx + h * 0.14, ty + s * 0.85, h * 0.022, { weight: 700, color: css(f.look.a, f.kiai) });
       }
       return false;
     },
