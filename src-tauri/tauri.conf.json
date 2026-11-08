@@ -32,7 +32,7 @@
         "media-src": "'self' blob: fumen: http://fumen.localhost http://127.0.0.1:* https://catboy.best https://osu.direct",
         "style-src": "'self' 'unsafe-inline'",
         "font-src": "'self' data:",
-        "connect-src": "'self' ipc: http://ipc.localhost fumen: http://fumen.localhost",
+        "connect-src": "'self' ipc: http://ipc.localhost fumen: http://fumen.localhost ws://127.0.0.1:24050 ws://localhost:24050",
         "object-src": "'none'",
         "frame-src": "'none'",
         "base-uri": "'none'",

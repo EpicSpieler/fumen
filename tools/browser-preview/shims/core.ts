@@ -536,6 +536,13 @@ export async function invoke<T>(cmd: string, args: Record<string, unknown> = {},
       await downloads;
       return summary as T;
     }
+    case "map_by_md5": {
+      // the fake tosu (tools/browser-preview/fake-tosu.mjs) sends "preview:<index>"
+      const n = /^preview:(\d+)$/.exec(String(args.md5));
+      if (!n) return null as T;
+      const snap = (await fetch("/__fumen/snapshot").then((r) => r.json())) as { maps: { id: string }[] };
+      return (snap.maps[+n[1]]?.id ?? null) as T;
+    }
     case "live_plays":
       return (await previewPlays()) as T;
     case "live_play":
