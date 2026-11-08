@@ -9,7 +9,8 @@
  *
  * A difficulty with a background video (and the Video setting on) plays it, muted, in place of the
  * sharp cover, kept on the song's time; the blurred background stays the cover. Videos the webview
- * can't play (old .avi / .flv) just leave the cover.
+ * can't play (old .avi / .flv) just leave the cover. With the cover's colours, the colours follow the
+ * video while it plays (a small frame read a few times a second, gliding slower than a cover change).
  */
 import { api, fileUrl, mediaUrl, thumbUrl } from "../../lib/api";
 import { loadChart } from "../../lib/charts";
@@ -127,6 +128,10 @@ export class Visualizer {
   private prevArt: Art | null = null;
   private artMix = 1;
   private palette: Palette | null = null;
+  /** the video's colours right now (read from a small frame), and when they were last read */
+  private videoPalette: Palette | null = null;
+  private videoRead = 0;
+  private videoSample: CanvasRenderingContext2D | null = null;
   private look: Look | null = null;
   private artJob = 0;
   private timing: { map: string; beats: number[]; kiai: number[] } | null = null;
@@ -279,6 +284,30 @@ export class Visualizer {
     return el;
   }
 
+  /** The video's colours, read from a 48×27 copy of its frame four times a second; null without one. */
+  private readVideoColours(video: HTMLVideoElement | null, now: number): void {
+    if (!video || this.o.colors !== "cover") {
+      this.videoPalette = null;
+      return;
+    }
+    if (now - this.videoRead < 0.25) return;
+    this.videoRead = now;
+    try {
+      if (!this.videoSample) {
+        const c = document.createElement("canvas");
+        c.width = 48;
+        c.height = 27;
+        this.videoSample = c.getContext("2d", { willReadFrequently: true })!;
+      }
+      const s = this.videoSample;
+      s.drawImage(video, 0, 0, 48, 27);
+      this.videoPalette = paletteOf(s.getImageData(0, 0, 48, 27).data);
+    } catch {
+      // a video the canvas may not read (another origin): the cover's colours stay
+      this.videoPalette = null;
+    }
+  }
+
   private accentColors(): { a: Rgb; b: Rgb } {
     const now = performance.now();
     if (now - this.accent.at > 500) {
@@ -294,6 +323,7 @@ export class Visualizer {
       const p = OWN_COLORS[o.own] ?? OWN_COLORS[0];
       return { a: hexRgb(p.a), b: hexRgb(p.b) };
     }
+    if (o.colors === "cover" && this.videoPalette) return this.videoPalette;
     if (o.colors === "cover" && this.palette) return this.palette;
     return this.accentColors();
   }
@@ -346,8 +376,10 @@ export class Visualizer {
     this.flashT *= Math.exp(-dt / 0.1);
 
     // colours glide to where they're going
+    this.readVideoColours(video, now);
     const goal = this.targetLook();
-    const k = this.look ? 1 - Math.exp(-dt / 0.25) : 1;
+    // a video's colours change all the time: they glide slower than a new cover's
+    const k = this.look ? 1 - Math.exp(-dt / (this.videoPalette ? 0.8 : 0.25)) : 1;
     const a = this.look ? mix(this.look.a, goal.a, k) : goal.a;
     const b = this.look ? mix(this.look.b, goal.b, k) : goal.b;
     this.look = lookOf({ a, b });
