@@ -1,4 +1,5 @@
 mod analysis;
+mod attempts;
 mod archive;
 mod care;
 mod catch;
@@ -346,6 +347,24 @@ async fn start_tosu(app: AppHandle) -> Result<()> {
     })
     .await
     .map_err(|e| Error::known("internal", e.to_string()))?
+}
+
+/// Keeps a try at a map (src/lib/attempts.ts); its id.
+#[tauri::command]
+fn save_attempt(state: State<'_, AppState>, attempt: attempts::Attempt) -> Result<i64> {
+    attempts::store(&state.db(), &attempt)
+}
+
+/// The tries at a difficulty, newest first.
+#[tauri::command]
+fn attempts_for_map(state: State<'_, AppState>, md5: String, limit: Option<u32>) -> Result<Vec<attempts::Attempt>> {
+    attempts::for_map(&state.db(), &md5, limit.unwrap_or(200).min(2000))
+}
+
+/// The tries since `since` (unix ms), newest first.
+#[tauri::command]
+fn attempts_since(state: State<'_, AppState>, since: i64) -> Result<Vec<attempts::Attempt>> {
+    attempts::since(&state.db(), since)
 }
 
 /// The library difficulty with this MD5 (lazer's before stable's), for following what osu! plays.
@@ -2126,6 +2145,9 @@ pub fn run() {
             live_play,
             map_by_md5,
             tosu_status,
+            save_attempt,
+            attempts_for_map,
+            attempts_since,
             set_tosu_path,
             start_tosu,
             live_replay,

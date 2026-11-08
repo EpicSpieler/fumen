@@ -1,6 +1,7 @@
 /* Typed wrappers around the Tauri commands, plus fumen:// URLs. */
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import type { Attempt } from "./attempts";
 import type { Comparison } from "./compare";
 import type { Goal } from "./goals";
 import { fromRust } from "./i18n";
@@ -107,6 +108,10 @@ export const api = {
   tosuStatus: () => invoke<{ running: boolean; path: string | null }>("tosu_status"),
   setTosuPath: (path: string) => invoke<Settings>("set_tosu_path", { path }),
   startTosu: () => invoke<void>("start_tosu"),
+  /** every try at a map (lib/attempts) */
+  saveAttempt: (attempt: Attempt) => invoke<number>("save_attempt", { attempt }),
+  attemptsForMap: (md5: string, limit?: number) => invoke<Attempt[]>("attempts_for_map", { md5, limit }),
+  attemptsSince: (since: number) => invoke<Attempt[]>("attempts_since", { since }),
   liveReplay: (id: string) => invoke<ReplayData>("live_replay", { id }),
   poolChoices: () => invoke<PoolChoice[]>("pool_choices"),
   poolRows: (id: string, since: number) => invoke<PoolRow[]>("pool_rows", { id, since }),

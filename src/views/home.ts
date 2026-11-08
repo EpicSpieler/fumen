@@ -4,7 +4,9 @@
  * sets you play most and haven't played in a while. Everything comes from the local library, the
  * replays lazer saved (live.ts) and the play history.
  */
-import { api, onLivePlay, thumbUrl } from "../lib/api";
+import { api, isTauri, onLivePlay, thumbUrl } from "../lib/api";
+import type { Attempt } from "../lib/attempts";
+import { follow } from "../lib/tosu-follow";
 import { displayArtist, displayTitle, duration, esc, num, pct, rankInfo, relativeTime } from "../lib/format";
 import { events, setPrefs, store } from "../lib/store";
 import type { LivePlay, SetRow } from "../lib/types";
@@ -53,6 +55,8 @@ export class HomeView {
   private greetIcon: IconName | null = null;
   /** plays from lazer's replays, the last week, newest first */
   private live: LivePlay[] = [];
+  /** tries this week (through tosu, lib/attempts), newest first */
+  private tries: Attempt[] = [];
   /** sets per shelf and list, for playing them in order */
   private lists = new Map<string, number[]>();
 
@@ -75,10 +79,17 @@ export class HomeView {
       player.bus.on("state", () => this.syncPlaying()),
     );
     void onLivePlay(() => void this.loadLive()).then((off) => this.offs.push(off));
+    this.offs.push(
+      follow.bus.on("attempt", (a) => {
+        this.tries.unshift(a);
+        this.renderSession();
+      }),
+    );
   }
 
   private async loadLive(): Promise<void> {
     this.live = await api.livePlays(Date.now() - WEEK).catch(() => []);
+    if (isTauri) this.tries = await api.attemptsSince(Date.now() - WEEK).catch(() => []);
     this.renderTile("continue");
     this.renderSession();
   }
@@ -282,14 +293,18 @@ export class HomeView {
 
   /** this session from lazer's replays (plays since the last hour-long pause) */
   private sessionHtml(): string {
-    const start = sessionStart(this.live);
+    // a session runs over passes and tries alike
+    const dates = [...this.live.map((p) => p.date), ...this.tries.map((a) => a.started)].sort((a, b) => b - a).map((date) => ({ date }));
+    const start = sessionStart(dates);
     const plays = this.live.filter((p) => p.date >= start - 1);
+    const tries = this.tries.filter((a) => a.started >= start - 1);
     const companion = store.prefs.companion;
     const head = `
       <div class="bt-head">
         <span class="label-caps">${t("This session")}</span>
         <button class="bt-link" type="button" data-companion>${companion ? t("Companion window is open") : t("Open the companion window")}</button>
       </div>`;
+    if (!plays.length && tries.length) return `${head}<div class="bt-hint bt-tries">${triesLine(tries)}</div>`;
     if (!plays.length) {
       const week = this.live.length;
       return `${head}<div class="bt-hint">${
@@ -303,7 +318,7 @@ export class HomeView {
         <div><i>${t("Played")}</i><b class="num">${s.time ? duration(s.time) : "–"}</b></div>
         <div><i>${t("Accuracy")}</i><b class="num">${s.accuracy === null ? "–" : pct(s.accuracy)}</b></div>
         <div><i>${t("New bests")}</i><b class="num${s.bests ? " up" : ""}">${num(s.bests)}</b></div>
-      </div>`;
+      </div>${tries.length ? `<div class="bt-hint bt-tries">${triesLine(tries)}</div>` : ""}`;
   }
 
   /** your goals, closest first; without any, this week from the play history */
@@ -611,4 +626,15 @@ export class HomeView {
     this.offs.forEach((f) => f());
     this.el.remove();
   }
+}
+
+/** "12 tries: 4 passed, 5 failed, 3 left early" */
+function triesLine(tries: readonly Attempt[]): string {
+  const n = (o: Attempt["outcome"]) => tries.filter((a) => a.outcome === o).length;
+  const parts = [
+    n("pass") && tn(n("pass"), "{n} passed", "{n} passed"),
+    n("fail") && tn(n("fail"), "{n} failed", "{n} failed"),
+    n("quit") + n("retry") && tn(n("quit") + n("retry"), "{n} left early", "{n} left early"),
+  ].filter(Boolean);
+  return `${tn(tries.length, "{n} try", "{n} tries")}: ${parts.join(", ")}`;
 }

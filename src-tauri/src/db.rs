@@ -328,6 +328,35 @@ const MIGRATIONS: &[&str] = &[
     );
     CREATE INDEX pool_matches_pool ON pool_matches(pool_id);
     "#,
+    // every try at a map, as tosu shows it (src/attempts.rs, 1.4): passes, fails, quits and
+    // restarts, with how far it got. IF NOT EXISTS: written on the 1.4 branch, whose migrations
+    // may move behind ones that main gets meanwhile.
+    r#"
+    CREATE TABLE IF NOT EXISTS attempts (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        md5          TEXT NOT NULL,
+        mode         INTEGER NOT NULL,
+        client       TEXT NOT NULL DEFAULT '',
+        started      INTEGER NOT NULL,
+        ended        INTEGER NOT NULL,
+        outcome      TEXT NOT NULL,
+        reached      INTEGER NOT NULL,
+        failed_at    INTEGER,
+        first_object INTEGER,
+        last_object  INTEGER,
+        accuracy     REAL NOT NULL,
+        score        INTEGER NOT NULL DEFAULT 0,
+        max_combo    INTEGER NOT NULL DEFAULT 0,
+        misses       INTEGER NOT NULL DEFAULT 0,
+        mods         TEXT NOT NULL DEFAULT '',
+        rate         REAL NOT NULL DEFAULT 1,
+        pp           REAL,
+        score_id     INTEGER,
+        rank         TEXT
+    );
+    CREATE INDEX IF NOT EXISTS attempts_md5 ON attempts(md5);
+    CREATE INDEX IF NOT EXISTS attempts_started ON attempts(started);
+    "#,
 ];
 
 pub fn open(path: &Path) -> Result<Connection> {

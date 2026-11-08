@@ -9,7 +9,7 @@ const msg = (o: { live?: number; md5?: string; state?: number; mods?: unknown } 
 
 describe("readTosu", () => {
   it("reads the map, place and state", () => {
-    expect(readTosu(msg())).toEqual({ md5: "abc123", state: 2, live: 1000, rate: 1, pitch: false, artist: "A", title: "T", version: "V" });
+    expect(readTosu(msg())).toMatchObject({ md5: "abc123", state: 2, live: 1000, rate: 1, pitch: false, artist: "A", title: "T", version: "V", paused: false, results: null });
   });
 
   it("reads the rate and whether the pitch goes with it", () => {

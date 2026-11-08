@@ -6,6 +6,7 @@
 import { api, isTauri } from "./api";
 import { startAnalyser } from "./eq";
 import { Emitter, store } from "./store";
+import { AttemptTracker, type Attempt } from "./attempts";
 import { readTosu, StartHold, STATE, TosuClock, type TosuNow } from "./tosu";
 import { player } from "../player";
 
@@ -48,7 +49,9 @@ export type FollowStatus =
 class Follow {
   /** `play`: a map started in osu! and Fumen plays along (its index in the library); `leave`:
    * out of the map again (to song select or a menu), or osu! / tosu went */
-  readonly bus = new Emitter<{ status: FollowStatus; play: number; leave: null }>();
+  readonly bus = new Emitter<{ status: FollowStatus; play: number; leave: null; attempt: Attempt }>();
+  /** every try at a map (lib/attempts), kept as it ends */
+  private tries = new AttemptTracker();
   status: FollowStatus = { kind: "off" };
   private ws: WebSocket | null = null;
   private retry = 0;
@@ -142,7 +145,22 @@ class Follow {
   }
 
   /** tosu is gone (or following stopped): Fumen's song stops and Fumen has its sound again. */
+  /** Keeps tries that ended and tells about them (`attempt`). */
+  private keep(done: Attempt[]): void {
+    for (const a of done) {
+      if (!isTauri) {
+        this.bus.emit("attempt", a);
+        continue;
+      }
+      api
+        .saveAttempt(a)
+        .then((id) => this.bus.emit("attempt", { ...a, id }))
+        .catch((e) => console.warn("[attempts] keep", e));
+    }
+  }
+
   private lost(): void {
+    this.keep(this.tries.end(Date.now()));
     if (this.now && this.mapIdx !== null && player.now?.map === this.mapIdx && player.playing) player.audio.pause();
     if (this.now) this.bus.emit("leave", null);
     this.hold.clear();
@@ -236,6 +254,7 @@ class Follow {
       void this.find(now);
     } else if (this.mapIdx === null && now.md5 && performance.now() - this.lookedAt > LOOK_AGAIN) void this.find(now);
     this.clock.update(now.live, now.rate, performance.now());
+    this.keep(this.tries.feed(now, Date.now()));
     if (!now.md5 && this.status.kind !== "waiting") this.set({ kind: "waiting" });
   }
 
@@ -283,7 +302,8 @@ class Follow {
       return;
     }
     // the results screen and paused play keep the song still in osu! too
-    const moving = this.clock.running(t) && now.state !== STATE.resultScreen;
+    // osu! says when it's paused (pause menu, fail screen); the time standing still catches the rest
+    const moving = this.clock.running(t) && !now.paused && now.state !== STATE.resultScreen;
     if (!moving) {
       if (!player.playing) return;
       a.pause();

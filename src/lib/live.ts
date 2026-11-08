@@ -8,7 +8,7 @@ export const SESSION_GAP = 60 * 60 * 1000;
 
 /** When the session began: the plays (newest first) back to the first gap of an hour or more.
  * No play for an hour: a new session starts now. */
-export function sessionStart(plays: readonly LivePlay[], now = Date.now()): number {
+export function sessionStart(plays: readonly Pick<LivePlay, "date">[], now = Date.now()): number {
   if (!plays.length || now - plays[0].date >= SESSION_GAP) return now;
   let start = plays[0].date;
   for (let i = 1; i < plays.length; i++) {

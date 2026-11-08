@@ -18,6 +18,50 @@ export interface TosuNow {
   artist: string;
   title: string;
   version: string;
+  /** osu! is paused: the pause menu, the fail screen (and moments while loading) */
+  paused: boolean;
+  /** "lazer" or "stable" */
+  client: string;
+  /** the ruleset played (0 osu!, 1 taiko, 2 catch, 3 mania) */
+  mode: number;
+  /** the play right now (in a map; zeros elsewhere) */
+  play: TosuPlay;
+  /** where the first and last notes are, ms */
+  firstObject: number | null;
+  lastObject: number | null;
+  /** the results screen's score, once it shows one */
+  results: TosuResults | null;
+}
+
+export interface TosuPlay {
+  failed: boolean;
+  /** 0–100 */
+  accuracy: number;
+  score: number;
+  maxCombo: number;
+  combo: number;
+  misses: number;
+  /** judgements so far (a restart starts again at 0) */
+  hits: number;
+  pp: number | null;
+  /** the mods by name, "HDDT" */
+  mods: string;
+  /** the mods, one by one ("AT" and "CN" are autoplay and cinema) */
+  modList: string[];
+  /** whose play it is (a replay or spectating shows someone else, or yourself from before) */
+  player: string;
+  /** who is logged in to osu! */
+  me: string;
+}
+
+export interface TosuResults {
+  scoreId: number;
+  rank: string;
+  /** 0–100 */
+  accuracy: number;
+  score: number;
+  maxCombo: number;
+  pp: number | null;
 }
 
 const str = (v: unknown): string => (typeof v === "string" ? v : "");
@@ -34,6 +78,12 @@ export function readTosu(msg: unknown): TosuNow | null {
   const rate = num(mods.rate);
   const list = Array.isArray(mods.array) ? mods.array.map(obj) : [];
   const pitch = list.some((x) => x.acronym === "NC" || x.acronym === "DC" || obj(x.settings).adjust_pitch === true);
+  const play = obj(m.play);
+  const hits = obj(play.hits);
+  const judged = ["0", "50", "100", "300", "geki", "katu"].reduce((n, k) => n + (num(hits[k]) ?? 0), 0);
+  const res = obj(m.resultsScreen);
+  const scoreId = num(res.scoreId) ?? 0;
+  const time = obj(beatmap.time);
   return {
     md5: str(beatmap.checksum).toLowerCase(),
     state: num(obj(m.state).number) ?? -1,
@@ -43,6 +93,36 @@ export function readTosu(msg: unknown): TosuNow | null {
     artist: str(beatmap.artist),
     title: str(beatmap.title),
     version: str(beatmap.version),
+    paused: obj(m.game).paused === true,
+    client: str(m.client),
+    mode: num(obj(play.mode).number) ?? num(obj(beatmap.mode).number) ?? 0,
+    play: {
+      failed: play.failed === true,
+      accuracy: num(play.accuracy) ?? 0,
+      score: num(play.score) ?? 0,
+      maxCombo: num(obj(play.combo).max) ?? 0,
+      combo: num(obj(play.combo).current) ?? 0,
+      misses: num(hits["0"]) ?? 0,
+      hits: judged,
+      pp: num(obj(play.pp).current),
+      mods: str(mods.name),
+      modList: list.map((x) => str(x.acronym)).filter(Boolean),
+      player: str(play.playerName),
+      me: str(obj(m.profile).name),
+    },
+    firstObject: num(time.firstObject),
+    lastObject: num(time.lastObject),
+    results:
+      scoreId > 0
+        ? {
+            scoreId,
+            rank: str(res.rank),
+            accuracy: num(res.accuracy) ?? 0,
+            score: num(res.score) ?? 0,
+            maxCombo: num(res.maxCombo) ?? 0,
+            pp: num(obj(res.pp).current),
+          }
+        : null,
   };
 }
 
@@ -88,7 +168,7 @@ export class TosuClock {
 /** a jump back in osu!'s time bigger than this (ms) is a new start, not a wobble */
 const JUMP = 300;
 /** a map starts this close to the song's beginning (ms; lazer starts there, with a skip button) */
-const NEAR_START = 3000;
+export const NEAR_START = 3000;
 /** ms after which waiting for the start gives up and follows anyway */
 export const HOLD_MAX = 10_000;
 
