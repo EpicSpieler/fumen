@@ -53,6 +53,9 @@ opt-level = 3
 
 [profile.dev]
 opt-level = 1
+# no local ThinLTO between codegen units: with opt-level > 0 and incremental builds it left
+# rebuilds after an edit unable to link (LNK2019 "unresolved external symbol anon.….llvm.…")
+lto = "off"
 
 [profile.release]
 codegen-units = 1
