@@ -7,7 +7,7 @@
       "Playfield: when the side panel is taller than the window it scrolls, instead of squashing the notes per second graph flat.",
       "Replays: hitsounds now play when the replay actually hit the note, early or late, and not at all for notes that were never pressed.",
       "There is a Play button at the bottom of the sidebar that starts osu!lazer. While osu! is open it turns into a Close button. If osu!stable is found, the small arrow next to it lets you pick stable instead.",
-      "Adding and deleting beatmaps need osu!lazer closed. Where Fumen tells you that, there is now a Close osu!lazer button that closes it the normal way.",
+      "Adding and deleting beatmaps need osu!lazer closed. Where Fumen tells you that, there is now a Close osu!lazer button. It closes lazer the normal way and also answers its \"Are you sure?\" question.",
       "Visualizer: maps with a background video play it in place of the cover, in time with the song. You can turn it off with Video in the visualizer settings. Videos of osu!stable maps show up after the next stable scan.",
       "Visualizer: Stage no longer shows the BPM and beat counter in the top left, and it is the style new users start with."
     ],
@@ -16,7 +16,7 @@
       "Playfield: Wenn die Seitenleiste höher als das Fenster ist, scrollt sie jetzt, statt den Graphen der Noten pro Sekunde platt zu drücken.",
       "Replays: Hitsounds kommen jetzt dann, wenn das Replay die Note wirklich getroffen hat, früh oder spät, und gar nicht bei Noten, die nie gedrückt wurden.",
       "Unten in der Seitenleiste gibt es einen Play-Knopf, der osu!lazer startet. Solange osu! offen ist, wird daraus ein Schließen-Knopf. Wenn osu!stable gefunden wird, kannst du über den kleinen Pfeil daneben stattdessen stable wählen.",
-      "Beatmaps hinzufügen und löschen geht nur, wenn osu!lazer zu ist. Wo Fumen das sagt, gibt es jetzt einen Knopf osu!lazer schließen, der es ganz normal beendet.",
+      "Beatmaps hinzufügen und löschen geht nur, wenn osu!lazer zu ist. Wo Fumen das sagt, gibt es jetzt einen Knopf osu!lazer schließen. Er beendet lazer ganz normal und bestätigt dabei auch die Frage \"Bist du sicher?\".",
       "Visualizer: Maps mit Hintergrundvideo spielen es statt des Covers ab, passend zum Song. Abschalten kannst du das mit Video in den Visualizer-Einstellungen. Videos von osu!stable-Maps erscheinen nach dem nächsten stable-Scan.",
       "Visualizer: Stage zeigt oben links keine BPM und keinen Taktzähler mehr und ist der Stil, mit dem neue Nutzer starten."
     ]

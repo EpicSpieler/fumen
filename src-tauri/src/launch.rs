@@ -71,7 +71,6 @@ pub fn stable(dir: &Path) -> Result<()> {
     }
 }
 
-
 /// Which osu! is running right now.
 #[derive(Debug, Clone, Copy, Default, serde::Serialize)]
 pub struct Running {
@@ -93,10 +92,39 @@ pub fn running(install: Option<&Path>) -> Running {
     }
 }
 
-/// Asks a running osu! ("lazer" or "stable") to close; how many of its windows (or processes)
-/// were asked. It may still ask something first (lazer with downloads running), so the caller
-/// watches whether it went.
+/// how often closing is asked for at most, and how long it waits for the game to go each time
+const CLOSE_TRIES: usize = 4;
+const CLOSE_WAIT: std::time::Duration = std::time::Duration::from_millis(900);
+
+/// Asks a running osu! ("lazer" or "stable") to close, as often as it takes: lazer answers the
+/// first request with "Are you sure?" (which a second one confirms), and from a screen deeper in it
+/// first goes back. Asks again while it still runs, up to CLOSE_TRIES times; how many windows (or
+/// processes) were asked in all, 0 when it wasn't running. The caller still watches whether it
+/// went (its exit animation takes a moment).
 pub fn close(client: &str, install: Option<&Path>) -> usize {
+    let still = |r: Running| if client == "stable" { r.stable } else { r.lazer };
+    let mut asked = 0;
+    for _ in 0..CLOSE_TRIES {
+        let n = close_once(client, install);
+        if n == 0 {
+            break;
+        }
+        asked += n;
+        // gone within the wait: done; else ask again
+        let mut waited = std::time::Duration::ZERO;
+        while waited < CLOSE_WAIT {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            waited += std::time::Duration::from_millis(100);
+            if !still(running(install)) {
+                return asked;
+            }
+        }
+    }
+    asked
+}
+
+/// One request to close (what Alt+F4 or the window's close button does once).
+fn close_once(client: &str, install: Option<&Path>) -> usize {
     #[cfg(windows)]
     {
         let (lazer, stable) = osu_pids(install);
