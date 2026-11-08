@@ -8,10 +8,14 @@
  * (eq.ts), mapped from the song's position; a jump in the song (seek, loop) or a pause stops
  * what's playing and starts over from there. Rate mods change their pitch, as lazer's do. The
  * volume is the player's volume times the hitsound slider, both on the player's perceptual curve.
+ *
+ * While a replay plays, a note's sounds come when the replay hit it (early or late) and not at all
+ * when it was never pressed: `setPlay` moves them (the notes' own times to when they were hit).
  */
 import { player } from "../player";
 import { api, fileUrl } from "./api";
 import { lowerBound } from "./charts";
+import { retimed } from "./retime";
 import { audioContext } from "./eq";
 import type { SoundChain } from "./skin/skins";
 import { events as storeEvents, store } from "./store";
@@ -68,6 +72,10 @@ class Hitsounds {
   private out: GainNode | null = null;
   private chart: { id: string; sounds: Promise<ChartSounds> } | null = null;
   private sounds: ChartSounds | null = null;
+  /** the sounds' [time, sample, volume] as they play: the chart's, or moved by a replay */
+  private events: number[] = [];
+  /** a replay's hits, flat [note time, when hit (NaN: never pressed)] by note time */
+  private hits: number[] | null = null;
   /** decoded sound per sample (null while loading, or missing) */
   private bufs: (AudioBuffer | null)[] = [];
   /** playback rate per sample (bananas) */
@@ -76,7 +84,7 @@ class Hitsounds {
   private job = 0;
   private active = false;
   private timer = 0;
-  /** next event (index into `sounds.events`) */
+  /** next event (index into `events`) */
   private next = 0;
   /** next looping sound (index of its start in `sounds.loops`) */
   private nextLoop = 0;
@@ -121,6 +129,7 @@ class Hitsounds {
     const keep = new Set(urls);
     for (const url of [...buffers.keys()]) if (!keep.has(url)) buffers.delete(url);
     this.sounds = sounds;
+    this.retime();
     this.bufs = urls.map(() => null);
     this.pitches = sounds.samples.map(Hitsounds.pitch);
     // sounds join as they're decoded (keysounded charts have hundreds)
@@ -139,7 +148,38 @@ class Hitsounds {
     this.loaded = "";
     this.halt();
     this.sounds = null;
+    this.events = [];
     this.bufs = [];
+  }
+
+  /** A replay's hits (flat [note time, when hit or NaN], any order), or null for autoplay. */
+  setPlay(hits: number[] | null): void {
+    if (hits) {
+      const order = Array.from({ length: hits.length / 2 }, (_, i) => i).sort((a, b) => hits[a * 2] - hits[b * 2]);
+      this.hits = order.flatMap((i) => [hits[i * 2], hits[i * 2 + 1]]);
+    } else this.hits = null;
+    this.retime();
+    // start over from where the song is
+    this.halt();
+    this.tick();
+  }
+
+  private retime(): void {
+    const ev = this.sounds?.events ?? [];
+    const h = this.hits;
+    if (!h) {
+      this.events = ev;
+      return;
+    }
+    const out: number[] = [];
+    for (let i = 0; i < ev.length; i += 3) {
+      const at = retimed(h, ev[i]);
+      if (at === null) continue;
+      out.push(at, ev[i + 1], ev[i + 2]);
+    }
+    // a late hit can pass the next note's sound: back in time order
+    const idx = Array.from({ length: out.length / 3 }, (_, i) => i).sort((a, b) => out[a * 3] - out[b * 3]);
+    this.events = idx.flatMap((i) => [out[i * 3], out[i * 3 + 1], out[i * 3 + 2]]);
   }
 
   /** How many of the chart's samples are the set's own, or null before it's loaded. */
@@ -204,7 +244,7 @@ class Hitsounds {
     if (!an) {
       this.halt();
       an = this.anchor = { song, at: now, rate };
-      this.next = lowerBound(s.events, song - LATE);
+      this.next = lowerBound(this.events, song - LATE);
       // loops under way carry on from here
       const loops = s.loops ?? [];
       this.nextLoop = 0;
@@ -214,7 +254,7 @@ class Hitsounds {
       }
     }
     const horizon = an.song + (now + LOOKAHEAD - an.at) * 1000 * rate;
-    const ev = s.events;
+    const ev = this.events;
     while (this.next < ev.length && ev[this.next] <= horizon) {
       const t = ev[this.next];
       const buf = this.bufs[ev[this.next + 1]];

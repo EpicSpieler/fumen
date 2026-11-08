@@ -12,6 +12,7 @@
  * the judging (lib/replay) keeps the score's own rate, so watching it slower changes nothing.
  */
 import { api, asApiError } from "../lib/api";
+import { hitsounds } from "../lib/hitsounds";
 import { date, fixed, num, pct } from "../lib/format";
 import { maniaWindows, ManiaReplay, MISS, playedNotes, unreplayed } from "../lib/replay";
 import { CatchReplay, catchUnreplayed } from "../lib/catch-replay";
@@ -287,26 +288,43 @@ export class ReplayPanel {
     const field = this.field();
     const map = store.snap?.maps.find((m) => m.id === this.mapId);
     if (!d || !p || !map) return;
+    /** an object's own time, to move its hitsounds to when it was hit */
+    let objTime: (obj: number) => number;
     if (field instanceof ManiaPlayfield) {
       const notes = playedNotes(d.notes, p.entry.mods);
+      objTime = (o) => notes[o * 3];
       const replay = new ManiaReplay(notes, d.keys, p.frames, maniaWindows(map.od, p.entry.mods, p.entry.rate ?? 1));
       field.setPlay(replay, notes);
       this.replay = replay;
     } else if (field instanceof TaikoPlayfield && d.taiko) {
+      const objects = d.taiko.objects;
+      objTime = (o) => objects[o * 5];
       const replay = new TaikoReplay(d.taiko, p.frames, taikoOd(map.od, p.entry.mods), p.entry.mods);
       field.setPlay(replay);
       this.replay = replay;
     } else if (field instanceof CatchPlayfield && d.catch) {
+      const chart = field.chart;
+      objTime = (o) => chart.time[o];
       const replay = new CatchReplay(field.chart, p.frames);
       field.setPlay(replay);
       this.replay = replay;
     } else if (field instanceof OsuPlayfield && d.osu) {
+      const chart = field.chart;
+      objTime = (o) => chart.time[o];
       // the playfield's chart has the score's Easy / Hard Rock / Mirror built in
       const replay = new OsuReplay(field.chart, p.frames, osuOd(map.od, p.entry.mods), p.entry.rate ?? 1);
       field.setPlay(replay);
       this.replay = replay;
     } else return;
     this.misses = this.replay.judgements.filter((j) => j.result === MISS).map((j) => j.time);
+    // the hitsounds as the replay played them: at the press, none for a note never pressed
+    // (osu!catch has no presses: a caught fruit sounds on time)
+    const hits: number[] = [];
+    for (const j of this.replay.judgements) {
+      if (j.tail) continue;
+      hits.push(objTime(j.obj), !Number.isNaN(j.offset) ? j.time : j.result === MISS ? NaN : objTime(j.obj));
+    }
+    hitsounds.setPlay(hits);
     const events: [number, number][] = this.replay.judgements.map((j) => [j.time, j.result === MISS ? -1 : 1]);
     if (this.replay instanceof OsuReplay) events.push(...this.replay.nestedCombo);
     this.combo = new ComboLine(events);
@@ -322,6 +340,7 @@ export class ReplayPanel {
     this.replay = null;
     this.combo = null;
     this.misses = [];
+    hitsounds.setPlay(null);
     const field = this.field();
     if (field instanceof ManiaPlayfield || field instanceof TaikoPlayfield || field instanceof OsuPlayfield || field instanceof CatchPlayfield) field.setPlay(null);
     this.renderMarks();
