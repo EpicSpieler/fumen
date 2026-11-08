@@ -1,21 +1,26 @@
 // A stand-in for tosu (lib/tosu) on its port, for "Follow osu!" in the browser preview:
-//   node tools/browser-preview/fake-tosu.mjs
-// It plays a script: preview map 5 from 0:30 at 1×, a pause, DT, then map 9 (the preview shim
-// takes "preview:<index>" as the MD5), then a map that isn't in the library, then over again.
+//   node tools/browser-preview/fake-tosu.mjs [port]
+// On another port than 24050 (when the real tosu runs), point the preview at it:
+//   localStorage["fumen-preview-tosu"] = "ws://127.0.0.1:<port>/websocket/v2"
+// It plays a script like a round of osu!: map 9 in song select, started with DT, a pause, the
+// results, map 5 in song select, a map that isn't in the library, then over again (the preview
+// shim takes "preview:<index>" as the MD5).
 import { createServer } from "node:http";
 import { createHash } from "node:crypto";
 
-const PORT = 24050;
-/** [seconds into the script, map index or null (not in the library), state, rate, paused] */
+const PORT = Number(process.argv[2]) || 24050;
+/** [seconds into the script, map index or null (not in the library), state (5 song select,
+ * 2 play, 7 results), rate, paused, the song's place there (ms) or null to go on] */
 const SCRIPT = [
-  [0, 5, 2, 1, false],
-  [8, 5, 2, 1, true],
-  [11, 5, 2, 1.5, false],
-  [18, 9, 5, 1, false],
-  [26, null, 2, 1, false],
-  [30, null, 0, 1, false],
+  [0, 9, 5, 1, false, 40000],
+  [5, 9, 2, 1.5, false, 0],
+  [12, 9, 2, 1.5, true, null],
+  [14, 9, 2, 1.5, false, null],
+  [20, 9, 7, 1, true, null],
+  [24, 5, 5, 1, false, 30000],
+  [29, null, 2, 1, false, 0],
 ];
-const LENGTH = 32;
+const LENGTH = 33;
 
 function frame(text) {
   const data = Buffer.from(text);
@@ -36,7 +41,7 @@ server.on("upgrade", (req, socket) => {
 });
 
 let start = Date.now();
-let live = 30000;
+let live = 40000;
 let lastStep = -1;
 let last = Date.now();
 setInterval(() => {
@@ -45,12 +50,11 @@ setInterval(() => {
   if (s >= LENGTH) {
     start = now;
     s = 0;
-    live = 30000;
   }
   const step = SCRIPT.findLastIndex(([at]) => s >= at);
-  const [, map, state, rate, paused] = SCRIPT[step];
+  const [, map, state, rate, paused, from] = SCRIPT[step];
   if (step !== lastStep) {
-    if (step > 0 && SCRIPT[step - 1][1] !== map) live = 20000;
+    if (from !== null) live = from;
     console.log(`${s.toFixed(1)}s  map ${map ?? "(not in library)"}  state ${state}  ${rate}×${paused ? "  paused" : ""}`);
     lastStep = step;
   }

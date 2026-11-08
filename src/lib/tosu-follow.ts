@@ -1,13 +1,26 @@
 /* tosu-follow.ts — Fumen plays along with osu!: the song osu! plays (from tosu, lib/tosu) plays in
- * Fumen's player without sound, at osu!'s place and rate, so the visualizer shows it live. Session
- * only: it runs while it's switched on. */
-import { api } from "./api";
+ * Fumen's player without sound, at osu!'s place and rate, so the visualizer shows it live. It runs
+ * in the background while prefs `followOsu` is on; Fumen is only quiet while tosu is there.
+ * main.ts opens the visualizer when a map starts (`play`) and the score page after a pass. */
+import { api, isTauri } from "./api";
 import { startAnalyser } from "./eq";
 import { Emitter, store } from "./store";
 import { readTosu, STATE, TosuClock, type TosuNow } from "./tosu";
 import { player } from "../player";
 
-const URL = "ws://127.0.0.1:24050/websocket/v2";
+/** tosu's address; the browser preview can point it at tools/browser-preview/fake-tosu.mjs */
+const URL = (() => {
+  const own = isTauri ? null : safeGet("fumen-preview-tosu");
+  return own ?? "ws://127.0.0.1:24050/websocket/v2";
+})();
+
+function safeGet(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
 /** ms between tries while tosu isn't there */
 const RETRY = 3000;
 /** ms between checks of Fumen's place against osu!'s */
@@ -16,6 +29,8 @@ const TICK = 100;
 const DRIFT = 90;
 /** ms between new looks for a song that wasn't in the library (it may be imported meanwhile) */
 const LOOK_AGAIN = 2000;
+/** ms between tries to start the song when it wouldn't (no click in Fumen yet, say) */
+const PLAY_AGAIN = 1000;
 
 export type FollowStatus =
   | { kind: "off" }
@@ -28,7 +43,8 @@ export type FollowStatus =
   | { kind: "missing"; title: string };
 
 class Follow {
-  readonly bus = new Emitter<{ status: FollowStatus }>();
+  /** `play`: a map started in osu! and Fumen plays along (its index in the library) */
+  readonly bus = new Emitter<{ status: FollowStatus; play: number }>();
   status: FollowStatus = { kind: "off" };
   private ws: WebSocket | null = null;
   private retry = 0;
@@ -40,16 +56,39 @@ class Follow {
   private mapIdx: number | null = null;
   private lookup = 0;
   private lookedAt = 0;
+  private playTried = 0;
+  /** a map started in osu!: `play` goes out once Fumen plays it too */
+  private started = false;
   private ids = new Map<string, string>();
+  /** Fumen plays something of your own (another song, a replay, practice): hands off until
+   * osu! moves on to another map or starts one */
+  private yielded = false;
+  /** listening to the player (from the first start: player.ts and this import each other) */
+  private hooked = false;
 
   get on(): boolean {
     return this.status.kind !== "off";
   }
 
+  /** tosu answers (Fumen is quiet then) */
+  get connected(): boolean {
+    return this.now !== null;
+  }
+
+  /** the difficulty osu! is on (MD5), "" without tosu */
+  get current(): string {
+    return this.now?.md5 ?? "";
+  }
+
   start(): void {
     if (this.on) return;
-    startAnalyser();
-    player.setSilent(true);
+    if (!this.hooked) {
+      this.hooked = true;
+      // another song picked in Fumen: yours
+      player.bus.on("track", (np) => {
+        if (this.connected && this.mapIdx !== null && np && np.map !== this.mapIdx) this.yieldPlayer();
+      });
+    }
     this.set({ kind: "connecting" });
     this.connect();
     this.tick = window.setInterval(() => this.sync(), TICK);
@@ -62,17 +101,38 @@ class Follow {
     const ws = this.ws;
     this.ws = null;
     ws?.close();
-    this.now = null;
-    this.md5 = "";
-    this.mapIdx = null;
-    this.clock.reset();
-    player.setSilent(false);
+    this.lost();
     this.set({ kind: "off" });
+  }
+
+  /** Leaves Fumen's player to you (with its sound) until osu! moves on. */
+  yieldPlayer(): void {
+    if (!this.connected || this.yielded) return;
+    this.yielded = true;
+    player.setSilent(false);
+  }
+
+  private takeBack(): void {
+    if (!this.yielded) return;
+    this.yielded = false;
+    player.setSilent(true);
   }
 
   private set(s: FollowStatus): void {
     this.status = s;
     this.bus.emit("status", s);
+  }
+
+  /** tosu is gone (or following stopped): Fumen's song stops and Fumen has its sound again. */
+  private lost(): void {
+    if (this.now && this.mapIdx !== null && player.now?.map === this.mapIdx && player.playing) player.audio.pause();
+    this.now = null;
+    this.md5 = "";
+    this.mapIdx = null;
+    this.started = false;
+    this.yielded = false;
+    this.clock.reset();
+    player.setSilent(false);
   }
 
   private connect(): void {
@@ -85,6 +145,7 @@ class Follow {
     }
     this.ws = ws;
     ws.onmessage = (e) => {
+      if (this.ws !== ws) return;
       let msg: unknown;
       try {
         msg = JSON.parse(String(e.data));
@@ -97,16 +158,26 @@ class Follow {
     ws.onclose = () => {
       if (this.ws !== ws) return;
       this.ws = null;
-      this.now = null;
-      this.md5 = "";
+      this.lost();
       if (this.status.kind !== "off") this.set({ kind: "connecting" });
       this.retry = window.setTimeout(() => this.connect(), RETRY);
     };
   }
 
   private read(now: TosuNow): void {
+    const before = this.now;
+    if (!before) {
+      // osu! plays the music now; the analysers still hear Fumen's copy
+      startAnalyser();
+      player.setSilent(true);
+    }
     this.now = now;
+    if (now.state === STATE.play && before?.state !== STATE.play) {
+      this.started = true;
+      this.takeBack();
+    } else if (now.state !== STATE.play) this.started = false;
     if (now.md5 !== this.md5) {
+      this.takeBack();
       this.md5 = now.md5;
       this.mapIdx = null;
       this.clock.reset();
@@ -129,7 +200,7 @@ class Follow {
       id = await api.mapByMd5(now.md5).catch(() => null);
       if (id) this.ids.set(now.md5, id);
     }
-    if (job !== this.lookup || !this.on) return;
+    if (job !== this.lookup || !this.connected || this.yielded) return;
     const idx = id ? (store.snap?.maps.findIndex((m) => m.id === id) ?? -1) : -1;
     if (idx < 0) {
       if (this.status.kind !== "missing" || this.status.title !== title) this.set({ kind: "missing", title });
@@ -146,7 +217,11 @@ class Follow {
   /** Keeps Fumen's song at osu!'s place, rate and pause. */
   private sync(): void {
     const now = this.now;
-    if (!now || this.mapIdx === null || !player.now || player.now.map !== this.mapIdx) return;
+    if (!now || this.yielded || this.mapIdx === null || !player.now || player.now.map !== this.mapIdx) return;
+    if (this.started) {
+      this.started = false;
+      this.bus.emit("play", this.mapIdx);
+    }
     const t = performance.now();
     if (Math.abs(player.rate - now.rate) > 0.001) player.setRate(now.rate);
     if (player.pitch !== now.pitch) player.setPitch(now.pitch);
@@ -163,6 +238,8 @@ class Follow {
     const at = this.clock.at(t);
     if (!Number.isFinite(at)) return;
     if (!player.playing) {
+      if (t - this.playTried < PLAY_AGAIN) return;
+      this.playTried = t;
       a.currentTime = at / 1000;
       player.toggle();
       return;

@@ -36,7 +36,8 @@ import { newSinceLastRun } from "./lib/changelog";
 import { openChangelog } from "./views/changelog";
 import { getVersion } from "@tauri-apps/api/app";
 import { mountPlayerBar } from "./player";
-import { openFullscreen } from "./views/fullscreen";
+import { closeFullscreen, fullscreenOpen, openFullscreen } from "./views/fullscreen";
+import { follow } from "./lib/tosu-follow";
 import { launchHtml, renderLaunch } from "./ui/osu-launch";
 import { BrowseView } from "./views/browse";
 import { ScoreView } from "./views/score";
@@ -921,6 +922,7 @@ async function boot(): Promise<void> {
   initMatches();
   initOverlay();
   initLivePlays();
+  initFollow();
   document.body.classList.add("ready");
   void startPing()
     .catch((e) => console.warn("[ping]", asApiError(e).message))
@@ -940,6 +942,11 @@ function initLivePlays(): void {
   if (!isTauri) return;
   void onLivePlay((p) => {
     const show = () => go({ name: "score", id: p.id });
+    // playing along with osu!: a pass goes from the visualizer to its score
+    if (follow.connected && p.md5 === follow.current) {
+      closeFullscreen();
+      return show();
+    }
     if (store.prefs.scoreAuto && !document.hasFocus()) return show();
     const what = [p.title ?? t("A play"), p.version ? `[${p.version}]` : "", playMods(p)].filter(Boolean).join(" ");
     toast(t("{what}: {acc}", { what, acc: pct(p.accuracy) }), { timeout: 9000, action: { label: t("Show"), run: show } });
@@ -948,6 +955,14 @@ function initLivePlays(): void {
   void listen<string>("show-score", (e) => go({ name: "score", id: e.payload }));
   void listen("companion-closed", () => setPrefs({ companion: false }));
   if (store.prefs.companion) void api.openCompanion().catch((e) => console.warn("[companion]", asApiError(e).message));
+}
+
+/** Follow osu! (prefs followOsu): runs in the background; a map started in osu! opens the visualizer. */
+function initFollow(): void {
+  const apply = () => (store.prefs.followOsu ? follow.start() : follow.stop());
+  apply();
+  events.on("prefs", (p) => "followOsu" in p && apply());
+  follow.bus.on("play", () => !fullscreenOpen() && openFullscreen("visual"));
 }
 
 void boot();

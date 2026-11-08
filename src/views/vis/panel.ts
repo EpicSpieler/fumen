@@ -2,7 +2,7 @@
  * colours, how it reacts, the beat, kiai and flashes, the background, the title. Every change is
  * saved at once (prefs `visualizer`). */
 import { t } from "../../lib/i18n";
-import { DEFAULT_PREFS } from "../../lib/store";
+import { DEFAULT_PREFS, setPrefs } from "../../lib/store";
 import type { VisPrefs } from "../../lib/types";
 import { attachSegIndicator, updateRange } from "../../ui/controls";
 import { icon } from "../../ui/icons";
@@ -114,7 +114,7 @@ export function bindPanel(host: HTMLElement, changed: () => void): () => void {
   render();
 
   const followSwitch = host.querySelector<HTMLInputElement>("input[data-follow]")!;
-  followSwitch.addEventListener("change", () => (followSwitch.checked ? follow.start() : follow.stop()));
+  followSwitch.addEventListener("change", () => setPrefs({ followOsu: followSwitch.checked }));
   // the panel is built before it's in the page: it lets go once it was there and is gone
   let shown = false;
   const showFollow = (st: FollowStatus) => {

@@ -40,7 +40,7 @@ export const visualizer: Record<string, string> = {
   Black: "Schwarz",
   "Kiai effects": "Kiai-Effekte",
   "Follow osu!": "osu! folgen",
-  "Plays along with what osu! plays, through tosu": "Spielt mit, was osu! gerade spielt, über tosu",
+  "Plays along with what osu! plays, through tosu": "Spielt über tosu mit, was osu! gerade spielt",
   "Waiting for tosu (tosu.app) to run": "Wartet, bis tosu (tosu.app) läuft",
   "tosu is there, osu! has no song yet": "tosu läuft, osu! hat noch keinen Song",
   "Not in your library": "Nicht in deiner Bibliothek",

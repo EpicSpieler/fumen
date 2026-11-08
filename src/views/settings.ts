@@ -227,6 +227,13 @@ export class SettingsView {
             </div>
             <input type="checkbox" role="switch" data-pref-companion aria-label="${t("Companion window")}" ${p.companion ? "checked" : ""} />
           </div>
+          <div class="setting-row">
+            <div class="setting-text">
+              <div class="setting-title">${t("Follow osu!")}</div>
+              <div class="setting-desc">${t("With tosu (tosu.app) running next to osu!, Fumen plays along with what osu! plays, without sound. The visualizer opens when you start a map, and a pass in osu!lazer opens its score.")}</div>
+            </div>
+            <input type="checkbox" role="switch" data-pref="followOsu" aria-label="${t("Follow osu!")}" ${p.followOsu ? "checked" : ""} />
+          </div>
         </section>
 
         <section class="settings-section">
