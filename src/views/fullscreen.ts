@@ -29,7 +29,6 @@ import { setPrefs, store } from "../lib/store";
 import type { ChartData, ReplayEntry, SkinList, VisStyle } from "../lib/types";
 import type { Section } from "../lib/practice";
 import { bindVolume, dragSlider, player, volumeHtml } from "../player";
-import { follow } from "../lib/tosu-follow";
 import { attachSegIndicator, createSelect, openMenu, reduceMotion, toast, type MenuEntry, type SelectHandle } from "../ui/controls";
 import { systemLines } from "../lib/report";
 import { icon } from "../ui/icons";
@@ -1176,22 +1175,12 @@ export function openFullscreen(mode?: FullscreenMode): void {
   fullscreen.show(mode);
 }
 
-export function fullscreenOpen(): boolean {
-  return fullscreen.open;
-}
-
-export function closeFullscreen(): void {
-  fullscreen.hide();
-}
-
 /** Plays a difficulty in the fullscreen playfield looping its hardest part (of `pattern`, osu!mania)
  * or `section`, at `rate`. */
 export function practiceChart(mapIdx: number, opts: { rate?: number; pattern?: PatternName | null; section?: Section } = {}): void {
   const snap = store.snap;
   const m = snap?.maps[mapIdx];
   if (!m) return;
-  // yours now, not osu!'s song played along to
-  follow.yieldPlayer();
   fullscreen.askPractice(m.id, opts.pattern, opts.section);
   if (player.now?.set === m.set) player.selectMap(mapIdx);
   else player.playSet(m.set, mapIdx);
@@ -1203,7 +1192,6 @@ export function practiceChart(mapIdx: number, opts: { rate?: number; pattern?: P
 export function watchPlay(mapIdx: number, entry: ReplayEntry & { live?: boolean }): void {
   const m = store.snap?.maps[mapIdx];
   if (!m) return;
-  follow.yieldPlayer();
   fullscreen.askReplay(m.id, entry);
   if (player.now?.set === m.set) player.selectMap(mapIdx);
   else player.playSet(m.set, mapIdx);

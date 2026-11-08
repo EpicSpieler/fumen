@@ -69,7 +69,6 @@ export const DEFAULT_PREFS: UiPrefs = {
   scoreAuto: true,
   companion: false,
   companionPool: null,
-  followOsu: false,
 };
 
 export const store = {

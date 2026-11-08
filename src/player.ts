@@ -70,8 +70,6 @@ class Player {
   private onMeta: (() => void) | null = null;
   /** the pitch follows the rate, like Nightcore / Daycore (session only) */
   pitch = false;
-  /** plays without sound (following osu!, lib/tosu): the analysers still hear it at full level */
-  silent = false;
 
   constructor() {
     this.audio.preload = "auto";
@@ -375,7 +373,6 @@ class Player {
 
   /** Perceptual volume curve. */
   private targetVolume(): number {
-    if (this.silent) return 0;
     const v = store.prefs.volume;
     return Math.max(0, Math.min(1, v * v));
   }
@@ -425,15 +422,6 @@ class Player {
   setVolume(v: number): void {
     setPrefs({ volume: Math.max(0, Math.min(1, v)) });
     // a fade-out under way goes on from the new volume
-    if (this.swapping || this.endFade) return;
-    this.stopFade();
-    this.setOut(this.targetVolume());
-  }
-
-  /** Plays on without sound (or with it again). */
-  setSilent(on: boolean): void {
-    if (on === this.silent) return;
-    this.silent = on;
     if (this.swapping || this.endFade) return;
     this.stopFade();
     this.setOut(this.targetVolume());
