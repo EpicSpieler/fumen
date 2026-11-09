@@ -348,6 +348,7 @@ const MIGRATIONS: &[&str] = &[
         score        INTEGER NOT NULL DEFAULT 0,
         max_combo    INTEGER NOT NULL DEFAULT 0,
         misses       INTEGER NOT NULL DEFAULT 0,
+        misses_at    TEXT NOT NULL DEFAULT '[]',
         mods         TEXT NOT NULL DEFAULT '',
         rate         REAL NOT NULL DEFAULT 1,
         pp           REAL,
@@ -371,7 +372,19 @@ pub fn open(path: &Path) -> Result<Connection> {
          PRAGMA temp_store = MEMORY;",
     )?;
     migrate(&mut conn)?;
+    ensure_columns(&conn)?;
     Ok(conn)
+}
+
+/// Columns that came to a table after its migration had already run on a development build
+/// (the 1.4 branch's attempts table, before 1.4 is out). Safe to run every time.
+fn ensure_columns(conn: &Connection) -> Result<()> {
+    let mut st = conn.prepare("SELECT name FROM pragma_table_info('attempts')")?;
+    let cols = st.query_map([], |r| r.get::<_, String>(0))?.collect::<rusqlite::Result<Vec<_>>>()?;
+    if !cols.is_empty() && !cols.iter().any(|c| c == "misses_at") {
+        conn.execute_batch("ALTER TABLE attempts ADD COLUMN misses_at TEXT NOT NULL DEFAULT '[]'")?;
+    }
+    Ok(())
 }
 
 fn migrate(conn: &mut Connection) -> Result<()> {
@@ -417,6 +430,23 @@ mod tests {
         assert_eq!(get_meta(&conn, "k").unwrap().as_deref(), Some("v"));
         let v: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
         assert_eq!(v as usize, MIGRATIONS.len());
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn an_early_attempts_table_gets_its_new_columns() {
+        let dir = std::env::temp_dir().join(format!("fumen-db-cols-{}", std::process::id()));
+        let path = dir.join("t.db");
+        let _ = std::fs::remove_dir_all(&dir);
+        {
+            // as the 1.4 branch first made it, without misses_at
+            let conn = open(&path).unwrap();
+            conn.execute_batch("DROP TABLE attempts; CREATE TABLE attempts (id INTEGER PRIMARY KEY, md5 TEXT NOT NULL, misses INTEGER NOT NULL DEFAULT 0);").unwrap();
+        }
+        let conn = open(&path).unwrap();
+        let n: i64 = conn.query_row("SELECT COUNT(*) FROM pragma_table_info('attempts') WHERE name = 'misses_at'", [], |r| r.get(0)).unwrap();
+        assert_eq!(n, 1);
         drop(conn);
         let _ = std::fs::remove_dir_all(&dir);
     }

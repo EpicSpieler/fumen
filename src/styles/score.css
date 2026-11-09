@@ -142,3 +142,46 @@
   .score-stretch { grid-template-columns: 22px 1fr auto; }
   .score-stretch-how, .score-stretch-what { grid-column: 2; }
 }
+
+/* ===========================================================================
+   Tries — your tries at a difficulty, through tosu (views/tries.ts)
+   =========================================================================== */
+
+/* where the tries end: a warm glow over the density, strongest where most end */
+.tries-heat { position: absolute; inset: 0; pointer-events: none; }
+.tries-heat i {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: linear-gradient(to top, color-mix(in srgb, var(--danger) 70%, transparent), color-mix(in srgb, var(--warning) 25%, transparent));
+  opacity: calc(var(--h) * .75);
+}
+/* each try's end: fails red, the ones left early amber, the try in focus taller */
+.tries-stops { position: absolute; inset: auto 0 0; height: 14px; pointer-events: none; }
+.tries-stops b {
+  position: absolute;
+  bottom: 0;
+  width: 2px;
+  height: 9px;
+  margin-left: -1px;
+  border-radius: 1px;
+  opacity: .8;
+}
+.tries-stops b.fail { background: var(--danger); }
+.tries-stops b.left { background: var(--warning); }
+.tries-stops b.on { height: 14px; width: 3px; margin-left: -1.5px; opacity: 1; box-shadow: 0 0 0 1px var(--bg-base); }
+.tries-spot { margin-top: 8px; }
+
+.tries-row { grid-template-columns: 74px minmax(60px, 1fr) 72px minmax(0, 1.2fr) 120px; }
+.tries-outcome { font-size: var(--fs-12); font-weight: 600; white-space: nowrap; }
+.tries-outcome.fail { color: var(--danger); }
+.tries-outcome.quit, .tries-outcome.retry { color: var(--warning); }
+.tries-progress { height: 5px; border-radius: var(--r-full); background: var(--fill-subtle); overflow: hidden; }
+.tries-progress i { display: block; height: 100%; border-radius: inherit; background: var(--accent); }
+.tries-misses { font-size: var(--fs-12); color: var(--t3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+@media (max-width: 860px) {
+  .tries-row { grid-template-columns: 74px minmax(60px, 1fr) 72px; }
+  .tries-misses, .tries-row .score-session-when { display: none; }
+}
+.score-tries-n { margin-left: 2px; color: var(--t3); font-size: var(--fs-12); }

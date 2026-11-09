@@ -41,6 +41,8 @@ const SHOWN: Record<number, string[]> = {
 };
 /** a mean hit error worth mentioning, real ms */
 const LEAN = 5;
+/** tries counted for the "Your tries" button at most */
+const TRIES_COUNTED = 100;
 
 export class ScoreView {
   readonly el: HTMLElement;
@@ -48,6 +50,8 @@ export class ScoreView {
   private session: LivePlay[] = [];
   private data: ChartData | null = null;
   private rv: Review | null = null;
+  /** tries at the difficulty kept through Follow osu! (views/tries), this pass among them */
+  private tries = 0;
   private job = 0;
 
   constructor(private id: string) {
@@ -78,9 +82,14 @@ export class ScoreView {
       this.el.innerHTML = `<div class="empty-state">${icon("info")}<div class="empty-title">${t("This play isn't here any more")}</div></div>`;
       return;
     }
-    const day = await api.livePlays(play.date - 24 * 3600_000).catch(() => [] as LivePlay[]);
+    const [day, tries] = await Promise.all([
+      api.livePlays(play.date - 24 * 3600_000).catch(() => [] as LivePlay[]),
+      api.attemptsForMap(play.md5, TRIES_COUNTED).catch(() => []),
+    ]);
+    if (job !== this.job) return;
     const start = sessionStart(day.filter((p) => p.date <= play.date + 1), play.date);
     this.session = day.filter((p) => p.date >= start - 1);
+    this.tries = tries.length;
     this.render();
     // the judging needs the chart (built with the score's chart mods) and its replay
     const mi = this.mapIdx();
@@ -177,6 +186,7 @@ export class ScoreView {
         ${hint ? `<button class="btn score-rate" type="button" data-rate="${hint}" data-tip="${t("Play it again at this rate in the fullscreen playfield")}">${icon("metronome")}<span>${t("Try it at {rate}×", { rate: fixed(hint, 2) })}</span></button>` : ""}
         <button class="btn btn-ghost score-collect" type="button">${icon("collection")}<span>${t("Add to collection")}</span></button>
         <button class="btn btn-ghost score-similar" type="button">${icon("similar")}<span>${t("Similar maps")}</span></button>
+        ${this.tries > 1 ? `<button class="btn btn-ghost score-tries" type="button">${icon("flag")}<span>${t("Your tries")}</span><span class="num score-tries-n">${this.tries >= TRIES_COUNTED ? `${num(TRIES_COUNTED - 1)}+` : num(this.tries)}</span></button>` : ""}
         <button class="btn btn-ghost score-set" type="button">${icon("arrow-right")}<span>${t("Open the set")}</span></button>
       </div>`;
   }
@@ -278,6 +288,7 @@ export class ScoreView {
     if (target.closest(".score-back")) return back();
     const row = target.closest<HTMLElement>(".score-session-row");
     if (row?.dataset.id && row.dataset.id !== this.id) return go({ name: "score", id: row.dataset.id }, { replace: true });
+    if (target.closest(".score-tries")) return go({ name: "tries", md5: p.md5 });
     if (mi < 0) return;
     if (target.closest(".score-watch")) {
       watchPlay(mi, {

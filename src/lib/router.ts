@@ -15,6 +15,8 @@ export type Route =
   | { name: "collection"; id: string }
   /** a play that just happened (its replay file in lazer's files) */
   | { name: "score"; id: string }
+  /** your tries at a difficulty (views/tries), `at`: the one in focus */
+  | { name: "tries"; md5: string; at?: number }
   | { name: "settings" }
   | { name: "welcome" };
 

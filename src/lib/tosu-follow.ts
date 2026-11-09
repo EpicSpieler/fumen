@@ -48,8 +48,8 @@ export type FollowStatus =
 
 class Follow {
   /** `play`: a map started in osu! and Fumen plays along (its index in the library); `leave`:
-   * out of the map again (to song select or a menu), or osu! / tosu went */
-  readonly bus = new Emitter<{ status: FollowStatus; play: number; leave: null; attempt: Attempt }>();
+   * out of the map again (to song select or a menu), or osu! / tosu went (the MD5 of the map left) */
+  readonly bus = new Emitter<{ status: FollowStatus; play: number; leave: string; attempt: Attempt }>();
   /** every try at a map (lib/attempts), kept as it ends */
   private tries = new AttemptTracker();
   status: FollowStatus = { kind: "off" };
@@ -148,10 +148,6 @@ class Follow {
   /** Keeps tries that ended and tells about them (`attempt`). */
   private keep(done: Attempt[]): void {
     for (const a of done) {
-      if (!isTauri) {
-        this.bus.emit("attempt", a);
-        continue;
-      }
       api
         .saveAttempt(a)
         .then((id) => this.bus.emit("attempt", { ...a, id }))
@@ -162,7 +158,7 @@ class Follow {
   private lost(): void {
     this.keep(this.tries.end(Date.now()));
     if (this.now && this.mapIdx !== null && player.now?.map === this.mapIdx && player.playing) player.audio.pause();
-    if (this.now) this.bus.emit("leave", null);
+    if (this.now) this.bus.emit("leave", this.now.md5);
     this.hold.clear();
     this.now = null;
     this.md5 = "";
@@ -243,7 +239,8 @@ class Follow {
       this.started = false;
       this.hold.clear();
     } else this.hold.update(now.live, t);
-    if (before && inMap(before.state) && !inMap(now.state)) this.bus.emit("leave", null);
+    // (osu! may have picked another map on the way out already: it's the one left that counts)
+    if (before && inMap(before.state) && !inMap(now.state)) this.bus.emit("leave", before.md5);
     if (now.md5 !== this.md5) {
       this.takeBack();
       this.md5 = now.md5;

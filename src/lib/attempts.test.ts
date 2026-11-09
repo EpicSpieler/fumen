@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AttemptTracker, progress, type Attempt } from "./attempts";
+import { AttemptTracker, progress, stopHeat, stopSpot, tally, troubleSpot, type Attempt } from "./attempts";
 import type { TosuNow } from "./tosu";
 
 const MD5 = "174589aaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -126,5 +126,97 @@ describe("AttemptTracker", () => {
     const t = new AttemptTracker();
     run([...start(), ...playing(500, 9000)], t);
     expect(t.end(3_000_000).map((a) => a.outcome)).toEqual(["quit"]);
+  });
+});
+
+const tried = (outcome: Attempt["outcome"], end: number, missesAt: number[] = [], extra: Partial<Attempt> = {}): Attempt => ({
+  md5: MD5,
+  mode: 3,
+  client: "lazer",
+  started: 0,
+  ended: 1,
+  outcome,
+  reached: end,
+  failedAt: outcome === "fail" ? end : null,
+  firstObject: 4802,
+  lastObject: 120000,
+  accuracy: 0.9,
+  score: 0,
+  maxCombo: 0,
+  misses: missesAt.length,
+  missesAt,
+  mods: "",
+  rate: 1,
+  pp: null,
+  scoreId: null,
+  rank: null,
+  ...extra,
+});
+
+describe("troubleSpot", () => {
+  it("starts at the run of misses that led to the fail", () => {
+    // an early stray miss, then a run from 27.2 s to the fail at 33.6 s
+    expect(troubleSpot(tried("fail", 33656, [9000, 27200, 28900, 30100, 31900, 33400]))).toEqual({ a: 26200, b: 35156 });
+  });
+
+  it("is a few seconds before the end without misses there", () => {
+    expect(troubleSpot(tried("quit", 22169, [5000]))).toEqual({ a: 17669, b: 23669 });
+  });
+
+  it("stays a part, not half the song", () => {
+    const misses = Array.from({ length: 40 }, (_, i) => 10000 + i * 1000);
+    expect(troubleSpot(tried("fail", 50000, misses))).toEqual({ a: 31500, b: 51500 });
+  });
+
+  it("has nothing for a pass", () => {
+    expect(troubleSpot(tried("pass", 120000))).toBeNull();
+  });
+});
+
+describe("stopHeat / stopSpot", () => {
+  it("finds the second most tries end around", () => {
+    const tries = [tried("fail", 33656, [31000, 33000]), tried("fail", 34100, [32500]), tried("quit", 33200, [32000]), tried("fail", 61000), tried("pass", 120000)];
+    const heat = stopHeat(tries, 125);
+    expect(heat.indexOf(1)).toBe(33);
+    expect(heat[61]).toBeGreaterThan(0);
+    expect(heat[61]).toBeLessThan(0.5);
+    const spot = stopSpot(tries, 125)!;
+    expect(spot.stops).toBe(3);
+    expect(spot.section.a).toBeGreaterThan(28000);
+    expect(spot.section.a).toBeLessThan(33000);
+    expect(spot.section.b).toBeGreaterThan(34000);
+  });
+
+  it("takes tries a few seconds apart as the same place", () => {
+    const spot = stopSpot([tried("fail", 232400, [228500, 231900]), tried("fail", 235100, [233000, 234800]), tried("pass", 400000)], 410);
+    expect(spot?.stops).toBe(2);
+  });
+
+  it("needs two tries ending at the same place", () => {
+    expect(stopSpot([tried("fail", 33656), tried("fail", 70000)], 125)).toBeNull();
+    expect(stopSpot([tried("pass", 120000)], 125)).toBeNull();
+  });
+
+  it("counts tries by how they ended", () => {
+    expect(tally([tried("fail", 60200), tried("quit", 10000), tried("retry", 5000), tried("pass", 120000)])).toEqual({ tries: 4, pass: 1, fail: 1, left: 2, furthest: 1 });
+    expect(tally([tried("fail", 62401)]).furthest).toBeCloseTo(0.5);
+  });
+});
+
+describe("AttemptTracker misses", () => {
+  it("remembers when each miss came, up to the fail", () => {
+    const out = run([
+      ...start(),
+      { state: 2, live: 5000, play: { hits: 5 } },
+      { state: 2, live: 9000, play: { hits: 40, misses: 1 } },
+      { state: 2, live: 9150, play: { hits: 41, misses: 3 } },
+      { state: 2, live: 12000, play: { hits: 60, misses: 3 } },
+      { state: 2, live: 12500, play: { hits: 62, misses: 4, failed: true } },
+      { state: 2, live: 13000, play: { hits: 62, misses: 6, failed: true } },
+      { state: 5, live: 50000 },
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0].missesAt).toEqual([9000, 9150, 9150, 12500]);
+    expect(out[0].failedAt).toBe(12500);
   });
 });

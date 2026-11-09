@@ -537,12 +537,29 @@ export async function invoke<T>(cmd: string, args: Record<string, unknown> = {},
       return summary as T;
     }
     case "map_by_md5": {
-      // the fake tosu (tools/browser-preview/fake-tosu.mjs) sends "preview:<index>"
-      const n = /^preview:(\d+)$/.exec(String(args.md5));
-      if (!n) return null as T;
+      // the fake tosu (tools/browser-preview/fake-tosu.mjs) sends the map's index in hex, padded
+      // to an MD5's 32 characters with zeros in front
+      // (the preview's plays, previewPlays, have the map's own id as theirs)
+      const md5 = String(args.md5);
       const snap = (await fetch("/__fumen/snapshot").then((r) => r.json())) as { maps: { id: string }[] };
-      return (snap.maps[+n[1]]?.id ?? null) as T;
+      const n = /^0{26}([0-9a-f]{6})$/.exec(md5);
+      if (!n) return (snap.maps.some((m) => m.id === md5) ? md5 : null) as T;
+      return (snap.maps[parseInt(n[1], 16)]?.id ?? null) as T;
     }
+    // tries at maps (lib/attempts), kept in the preview's localStorage
+    case "save_attempt": {
+      const all = previewAttempts();
+      const id = Number(all[0]?.id ?? 0) + 1;
+      all.unshift({ ...(args.attempt as Record<string, unknown>), id });
+      localStorage.setItem("fumen-preview-attempts", JSON.stringify(all.slice(0, 2000)));
+      return id as T;
+    }
+    case "attempts_for_map":
+      return previewAttempts()
+        .filter((a) => a.md5 === args.md5)
+        .slice(0, (args.limit as number | undefined) ?? 200) as T;
+    case "attempts_since":
+      return previewAttempts().filter((a) => (a.started as number) >= (args.since as number)) as T;
     case "live_plays":
       return (await previewPlays()) as T;
     case "live_play":
@@ -595,6 +612,16 @@ async function lazerCollectionIds(id: string): Promise<string[]> {
 }
 
 type PreviewPlay = { id: string; map: string | null; accuracy: number } & Record<string, unknown>;
+
+/** the tries kept in the preview (newest first) */
+function previewAttempts(): Record<string, unknown>[] {
+  try {
+    return JSON.parse(localStorage.getItem("fumen-preview-attempts") ?? "[]");
+  } catch {
+    return [];
+  }
+}
+
 /** the cached replays as plays of the last few minutes, newest first */
 async function previewPlays(): Promise<PreviewPlay[]> {
   const [live, snap] = await Promise.all([fetch("/__fumen/live").then((r) => r.json()), fetch("/__fumen/snapshot").then((r) => r.json())]);

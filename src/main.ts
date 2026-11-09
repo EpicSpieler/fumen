@@ -41,6 +41,8 @@ import { follow } from "./lib/tosu-follow";
 import { launchHtml, renderLaunch } from "./ui/osu-launch";
 import { BrowseView } from "./views/browse";
 import { ScoreView } from "./views/score";
+import { TriesView } from "./views/tries";
+import type { Attempt } from "./lib/attempts";
 import { CareView } from "./views/care";
 import { PoolsView } from "./views/pools";
 import { MatchView } from "./views/match";
@@ -375,6 +377,10 @@ function show(route: Route): void {
       break;
     case "score":
       view = new ScoreView(route.id);
+      content.appendChild(view.el);
+      break;
+    case "tries":
+      view = new TriesView(route.md5, route.at);
       content.appendChild(view.el);
       break;
     case "settings":
@@ -959,23 +965,42 @@ function initLivePlays(): void {
 }
 
 /** Follow osu! (prefs followOsu): runs in the background; a map started in osu! opens the visualizer,
- * and leaving the map (or osu!) closes it again when it was the one that opened it. */
+ * and leaving the map (or osu!) closes it again when it was the one that opened it. Leaving a map
+ * you failed on (and didn't pass after) opens your tries at it, with the fail to practise. */
 function initFollow(): void {
   const apply = () => (store.prefs.followOsu ? follow.start() : follow.stop());
   apply();
   events.on("prefs", (p) => "followOsu" in p && apply());
   follow.bus.on("play", () => {
+    if (visit && visit.md5 !== follow.current) visit = null;
     if (fullscreenOpen()) return;
     openFullscreen("visual");
     followOpened = fullscreenOpen();
   });
-  follow.bus.on("leave", () => {
+  follow.bus.on("attempt", (a) => {
+    if (!visit || visit.md5 !== a.md5) visit = { md5: a.md5, tries: [] };
+    visit.tries.push(a);
+    if (active instanceof TriesView) active.add(a);
+  });
+  follow.bus.on("leave", (md5) => {
     if (followOpened && fullscreenOpen()) closeFullscreen();
     followOpened = false;
+    // the last try is kept a moment after osu! has left the map
+    window.setTimeout(() => {
+      const v = visit;
+      visit = null;
+      if (!v || !md5 || v.md5 !== md5 || v.tries.some((a) => a.outcome === "pass")) return;
+      const fail = [...v.tries].reverse().find((a) => a.outcome === "fail");
+      if (fail) go({ name: "tries", md5, at: fail.id });
+    }, LAST_TRY_WAIT);
   });
 }
 
 /** the visualizer is open because a map started in osu! (initFollow) */
 let followOpened = false;
+/** the tries at the map osu! is on, since it was started (initFollow) */
+let visit: { md5: string; tries: Attempt[] } | null = null;
+/** ms the tries page waits after leaving a map for its last try to be kept */
+const LAST_TRY_WAIT = 900;
 
 void boot();

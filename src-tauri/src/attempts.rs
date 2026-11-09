@@ -33,6 +33,9 @@ pub struct Attempt {
     pub score: i64,
     pub max_combo: i64,
     pub misses: i64,
+    /// when each miss came, song ms (up to the fail)
+    #[serde(default)]
+    pub misses_at: Vec<i64>,
     /// "HDDT", as tosu names them
     pub mods: String,
     pub rate: f64,
@@ -54,6 +57,8 @@ fn check(a: &Attempt) -> Result<()> {
         && a.rate > 0.0
         && a.rate <= 4.0
         && a.mods.len() <= 64
+        && a.misses_at.len() <= 5000
+        && a.misses_at.iter().all(|&t| (0..=86_400_000).contains(&t))
         && a.client.len() <= 16;
     if ok {
         Ok(())
@@ -67,8 +72,8 @@ pub fn store(conn: &Connection, a: &Attempt) -> Result<i64> {
     check(a)?;
     conn.execute(
         "INSERT INTO attempts (md5, mode, client, started, ended, outcome, reached, failed_at, first_object, last_object,
-            accuracy, score, max_combo, misses, mods, rate, pp, score_id, rank)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)",
+            accuracy, score, max_combo, misses, misses_at, mods, rate, pp, score_id, rank)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)",
         params![
             a.md5.to_ascii_lowercase(),
             a.mode,
@@ -84,6 +89,7 @@ pub fn store(conn: &Connection, a: &Attempt) -> Result<i64> {
             a.score,
             a.max_combo,
             a.misses,
+            serde_json::to_string(&a.misses_at)?,
             a.mods,
             a.rate,
             a.pp,
@@ -95,7 +101,7 @@ pub fn store(conn: &Connection, a: &Attempt) -> Result<i64> {
 }
 
 const COLUMNS: &str = "id, md5, mode, client, started, ended, outcome, reached, failed_at, first_object, last_object,
-    accuracy, score, max_combo, misses, mods, rate, pp, score_id, rank";
+    accuracy, score, max_combo, misses, misses_at, mods, rate, pp, score_id, rank";
 
 fn row(r: &rusqlite::Row) -> rusqlite::Result<Attempt> {
     Ok(Attempt {
@@ -114,11 +120,12 @@ fn row(r: &rusqlite::Row) -> rusqlite::Result<Attempt> {
         score: r.get(12)?,
         max_combo: r.get(13)?,
         misses: r.get(14)?,
-        mods: r.get(15)?,
-        rate: r.get(16)?,
-        pp: r.get(17)?,
-        score_id: r.get(18)?,
-        rank: r.get(19)?,
+        misses_at: serde_json::from_str(&r.get::<_, String>(15)?).unwrap_or_default(),
+        mods: r.get(16)?,
+        rate: r.get(17)?,
+        pp: r.get(18)?,
+        score_id: r.get(19)?,
+        rank: r.get(20)?,
     })
 }
 
@@ -157,6 +164,7 @@ mod tests {
             score: 120_000,
             max_combo: 242,
             misses: 12,
+            misses_at: vec![30_100, 31_900, 33_400],
             mods: "DT".into(),
             rate: 1.5,
             pp: Some(15.4),
@@ -177,6 +185,7 @@ mod tests {
         assert_eq!(got[0].outcome, "pass");
         assert_eq!(got[1].failed_at, Some(33_656));
         assert_eq!(got[1].md5, "0123456789abcdef0123456789abcdef");
+        assert_eq!(got[1].misses_at, vec![30_100, 31_900, 33_400]);
         assert_eq!(since(&conn, 2000).unwrap().len(), 1);
         drop(conn);
         let _ = std::fs::remove_dir_all(&dir);

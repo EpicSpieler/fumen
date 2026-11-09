@@ -2,16 +2,18 @@
 //   node tools/browser-preview/fake-tosu.mjs [port]
 // On another port than 24050 (when the real tosu runs), point the preview at it:
 //   localStorage["fumen-preview-tosu"] = "ws://127.0.0.1:<port>/websocket/v2"
-// It plays a script like a round of osu!lazer (the preview shim takes "preview:<index>" as the
-// MD5): map 9 in song select; started with DT, the menu's music running on for a moment before the
-// lead-in; a pause; the results; back to song select; map 5 started and quit; a map that isn't in
-// the library; then over again.
+// It plays a script like a round of osu!lazer (the MD5 is the preview map's index in hex, which
+// the preview shim takes back): map 9 in song select; started with DT, the menu's music running
+// on for a moment before the lead-in; a pause; the results; back to song select; map 5 started
+// and quit; a map that isn't in the library; map 13 failed, misses piling up before the fail;
+// then over again.
 import { createServer } from "node:http";
 import { createHash } from "node:crypto";
 
 const PORT = Number(process.argv[2]) || 24050;
 /** [seconds into the script, map index or null (not in the library), state (5 song select,
- * 2 play, 7 results), rate, paused, the song's place there (ms) or null to go on] */
+ * 2 play, 7 results), rate, paused, the song's place there (ms) or null to go on, and while
+ * playing: the misses so far and whether it's failed] */
 const SCRIPT = [
   [0, 9, 5, 1, false, 40000],
   [5, 9, 2, 1, false, null],
@@ -25,8 +27,14 @@ const SCRIPT = [
   [30.5, 5, 2, 1, false, 0],
   [35, 5, 5, 1, false, 30000],
   [38, null, 2, 1, false, 0],
+  [41, 13, 5, 1, false, 30000],
+  [44, 13, 2, 1, false, -1500, 0],
+  [50, 13, 2, 1, false, null, 2],
+  [53, 13, 2, 1, false, null, 5],
+  [55, 13, 2, 1, false, null, 8, true],
+  [58, 13, 5, 1, false, 30000],
 ];
-const LENGTH = 41;
+const LENGTH = 61;
 
 function frame(text) {
   const data = Buffer.from(text);
@@ -58,7 +66,7 @@ setInterval(() => {
     s = 0;
   }
   const step = SCRIPT.findLastIndex(([at]) => s >= at);
-  const [, map, state, rate, paused, from] = SCRIPT[step];
+  const [, map, state, rate, paused, from, misses = 0, failed = false] = SCRIPT[step];
   if (step !== lastStep) {
     if (from !== null) live = from;
     console.log(`${s.toFixed(1)}s  map ${map ?? "(not in library)"}  state ${state}  ${rate}×${paused ? "  paused" : ""}`);
@@ -69,13 +77,18 @@ setInterval(() => {
   const msg = JSON.stringify({
     state: { number: state, name: "" },
     beatmap: {
-      checksum: map === null ? "0123456789abcdef0123456789abcdef" : `preview:${map}`,
+      checksum: map === null ? "0123456789abcdef0123456789abcdef" : `${"0".repeat(26)}${map.toString(16).padStart(6, "0")}`,
       time: { live: Math.round(live), firstObject: 0, lastObject: 0, mp3Length: 0 },
       artist: "Fake",
       title: map === null ? "Not here" : `Preview map ${map}`,
       version: "Test",
     },
-    play: { mods: { number: 0, name: rate === 1.5 ? "DT" : "", array: rate === 1.5 ? [{ acronym: "DT" }] : [], rate } },
+    play: {
+      mods: { number: 0, name: rate === 1.5 ? "DT" : "", array: rate === 1.5 ? [{ acronym: "DT" }] : [], rate },
+      failed,
+      accuracy: misses ? 100 - misses * 0.6 : 100,
+      hits: state === 2 ? { 300: Math.max(0, Math.floor(live / 150)), 0: misses } : {},
+    },
   });
   for (const c of clients) c.write(frame(msg));
 }, 100);

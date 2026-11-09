@@ -4,7 +4,7 @@
  * sets you play most and haven't played in a while. Everything comes from the local library, the
  * replays lazer saved (live.ts) and the play history.
  */
-import { api, isTauri, onLivePlay, thumbUrl } from "../lib/api";
+import { api, onLivePlay, thumbUrl } from "../lib/api";
 import type { Attempt } from "../lib/attempts";
 import { follow } from "../lib/tosu-follow";
 import { displayArtist, displayTitle, duration, esc, num, pct, rankInfo, relativeTime } from "../lib/format";
@@ -89,7 +89,7 @@ export class HomeView {
 
   private async loadLive(): Promise<void> {
     this.live = await api.livePlays(Date.now() - WEEK).catch(() => []);
-    if (isTauri) this.tries = await api.attemptsSince(Date.now() - WEEK).catch(() => []);
+    this.tries = await api.attemptsSince(Date.now() - WEEK).catch(() => []);
     this.renderTile("continue");
     this.renderSession();
   }
