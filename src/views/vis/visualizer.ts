@@ -19,6 +19,8 @@ import { t } from "../../lib/i18n";
 import { DEFAULT_PREFS, setPrefs, store } from "../../lib/store";
 import type { VisPrefs, VisStyle } from "../../lib/types";
 import { Analysis } from "../../lib/vis/analysis";
+import type { FeelFrame } from "../../lib/vis/feel";
+import { follow } from "../../lib/tosu-follow";
 import { beatAt, inKiai } from "../../lib/vis/beat";
 import { css, hexRgb, mix, paletteOf, type Palette, type Rgb } from "../../lib/vis/palette";
 import { player } from "../../player";
@@ -62,6 +64,9 @@ export function setVis(patch: Partial<VisPrefs>): void {
 }
 
 const WHITE: Rgb = [255, 255, 255];
+/** seconds a full combo's and a pass's moment get before the score page comes */
+const FINALE_FC = 3.4;
+const FINALE_PASS = 2.2;
 const lookOf = (p: Palette): Look => ({ a: p.a, b: p.b, ink: mix(p.a, WHITE, 0.7) });
 
 /** Draws the cover over a w×h canvas, cropped to fit (`over` > 1 zooms in). */
@@ -152,6 +157,8 @@ export class Visualizer {
   /** the floor's drop on the last frame: it moves while the transport slides */
   private lastDrop = 0;
   private accent = { at: -Infinity, a: [139, 124, 255] as Rgb, b: [201, 193, 255] as Rgb };
+  /** the play in osu! on the last frame (Follow osu!) */
+  private play: FeelFrame | null = null;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -384,6 +391,9 @@ export class Visualizer {
     const b = this.look ? mix(this.look.b, goal.b, k) : goal.b;
     this.look = lookOf({ a, b });
     const settling = Math.abs(a[0] - goal.a[0]) + Math.abs(a[1] - goal.a[1]) + Math.abs(b[2] - goal.b[2]) > 1.5;
+    // the play in osu!, when Fumen plays its song along with it
+    const play = (o.react || o.stats) && follow.alongside ? follow.feel.frame(dt, now) : null;
+    this.play = play;
     if (this.artMix < 1) this.artMix = Math.min(1, this.artMix + dt / 0.5);
     // the transport sliding away while idle (Stage): what sits on the floor goes with it
     const dropping = box.drop !== this.lastDrop;
@@ -416,6 +426,7 @@ export class Visualizer {
       drop: box.drop,
       meta: this.meta,
       o,
+      play,
     };
     c.setTransform(dpr, 0, 0, dpr, 0, 0);
     c.save();
@@ -439,6 +450,14 @@ export class Visualizer {
         c.globalAlpha = 1;
       }
     }
-    return moving || (!!video && playing) || dropping || this.a.moving || this.kiai > 0.01 || this.flashT > 0.01 || this.artMix < 1 || !!this.fade || settling;
+    return moving || (!!video && playing) || dropping || this.a.moving || this.kiai > 0.01 || this.flashT > 0.01 || this.artMix < 1 || !!this.fade || settling || !!play;
+  }
+
+  /** ms a pass or full combo still has for its moment (what Stage plays over the results) before
+   * the score page takes over; 0 when there's none. */
+  finaleLeft(): number {
+    const end = this.play?.end;
+    if (!end || end.kind === "fail" || !this.o.react || this.o.style !== "stage") return 0;
+    return Math.max(0, (end.kind === "fc" ? FINALE_FC : FINALE_PASS) - end.t) * 1000;
   }
 }

@@ -36,7 +36,7 @@ import { newSinceLastRun } from "./lib/changelog";
 import { openChangelog } from "./views/changelog";
 import { getVersion } from "@tauri-apps/api/app";
 import { mountPlayerBar } from "./player";
-import { closeFullscreen, fullscreenOpen, openFullscreen } from "./views/fullscreen";
+import { closeFullscreen, finaleLeft, fullscreenOpen, openFullscreen } from "./views/fullscreen";
 import { follow } from "./lib/tosu-follow";
 import { launchHtml, renderLaunch } from "./ui/osu-launch";
 import { BrowseView } from "./views/browse";
@@ -948,11 +948,15 @@ function initLivePlays(): void {
   if (!isTauri) return;
   void onLivePlay((p) => {
     const show = () => go({ name: "score", id: p.id });
-    // playing along with osu!: a pass goes from the visualizer to its score
+    // playing along with osu!: a pass goes from the visualizer to its score (once a full combo has
+    // had its moment there)
     if (follow.connected && p.md5 === follow.current) {
-      closeFullscreen();
-      followOpened = false;
-      return show();
+      window.setTimeout(() => {
+        closeFullscreen();
+        followOpened = false;
+        show();
+      }, finaleLeft());
+      return;
     }
     if (store.prefs.scoreAuto && !document.hasFocus()) return show();
     const what = [p.title ?? t("A play"), p.version ? `[${p.version}]` : "", playMods(p)].filter(Boolean).join(" ");

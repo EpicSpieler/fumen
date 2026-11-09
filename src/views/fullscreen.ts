@@ -115,6 +115,11 @@ class Fullscreen {
     return this.isOpen;
   }
 
+  /** ms the visualizer's end-of-map moment still runs (0 off the visualizer) */
+  finaleLeft(): number {
+    return this.isOpen && this.mode === "visual" ? this.vis.finaleLeft() : 0;
+  }
+
   askPractice(mapId: string, pattern?: PatternName | null, section?: Section): void {
     this.mount();
     this.practice.ask({ mapId, pattern, section });
@@ -1178,6 +1183,11 @@ export function openFullscreen(mode?: FullscreenMode): void {
 
 export function fullscreenOpen(): boolean {
   return fullscreen.open;
+}
+
+/** ms the visualizer's end-of-map moment still runs (a full combo's), 0 when there's none. */
+export function finaleLeft(): number {
+  return fullscreen.finaleLeft();
 }
 
 export function closeFullscreen(): void {

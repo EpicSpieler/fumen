@@ -139,6 +139,9 @@ body.fs-test-no-blur *, body.fs-test-no-blur *::before, body.fs-test-no-blur *::
 .vp-switch b { font-size: var(--fs-13); font-weight: 600; }
 .vp-switch i { font-style: normal; font-size: var(--fs-12); color: var(--t3); }
 .vp-follow i { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* what answers the play hangs under Follow osu!, quieter while that's off */
+.vp-play { margin-top: -4px; padding-left: 12px; border-left: 1px solid rgba(255, 255, 255, .1); transition: opacity .15s var(--ease-std); }
+.fs-vis-panel:has(.vp-follow input:not(:checked)) .vp-play { opacity: .45; }
 .vp-reset { align-self: flex-start; }
 
 /* cinema: while the visualizer plays untouched, the bars and the cursor go */

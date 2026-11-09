@@ -63,6 +63,8 @@ export const DEFAULT_PREFS: UiPrefs = {
     title: true,
     video: true,
     offset: 0,
+    react: true,
+    stats: true,
   },
   defaultsApplied: false,
   pingNoticed: false,

@@ -12,7 +12,7 @@ import { esc } from "../../lib/format";
 
 type Num = "reaction" | "sensitivity" | "pulse" | "bars" | "blur" | "dim" | "offset";
 type Seg = "colors" | "flashes" | "background";
-type Flag = "kiai" | "mirror" | "title" | "video";
+type Flag = "kiai" | "mirror" | "title" | "video" | "react" | "stats";
 
 /** sliders: setting, label, min, max, scale to the input's numbers, ends, shown value */
 const RANGES: [Num, string, number, number, number, string, string, (v: number) => string][] = [
@@ -31,6 +31,12 @@ const SEGS: [Seg, string, [string, string][]][] = [
   ["background", t("Background"), [["blur", t("Blurred")], ["art", t("Cover")], ["black", t("Black")]]],
 ];
 
+/** what answers the play in osu! (shown under Follow osu!) */
+const PLAY_FLAGS: [Flag, string, string][] = [
+  ["react", t("Reacts to your play"), t("Misses, combo breaks, low health and how the map ends")],
+  ["stats", t("Live numbers"), t("Combo, accuracy and pp while you play")],
+];
+
 const FLAGS: [Flag, string, string][] = [
   ["kiai", t("Kiai effects"), t("Brighter and livelier in the beatmap's kiai")],
   ["mirror", t("Mirrored"), t("Bass in the middle, highs to both sides")],
@@ -44,6 +50,8 @@ export function panelHtml(): string {
       <div class="seg-pill vp-seg" data-vis="${key}" role="group" aria-label="${label}">${opts.map(([v, l]) => `<button type="button" data-v="${v}">${l}</button>`).join("")}</div>
       ${key === "colors" ? `<div class="vp-swatches" hidden>${OWN_COLORS.map((c, i) => `<button type="button" class="vp-swatch" data-own="${i}" aria-label="${c.name}" style="background:linear-gradient(135deg, ${c.a} 0 50%, ${c.b} 50% 100%)"></button>`).join("")}</div>` : ""}
     </div>`;
+  const flag = ([key, label, sub]: (typeof FLAGS)[number]) =>
+    `<label class="vp-switch"><span><b>${label}</b>${sub ? `<i>${sub}</i>` : ""}</span><input type="checkbox" role="switch" data-vis="${key}" /></label>`;
   const range = ([key, label, min, max, , lo, hi]: (typeof RANGES)[number]) => `
     <div class="vp-row vp-range"><div class="vp-range-top"><label class="fs-k" for="vp-${key}">${label}</label><b class="num" data-val="${key}"></b></div>
       <input type="range" id="vp-${key}" data-vis="${key}" min="${min}" max="${max}" step="1" />
@@ -55,15 +63,14 @@ export function panelHtml(): string {
     </div>
     <div class="vp-row"><span class="fs-k">${t("Style")}</span><span class="vp-style-host"></span></div>
     <label class="vp-switch vp-follow"><span><b>${t("Follow osu!")}</b><i class="vp-follow-status"></i></span><input type="checkbox" role="switch" data-follow /></label>
+    <div class="vp-switches vp-play">${PLAY_FLAGS.map(flag).join("")}</div>
     ${seg(SEGS[0])}
     ${RANGES.slice(0, 4).map(range).join("")}
     ${seg(SEGS[1])}
     ${seg(SEGS[2])}
     ${range(RANGES[4])}
     ${range(RANGES[5])}
-    <div class="vp-switches">${FLAGS.map(
-      ([key, label, sub]) => `<label class="vp-switch"><span><b>${label}</b>${sub ? `<i>${sub}</i>` : ""}</span><input type="checkbox" role="switch" data-vis="${key}" /></label>`,
-    ).join("")}</div>
+    <div class="vp-switches">${FLAGS.map(flag).join("")}</div>
     ${range(RANGES[6])}
     <button class="btn btn-sm vp-reset" type="button">${icon("refresh")}${t("Reset to defaults")}</button>`;
 }

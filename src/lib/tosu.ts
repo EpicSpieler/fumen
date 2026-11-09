@@ -29,6 +29,10 @@ export interface TosuNow {
   /** where the first and last notes are, ms */
   firstObject: number | null;
   lastObject: number | null;
+  /** the most combo the difficulty gives (as tosu counts it) */
+  mapCombo: number | null;
+  /** in one of the map's breaks */
+  inBreak: boolean;
   /** the results screen's score, once it shows one */
   results: TosuResults | null;
 }
@@ -41,8 +45,14 @@ export interface TosuPlay {
   maxCombo: number;
   combo: number;
   misses: number;
+  /** slider breaks (osu!): the combo goes without a miss */
+  breaks: number;
   /** judgements so far (a restart starts again at 0) */
   hits: number;
+  /** 0–100; null when tosu doesn't say (taiko's fills up from 0 instead of draining) */
+  health: number | null;
+  /** the grade it's on now ("SS", "S", "A" …) */
+  rank: string;
   pp: number | null;
   /** the mods by name, "HDDT" */
   mods: string;
@@ -103,7 +113,10 @@ export function readTosu(msg: unknown): TosuNow | null {
       maxCombo: num(obj(play.combo).max) ?? 0,
       combo: num(obj(play.combo).current) ?? 0,
       misses: num(hits["0"]) ?? 0,
+      breaks: num(hits.sliderBreaks) ?? 0,
       hits: judged,
+      health: num(obj(play.healthBar).normal),
+      rank: str(obj(play.rank).current),
       pp: num(obj(play.pp).current),
       mods: str(mods.name),
       modList: list.map((x) => str(x.acronym)).filter(Boolean),
@@ -112,6 +125,8 @@ export function readTosu(msg: unknown): TosuNow | null {
     },
     firstObject: num(time.firstObject),
     lastObject: num(time.lastObject),
+    mapCombo: num(obj(beatmap.stats).maxCombo),
+    inBreak: beatmap.isBreak === true,
     results:
       scoreId > 0
         ? {

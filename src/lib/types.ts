@@ -553,6 +553,10 @@ export interface VisPrefs {
   video: boolean;
   /** ms added to the song's time for the beat (later = positive) */
   offset: number;
+  /** answers the play in osu! (Follow osu!, lib/vis/feel): misses, combo, health, the end */
+  react: boolean;
+  /** combo, accuracy and pp of the play in osu! */
+  stats: boolean;
 }
 
 /** A play as it happened, read from the replay lazer saved (src-tauri/src/live.rs). */

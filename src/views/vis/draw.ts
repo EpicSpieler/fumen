@@ -2,6 +2,7 @@
  * look) and the pieces they share (the background, the cover with its crossfade, text). */
 import type { Analysis } from "../../lib/vis/analysis";
 import type { Beat } from "../../lib/vis/beat";
+import type { FeelFrame } from "../../lib/vis/feel";
 import { css, type Rgb } from "../../lib/vis/palette";
 import type { VisPrefs } from "../../lib/types";
 import { glowBox } from "../../ui/glow";
@@ -61,6 +62,8 @@ export interface VisFrame {
   drop: number;
   meta: { title: string; artist: string; version: string };
   o: VisPrefs;
+  /** the play in osu! it follows (Follow osu!, lib/vis/feel); null when there's none to answer */
+  play: FeelFrame | null;
 }
 
 export interface Style {

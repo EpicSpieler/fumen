@@ -19,6 +19,14 @@ describe("readTosu", () => {
     expect(readTosu(msg({ mods: { rate: 0 } }))).toMatchObject({ rate: 1 });
   });
 
+  it("reads how the play goes", () => {
+    const m = msg();
+    Object.assign(m.play, { combo: { current: 312, max: 340 }, hits: { 0: 2, 300: 400, sliderBreaks: 1 }, healthBar: { normal: 64.5, smooth: 60 }, rank: { current: "A" } });
+    Object.assign(m.beatmap, { isBreak: true, stats: { maxCombo: 2330 } });
+    expect(readTosu(m)).toMatchObject({ mapCombo: 2330, inBreak: true, play: { combo: 312, maxCombo: 340, misses: 2, breaks: 1, hits: 402, health: 64.5, rank: "A" } });
+    expect(readTosu(msg())).toMatchObject({ mapCombo: null, inBreak: false, play: { health: null, breaks: 0, rank: "" } });
+  });
+
   it("isn't fooled by other messages", () => {
     expect(readTosu(null)).toBeNull();
     expect(readTosu({ beatmap: {} })).toBeNull();

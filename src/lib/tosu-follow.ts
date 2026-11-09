@@ -7,6 +7,7 @@ import { api, isTauri } from "./api";
 import { startAnalyser } from "./eq";
 import { Emitter, store } from "./store";
 import { AttemptTracker, type Attempt } from "./attempts";
+import { Feel } from "./vis/feel";
 import { readTosu, StartHold, STATE, TosuClock, type TosuNow } from "./tosu";
 import { player } from "../player";
 
@@ -52,6 +53,8 @@ class Follow {
   readonly bus = new Emitter<{ status: FollowStatus; play: number; leave: string; attempt: Attempt }>();
   /** every try at a map (lib/attempts), kept as it ends */
   private tries = new AttemptTracker();
+  /** how the play goes, for the visualizer to answer (lib/vis/feel) */
+  readonly feel = new Feel();
   status: FollowStatus = { kind: "off" };
   private ws: WebSocket | null = null;
   private retry = 0;
@@ -94,6 +97,11 @@ class Follow {
   /** the difficulty osu! is on (MD5), "" without tosu */
   get current(): string {
     return this.now?.md5 ?? "";
+  }
+
+  /** Fumen's player has osu!'s map on (not something of your own) */
+  get alongside(): boolean {
+    return this.connected && !this.yielded && this.mapIdx !== null && player.now?.map === this.mapIdx;
   }
 
   start(): void {
@@ -144,7 +152,6 @@ class Follow {
     this.bus.emit("status", s);
   }
 
-  /** tosu is gone (or following stopped): Fumen's song stops and Fumen has its sound again. */
   /** Keeps tries that ended and tells about them (`attempt`). */
   private keep(done: Attempt[]): void {
     for (const a of done) {
@@ -155,8 +162,10 @@ class Follow {
     }
   }
 
+  /** tosu is gone (or following stopped): Fumen's song stops and Fumen has its sound again. */
   private lost(): void {
     this.keep(this.tries.end(Date.now()));
+    this.feel.stop();
     if (this.now && this.mapIdx !== null && player.now?.map === this.mapIdx && player.playing) player.audio.pause();
     if (this.now) this.bus.emit("leave", this.now.md5);
     this.hold.clear();
@@ -252,6 +261,7 @@ class Follow {
     } else if (this.mapIdx === null && now.md5 && performance.now() - this.lookedAt > LOOK_AGAIN) void this.find(now);
     this.clock.update(now.live, now.rate, performance.now());
     this.keep(this.tries.feed(now, Date.now()));
+    this.feel.feed(now, performance.now() / 1000);
     if (!now.md5 && this.status.kind !== "waiting") this.set({ kind: "waiting" });
   }
 

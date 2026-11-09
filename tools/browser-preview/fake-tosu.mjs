@@ -7,10 +7,15 @@
 // on for a moment before the lead-in; a pause; the results; back to song select; map 5 started
 // and quit; a map that isn't in the library; map 13 failed, misses piling up before the fail;
 // then over again.
+//   node tools/browser-preview/fake-tosu.mjs [port] --show [fc|fail|pass]
+// plays whole tries at map 13 instead, with the combo, misses, health and results the visualizer
+// answers (lib/vis/feel): a full combo, a fail on low health, a pass with a break; one of them
+// over and over, or all three in turn.
 import { createServer } from "node:http";
 import { createHash } from "node:crypto";
 
 const PORT = Number(process.argv[2]) || 24050;
+const SHOW = process.argv.includes("--show") ? (process.argv[process.argv.indexOf("--show") + 1] ?? "all") : null;
 /** [seconds into the script, map index or null (not in the library), state (5 song select,
  * 2 play, 7 results), rate, paused, the song's place there (ms) or null to go on, and while
  * playing: the misses so far and whether it's failed] */
@@ -38,7 +43,7 @@ const LENGTH = 61;
 
 function frame(text) {
   const data = Buffer.from(text);
-  const head = data.length < 126 ? Buffer.from([0x81, data.length]) : Buffer.from([0x81, 126, data.length >> 8, data.length & 255]);
+  const head = data.length < 126 ? Buffer.from([0x81, data.length]) : Buffer.from([0x81, 126, (data.length >> 8) & 255, data.length & 255]);
   return Buffer.concat([head, data]);
 }
 
@@ -54,12 +59,91 @@ server.on("upgrade", (req, socket) => {
   socket.on("data", (d) => (d[0] & 15) === 8 && socket.end());
 });
 
+/** A try at map 13 for --show: what tosu says `s` seconds into it; null once it's over. */
+function tryAt(kind, s) {
+  const MAP_MD5 = `${"0".repeat(26)}${(13).toString(16).padStart(6, "0")}`;
+  const LAST = kind === "fail" ? 60000 : 34000;
+  const PER_S = 30;
+  const msg = (state, live, play = {}, extra = {}) => ({
+    state: { number: state, name: "" },
+    game: { paused: !!play.paused },
+    beatmap: {
+      checksum: MAP_MD5,
+      isBreak: false,
+      time: { live: Math.round(live), firstObject: 0, lastObject: LAST, mp3Length: 205000 },
+      stats: { maxCombo: Math.round((LAST / 1000) * PER_S) },
+      artist: "Fake",
+      title: "Preview map 13",
+      version: "Test",
+    },
+    play: {
+      mode: { number: 3 },
+      failed: !!play.failed,
+      accuracy: play.accuracy ?? 100,
+      combo: { current: play.combo ?? 0, max: play.max ?? 0 },
+      hits: { 300: play.hits ?? 0, 0: play.misses ?? 0 },
+      healthBar: { normal: play.health ?? 100, smooth: play.health ?? 100 },
+      rank: { current: play.rank ?? "SS" },
+      pp: { current: play.pp ?? 0 },
+      mods: { number: 0, name: "", array: [], rate: 1 },
+    },
+    ...extra,
+  });
+  // song select with the menu's music, then loading (the music still running), then the lead-in
+  if (s < 2) return msg(5, 30000 + s * 1000);
+  if (s < 3) return msg(2, 30000 + s * 1000);
+  const live = -1500 + (s - 3) * 1000;
+  // misses (song s) and the health along the way
+  const missAt = { fc: [], pass: [8.2], fail: [6, 11, 12.6, 14.2, 15.4] }[kind];
+  const failAt = kind === "fail" ? 17 : Infinity;
+  const t = Math.min(live, failAt * 1000) / 1000;
+  const notes = Math.max(0, Math.floor(t * PER_S));
+  const misses = missAt.filter((m) => m <= t).length;
+  const lastMiss = Math.max(0, ...missAt.filter((m) => m <= t));
+  const combo = Math.max(0, notes - Math.floor(lastMiss * PER_S));
+  let max = 0;
+  for (let i = 0, from = 0; i <= missAt.length; i++) {
+    const to = i < missAt.length && missAt[i] <= t ? missAt[i] : t;
+    max = Math.max(max, Math.floor((to - from) * PER_S));
+    if (i < missAt.length && missAt[i] <= t) from = missAt[i];
+    else break;
+  }
+  const health = kind === "fail" ? (t < 9 ? 100 : Math.max(0, 100 - ((t - 9) / 8) * 100)) : Math.min(100, 97 - 3 * Math.sin(t));
+  const accuracy = Math.max(0, 99.4 - misses * 0.9 - t * 0.02);
+  const rank = accuracy >= 99.5 ? "SS" : accuracy >= 95 ? "S" : accuracy >= 90 ? "A" : "B";
+  const play = { combo, max, misses, hits: notes + misses, health, accuracy, rank, pp: Math.round(notes * 0.11) };
+  if (live / 1000 >= failAt) {
+    // the fail screen: paused, the time creeping on, then back to song select
+    if (s - 3 - 1.5 - failAt > 4) return null;
+    return msg(2, failAt * 1000 + (live - failAt * 1000) * 0.2, { ...play, failed: true, paused: true });
+  }
+  if (live < LAST + 1500) return msg(2, live, play);
+  // the results, then back to song select
+  if (live > LAST + 1500 + 5000) return null;
+  return msg(7, live, play, { resultsScreen: { scoreId: 9001, rank, accuracy, score: 812345, maxCombo: max, pp: { current: play.pp } } });
+}
+
+const ROUNDS = SHOW === "all" ? ["fc", "fail", "pass"] : SHOW ? [SHOW] : [];
+let round = 0;
+let roundAt = Date.now();
+
 let start = Date.now();
 let live = 40000;
 let lastStep = -1;
 let last = Date.now();
 setInterval(() => {
   const now = Date.now();
+  if (SHOW) {
+    let m = tryAt(ROUNDS[round % ROUNDS.length], (now - roundAt) / 1000);
+    if (!m) {
+      round++;
+      roundAt = now;
+      console.log(`try: ${ROUNDS[round % ROUNDS.length]}`);
+      m = tryAt(ROUNDS[round % ROUNDS.length], 0);
+    }
+    for (const c of clients) c.write(frame(JSON.stringify(m)));
+    return;
+  }
   let s = (now - start) / 1000;
   if (s >= LENGTH) {
     start = now;
