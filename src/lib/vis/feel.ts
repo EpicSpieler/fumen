@@ -76,8 +76,10 @@ const BREAK_MIN = 20;
 const RESTART_JUMP = 1000;
 /** ms past the last note before the breath is held (its hit window has gone by) */
 const LAST_NOTE_AFTER = 200;
-/** seconds the moments nobody drew are kept (the visualizer closed or hidden) */
+/** seconds the moments nobody drew are kept (the visualizer closed, hidden or slow): a late miss
+ * or milestone means nothing any more, a late start, break or end still does */
 const EVENT_KEEP = 0.5;
+const EVENT_KEEP_LONG = 2.5;
 /** seconds a combo break's sting stays before it fades */
 const GRIEF_HOLD = 0.35;
 
@@ -272,7 +274,7 @@ export class Feel {
     this.rest = glide(this.rest, playing && n!.inBreak ? 1 : 0, dt, 0.8);
     if (this.ending && this.phase === "idle") this.endK = Math.max(0, this.endK - dt / 0.8);
     if (this.ending && this.endK <= 0) this.ending = null;
-    const events = this.queue.filter((e) => now - e.at <= EVENT_KEEP).map(({ at: _, ...e }) => e as FeelEvent);
+    const events = this.queue.filter((e) => now - e.at <= (e.kind === "miss" || e.kind === "milestone" ? EVENT_KEEP : EVENT_KEEP_LONG)).map(({ at: _, ...e }) => e as FeelEvent);
     this.queue = [];
     const quiet = this.energy < 0.003 && this.grief < 0.003 && this.danger < 0.003 && this.breath < 0.003 && this.rest < 0.003;
     if (this.phase === "idle" && quiet && !this.ending && !events.length) return null;

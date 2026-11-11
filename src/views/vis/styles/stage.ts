@@ -101,9 +101,16 @@ export function stage(): Style {
   let burst = 0;
   let emit = 0;
   let ending: Ending | null = null;
+  /** the lamps' levels of the last moments, and at the end of a pass the ones they hold: osu!
+   * shows its results and Fumen's song stands, so they ring out like a last chord instead of
+   * dropping right then */
+  let heard = new Float32Array(0);
+  let chord: Float32Array | null = null;
+  let chordAt = 0;
+  let takeChord = false;
   let endK = 0;
   /** the combo's digits, from the units up: what shows, what it rolled from, when */
-  const odo: { cur: string; prev: string; at: number }[] = [];
+  const odo: { cur: string; prev: string; at: number; roll: number }[] = [];
   let comboPulse = -Infinity;
   let comboBack = -Infinity;
   const falling: { digits: string; at: number; spin: number }[] = [];
@@ -127,6 +134,7 @@ export function stage(): Style {
         case "start":
           // the show begins: the lamps come on from the left
           relight = { at: now, depth: 1, hold: 0.05, spread: 0.8 };
+          chord = null;
           ending = null;
           falling.length = 0;
           swell = 0;
@@ -165,6 +173,7 @@ export function stage(): Style {
           emit = 34;
           relight = null;
           comboPulse = now;
+          takeChord = true;
           if (!calm) cam.z.kick(-0.03);
           ending = { kind: "fc", at: now, text: t("Full combo").toLocaleUpperCase(), detail: [e.rank, pct(e.accuracy)].filter(Boolean).join("  ·  ") };
           break;
@@ -173,6 +182,7 @@ export function stage(): Style {
           swell = Math.max(swell, 0.5);
           burst += 14;
           relight = null;
+          takeChord = true;
           ending = { kind: "pass", at: now, text: t("Passed").toLocaleUpperCase(), detail: [e.rank, pct(e.accuracy)].filter(Boolean).join("  ·  ") };
           break;
         case "fail":
@@ -196,8 +206,11 @@ export function stage(): Style {
     const digits = String(Math.max(0, value));
     for (let j = 0; j < Math.max(digits.length, odo.length); j++) {
       const d = j < digits.length ? digits[digits.length - 1 - j] : "";
-      const cell = (odo[j] ??= { cur: "", prev: "", at: -Infinity });
+      const cell = (odo[j] ??= { cur: "", prev: "", at: -Infinity, roll: 0.16 });
       if (cell.cur !== d) {
+        // a digit that changes all the time (the units in a dense stream) rolls short or not at
+        // all: a constant roll reads as a blur; the slower ones roll in full
+        cell.roll = Math.min(0.16, Math.max(0, (now - cell.at) * 0.6 - 0.04));
         cell.prev = cell.cur;
         cell.cur = d;
         cell.at = now;
@@ -224,7 +237,7 @@ export function stage(): Style {
     c.textBaseline = "alphabetic";
     odo.forEach((cell, j) => {
       const cx = right - (j + 0.5) * cw;
-      const u = calm ? 1 : clamp01((now - cell.at) / 0.16);
+      const u = calm || cell.roll < 0.03 ? 1 : clamp01((now - cell.at) / cell.roll);
       const e = easeOut(u);
       c.fillStyle = ink;
       if (cell.cur) {
@@ -405,6 +418,15 @@ export function stage(): Style {
 
       // the strip of light along the box's floor: lamps, taller as the stage lights up
       const v = bars(f, m, f.o.mirror);
+      if (heard.length !== m) heard = new Float32Array(m);
+      for (let i = 0; i < m; i++) heard[i] = Math.max(v[i], heard[i] * Math.exp(-dt / 0.6));
+      if (takeChord) {
+        chord = Float32Array.from(heard);
+        chordAt = now;
+        takeChord = false;
+      }
+      if (chord && (chord.length !== m || now - chordAt > 9 || !react)) chord = null;
+      const ring = chord ? Math.exp(-(now - chordAt) / 2.8) : 0;
       const sw = w / m;
       const maxH = h * Math.min(0.125, 0.09 * (1 + 0.32 * light * lit + 0.5 * swell + 0.25 * breath));
       const top = mix(mix(f.look.ink, DANGER, 0.55 * danger), GREY, 0.85 * failK);
@@ -416,7 +438,9 @@ export function stage(): Style {
       const tops = new Float32Array(m);
       for (let i = 0; i < m; i++) {
         const p = powers[i];
-        const bh = Math.max(h * 0.003, v[i] * maxH) * (0.3 + 0.7 * p);
+        // a held chord breathes a little, each lamp in its own time
+        const lv = chord ? Math.max(v[i], chord[i] * ring * (0.86 + 0.14 * Math.sin(now * 2.1 + i * 0.37))) : v[i];
+        const bh = Math.max(h * 0.003, lv * maxH) * (0.3 + 0.7 * p);
         const lx = x + i * sw + sw * 0.15;
         tops[i] = bh;
         levels[Math.round(clamp01(p) * 5)].rect(lx, floor - bh, sw * 0.7, bh);
@@ -572,7 +596,7 @@ export function stage(): Style {
       }
       // still moving: the title gliding after the strip, the camera settling, light in the air
       const camMoving = !calm && !(cam.x.settled() && cam.y.settled(0.016 * failK) && cam.r.settled(-0.008 * failK));
-      return !settled || camMoving || !!P || motes.list.length > 0 || sweeps.length > 0 || falling.length > 0 || statsK > 0.005 || endK > 0.005 || bulb > 0.005 || swell > 0.01 || flick > 0;
+      return !settled || camMoving || !!P || motes.list.length > 0 || sweeps.length > 0 || falling.length > 0 || statsK > 0.005 || endK > 0.005 || ring > 0.01 || bulb > 0.005 || swell > 0.01 || flick > 0;
     },
   };
 }
