@@ -362,3 +362,100 @@ body.obs {
 .card-best { margin-top: 0.5rem; }
 .card-best > div { font-size: 0.95rem; font-weight: 600; color: var(--t1); }
 .card-best span { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--t3); }
+
+/* ══ the session card (src/obs/session.ts): for a break or the end, in the middle ══ */
+.ses-behind {
+  position: absolute;
+  inset: -4rem;
+  background: center / cover no-repeat;
+  filter: blur(2.6rem) brightness(0.45) saturate(1.1);
+  transform: scale(1.06);
+}
+.ses {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: min(74rem, calc(100vw - 8rem));
+  display: flex;
+  flex-direction: column;
+  gap: 1.9rem;
+  padding: 2.4rem 2.6rem 2.6rem;
+  border-radius: 1.4rem;
+  background: rgba(16, 16, 19, 0.95);
+  box-shadow: 0 1.75rem 4.5rem rgba(0, 0, 0, 0.55), 0 0.25rem 0.75rem rgba(0, 0, 0, 0.3);
+  transform: translate(-50%, -50%);
+  opacity: 0;
+  transition: opacity 0.3s var(--ease-std), transform 0.4s var(--ease-std);
+}
+.ses[data-state="in"] { opacity: 1; transition: opacity 0.45s var(--ease-std), transform 0.8s var(--ease-out); }
+.ses[data-state="out"] { transform: translate(-50%, calc(-50% + 1.5rem)) scale(0.985); }
+.ses-label { font-size: 0.8rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--t3); }
+.ses-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 2rem; }
+.ses-length { margin-top: 0.3rem; font-size: 2.6rem; font-weight: 650; line-height: 1.05; letter-spacing: -0.02em; color: #fff; }
+.ses-since { font-size: 1rem; font-weight: 550; color: var(--t2); }
+
+/* the numbers, rolling up one after another */
+.ses-stats { display: flex; gap: 0.75rem; }
+.ses-stat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 1rem 1.2rem;
+  border-radius: 0.9rem;
+  background: rgba(255, 255, 255, 0.045);
+  transform: translateY(0.75rem);
+  opacity: 0;
+  transition: opacity 0.3s var(--ease-std), transform 0.3s var(--ease-std);
+}
+.ses[data-state="in"] .ses-stat { transform: none; opacity: 1; transition: opacity 0.5s var(--ease-std) calc(0.2s + var(--i) * 0.07s), transform 0.7s var(--ease-out) calc(0.2s + var(--i) * 0.07s); }
+.ses-num { font-size: 2.6rem; font-weight: 650; line-height: 1; letter-spacing: -0.02em; color: #fff; }
+.ses-stat > span { font-size: 0.85rem; font-weight: 600; color: var(--t2); }
+.ses-stat[data-stat="passes"] .ses-num { color: var(--accent-ink); }
+
+/* every try on one line, drawn from the left */
+.ses-line-box { height: 5.5rem; border-bottom: 1px solid rgba(255, 255, 255, 0.1); }
+.ses-line {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 100%;
+  clip-path: inset(0 100% 0 0);
+  transition: clip-path 0.3s var(--ease-std);
+}
+.ses[data-state="in"] .ses-line { clip-path: inset(-1rem 0 0 0); transition: clip-path 1.6s cubic-bezier(0.45, 0.05, 0.25, 1) 0.45s; }
+.ses-line i { flex: 1 1 0; min-width: 1px; max-width: 1.1rem; height: calc(var(--h) * 100%); border-radius: 2px 2px 0 0; background: rgba(255, 255, 255, 0.28); }
+.ses-line i.fail { background: color-mix(in srgb, var(--danger) 55%, rgba(255, 255, 255, 0.25)); }
+.ses-line i.pass { background: var(--accent); }
+.ses-line i.moved { margin-left: 0.5rem; }
+
+/* the best plays and the costly map */
+.ses-cols { display: grid; grid-template-columns: 1.4fr 1fr; gap: 2.2rem; }
+.ses-plays, .ses-map { display: flex; flex-direction: column; gap: 0.7rem; margin-top: 0.8rem; }
+.ses-play {
+  display: grid;
+  grid-template-columns: 3.4rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.9rem;
+  transform: translateX(-1.25rem);
+  opacity: 0;
+  transition: opacity 0.3s var(--ease-std), transform 0.3s var(--ease-std);
+}
+.ses[data-state="in"] .ses-play { transform: none; opacity: 1; transition: opacity 0.5s var(--ease-std) calc(0.9s + var(--i) * 0.1s), transform 0.75s var(--ease-out) calc(0.9s + var(--i) * 0.1s); }
+.ses-cover { width: 3.4rem; height: 3.4rem; border-radius: 0.55rem; overflow: hidden; background: var(--placeholder-gradient); }
+.ses-cover img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.ses-play-title { font-size: 1.15rem; font-weight: 650; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ses-play-sub { font-size: 0.9rem; font-weight: 500; color: var(--t2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ses-play-score { display: flex; align-items: baseline; gap: 0.75rem; font-size: 1rem; font-weight: 600; color: var(--t1); white-space: nowrap; }
+.ses-rank { font-size: 1.5rem; font-weight: 700; }
+.ses-badges { grid-column: 2 / -1; display: flex; gap: 0.4rem; margin-top: -0.35rem; }
+.ses-badges:empty { display: none; }
+.ses-badge { padding: 0.1rem 0.55rem; border-radius: 999px; background: rgba(255, 255, 255, 0.08); font-size: 0.75rem; font-weight: 700; letter-spacing: 0.06em; color: var(--t1); }
+.ses-badge.accent { background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--accent-ink); }
+.ses-cost { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.35rem 1rem; margin-top: 0.2rem; font-size: 1rem; font-weight: 600; color: var(--t2); }
+.ses-cost b { font-weight: 650; color: var(--t1); }
+.ses-cost b.accent { color: var(--accent-ink); }
+.ses-none { margin: 0; font-size: 1rem; color: var(--t3); }
+.ses-empty { display: none; font-size: 1.2rem; font-weight: 550; color: var(--t2); }
+.ses.empty .ses-empty { display: block; }
+.ses.empty :is(.ses-line-box, .ses-cols) { display: none; }

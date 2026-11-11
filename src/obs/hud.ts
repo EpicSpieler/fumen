@@ -34,22 +34,8 @@ import { artUrl, editing, link, parts } from "./link";
 import { inMap, live } from "./live";
 import { accentFrom } from "./look";
 import { Odometer } from "./odometer";
+import { RANKS } from "./ranks";
 import { mountVisualizer } from "./stage";
-
-/** what a rank from tosu is called and its colour (osu!'s) */
-const RANKS: Record<string, { label: string; color: string }> = {
-  XH: { label: "SS", color: "#e4e4ee" },
-  SSH: { label: "SS", color: "#e4e4ee" },
-  X: { label: "SS", color: "#ff5fc8" },
-  SS: { label: "SS", color: "#ff5fc8" },
-  SH: { label: "S", color: "#d4e2e8" },
-  S: { label: "S", color: "#2fd6e3" },
-  A: { label: "A", color: "#9be33a" },
-  B: { label: "B", color: "#f0bf3c" },
-  C: { label: "C", color: "#ff9b6a" },
-  D: { label: "D", color: "#ff6b6b" },
-  F: { label: "F", color: "#ff6b6b" },
-};
 
 /** what Feel says while nothing goes on */
 const IDLE: FeelFrame = {

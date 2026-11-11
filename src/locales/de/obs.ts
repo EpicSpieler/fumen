@@ -60,6 +60,21 @@ export const obs: Record<string, string> = {
   Pass: "Pass",
   Fail: "Fail",
 
+  // the session card
+  "{h} h {m} min": "{h} Std. {m} Min.",
+  "{m} min": "{m} Min.",
+  "since {time}": "seit {time}",
+  Passes: "Passes",
+  Fails: "Fails",
+  Clips: "Clips",
+  "Best plays": "Beste Plays",
+  "Cost the most": "Hat am meisten gekostet",
+  "Nothing played yet": "Noch nichts gespielt",
+  "No pass yet": "Noch kein Pass",
+  "{n} fail|{n} fails": "{n} Fail|{n} Fails",
+  "Passed in the end": "Am Ende geschafft",
+  "Not passed yet": "Noch nicht geschafft",
+
   // the song card
   "mapped by {name}": "gemappt von {name}",
   "Your best": "Deine Bestleistung",
