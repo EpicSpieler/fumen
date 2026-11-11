@@ -1,7 +1,8 @@
 //! `fumen://` — serves osu! files to the webview.
 //!
 //!   fumen://localhost/file/<key>             raw file from lazer's store or stable's Songs folder
-//!                                            (Range-capable, for audio)
+//!                                            (Range-capable, for audio), or a video rewrapped as
+//!                                            .mp4 (remux.rs, key mp4-…)
 //!   fumen://localhost/thumb/<width>/<key>    cached JPEG thumbnail of an image file
 //!   fumen://localhost/skin/<skin>/<file>       lazer's built-in skin textures and hit sounds (see skins.rs)
 //!
@@ -14,7 +15,7 @@ use std::path::Path;
 use tauri::http::{header, Request, Response, StatusCode};
 use tauri::{AppHandle, Manager};
 
-use crate::{skins, thumbs};
+use crate::{remux, skins, thumbs};
 use crate::AppState;
 
 /// Open-ended range requests (`bytes=N-`) are answered in chunks so playback starts fast.
@@ -38,7 +39,7 @@ fn route(app: &AppHandle, req: &Request<Vec<u8>>) -> Result<Response<Vec<u8>>, S
 
     match parts.as_slice() {
         ["file", hash] => {
-            let path = files.path(hash).ok_or(StatusCode::NOT_FOUND)?;
+            let path = remux::served(state.cache_dir(), hash).or_else(|| files.path(hash)).ok_or(StatusCode::NOT_FOUND)?;
             serve_file(&path, req)
         }
         ["thumb", width, hash] => {

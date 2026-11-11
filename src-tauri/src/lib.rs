@@ -17,6 +17,7 @@ mod lazer_import;
 mod lazer_linux;
 mod launch;
 mod video;
+mod remux;
 mod matches;
 mod mirror_search;
 mod mma;
@@ -760,13 +761,25 @@ async fn get_hitsounds(app: AppHandle, id: String) -> Result<hitsounds::Sounds> 
 }
 
 /// A library difficulty's background video (its key and the song ms it starts at), if it has one.
+/// An .avi or .flv is rewrapped as an .mp4 first (remux.rs), under a key of its own; one that
+/// can't be (not H.264) counts as none, the webview couldn't play it anyway.
 #[tauri::command]
 async fn map_video(app: AppHandle, id: String) -> Result<Option<video::Video>> {
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
         let files = state.files();
-        let conn = state.db();
-        video::for_map(&conn, &files, &id)
+        let found = {
+            let conn = state.db();
+            video::for_map(&conn, &files, &id)?
+        };
+        let Some(v) = found else { return Ok(None) };
+        let Some(path) = files.path(&v.file) else { return Ok(Some(v)) };
+        let mut head = [0u8; 12];
+        let n = std::fs::File::open(&path).and_then(|mut f| std::io::Read::read(&mut f, &mut head)).unwrap_or(0);
+        if !remux::wants(&head[..n]) {
+            return Ok(Some(v));
+        }
+        Ok(remux::mp4_for(state.cache_dir(), &v.file, &path).map(|file| video::Video { file, ..v }))
     })
     .await
     .map_err(|e| Error::known("internal", e.to_string()))?
