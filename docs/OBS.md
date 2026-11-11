@@ -111,3 +111,34 @@ Kodama as Fumen has it, adjusted for OBS:
 Tests for the logic (obs-websocket's handshake and password hash, scene rules, clip triggers, the
 spectrum, the session summary), Rust tests for the server, and a fake OBS next to the fake tosu in
 `tools/browser-preview/` to try scenes and clips without OBS.
+
+## Status (2026-11-11)
+
+All six pieces are built on `1.4` (3d8f188 to af87d93) and tried against the fake tosu and the
+fake OBS in the browser preview. Open: the review by eye (frames, German texts) and a run with the
+real OBS and osu!.
+
+How they turned out, where it differs from the plan above:
+
+- **Live overlay.** Every part (progress, title, stars, combo, health, accuracy, pp, the lines, the
+  lamps) is pinned on its own and placed in Fumen: Settings, Stream & OBS, Arrange, over a pasted
+  screenshot of the skin while a made-up try plays. The part where most tries ended is a flag on
+  the progress line with how many ended there; it lights up 6 s before, gets a tick when you're
+  through, and counts one more on a fail there. "Further than ever" rides along the line. After
+  the end: "Ended here N times now", "First pass after N tries", "New best, +N pp", "Your best
+  stays N". osu!'s fail screen counts as the end (tosu still says playing).
+- **Scenes.** A state has to hold before it switches: playing 0.35 s, results 0.6 s, song select
+  0.9 s, osu! closed 3 s. Only from one of the four scenes set; a retry stays in playing.
+- **Clips.** Close pass: health under 10 % at some point, or the first pass after 3 or more fails.
+  Saved 3 s after the try is kept, once per try. Named "Title [Difficulty] Full combo 2026-11-11
+  21-05-33" if wanted; the chapter marker only while OBS records. The password is sealed like the
+  osu! login (`obs_password_set` / `obs_password_get`); clips are renamed and shown only inside
+  the folder OBS wrote them to (`src-tauri/src/clips.rs`).
+- **Session card.** "Show now" sends the session as it is that moment. A map the library doesn't
+  know (played in stable, downloaded since the last look at lazer) goes by the name osu! gave it
+  while Fumen ran, or stays off the card.
+- **Tests.** The obs-websocket client is TypeScript (`src/lib/obs-ws.ts`), so its handshake and
+  password hash are tested there (`src/lib/obs-rules.test.ts`), with the scene rules and clip
+  triggers; tries, bests and the session start in `src/lib/obs-parts.test.ts`; the spectrum in
+  `src/obs/fft.test.ts`; the server in `overlay.rs`; clip files in `clips.rs`. The fake OBS:
+  `node tools/browser-preview/fake-obs.mjs 4466 --password hunter2 [--no-replay]`.
