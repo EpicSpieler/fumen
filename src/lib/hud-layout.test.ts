@@ -3,15 +3,14 @@ import { DEFAULT_HUD, guides, hudPrefs, MARGIN_X, pinsFor, placeAt, rectOf, snap
 
 describe("hud layout", () => {
   it("keeps the defaults as they are", () => {
-    expect(hudPrefs({ layout: DEFAULT_HUD, react: true })).toEqual({ layout: DEFAULT_HUD, react: true });
+    expect(hudPrefs({ layout: DEFAULT_HUD })).toEqual({ layout: DEFAULT_HUD });
   });
 
   it("fills in what's missing and mends what's broken", () => {
-    const p = hudPrefs({ layout: { pp: { x: 4, size: 99, ax: 0.3, on: false }, combo: "no" }, react: "yes" });
+    const p = hudPrefs({ layout: { pp: { x: 4, size: 99, ax: 0.3, on: false }, combo: "no" } });
     expect(p.layout.pp).toEqual({ ...DEFAULT_HUD.pp, x: 1, size: SIZE_MAX, on: false });
     expect(p.layout.combo).toEqual(DEFAULT_HUD.combo);
     expect(p.layout.vis).toEqual(DEFAULT_HUD.vis);
-    expect(p.react).toBe(true);
     expect(hudPrefs(null).layout).toEqual(DEFAULT_HUD);
   });
 

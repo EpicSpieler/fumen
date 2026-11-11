@@ -137,13 +137,6 @@ export function openHudEditor(): void {
             </div>
             <p class="he-note">${t("Take a screenshot in osu! and paste it here with Ctrl+V, or pick the file. It's only for arranging and stays on this PC.")}</p>
           </section>
-          <section class="he-opt">
-            <div class="setting-text">
-              <div class="setting-title">${t("The screen answers")}</div>
-              <div class="setting-desc">${t("Low health closes in from the edges, a full combo sweeps light across.")}</div>
-            </div>
-            <input type="checkbox" role="switch" data-opt="react" aria-label="${t("The screen answers")}" ${look.react ? "checked" : ""} />
-          </section>
         </aside>
       </div>
     </div>`;
@@ -497,11 +490,7 @@ export function openHudEditor(): void {
   });
   bd.addEventListener("change", (e) => {
     const el = e.target as HTMLInputElement;
-    if (el.dataset.opt === "react") {
-      look = { ...look, react: el.checked };
-      tell();
-      save(true);
-    } else if (el === fileInput && el.files?.[0]) {
+    if (el === fileInput && el.files?.[0]) {
       void takeShot(el.files[0]);
       el.value = "";
     }

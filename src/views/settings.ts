@@ -340,7 +340,7 @@ export class SettingsView {
         ${actions ? `<div class="setting-actions">${actions}</div>` : ""}
       </div>`;
     el.innerHTML = [
-      source(t("Visualizer"), t("The visualizer as in Fumen, answering the play. With ?bg=none at the end of the address the game shows through it."), "stage"),
+      source(t("Visualizer"), t("The visualizer as in Fumen, answering the play, while a map runs. With ?bg=none at the end of the address the game shows through it, with ?idle=1 it stays on in song select and for Fumen's player."), "stage"),
       source(
         t("Live overlay"),
         t("Over the game: progress, combo, accuracy, pp, health, and what your tries before mean. Each part goes where your skin leaves room."),

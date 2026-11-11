@@ -45,8 +45,6 @@ export type HudLayout = Record<HudPartId, HudPart>;
 
 export interface HudPrefs {
   layout: HudLayout;
-  /** the whole screen answers the play: low health closes in from the edges, a full combo sweeps over it */
-  react: boolean;
 }
 
 /** A place on the source, 0–1 of its width and height. */
@@ -80,14 +78,14 @@ export const DEFAULT_HUD: HudLayout = {
   vis: part(0, 1, 0, 1, { w: 1, h: 0.135 }),
 };
 
-export const DEFAULT_HUD_PREFS: HudPrefs = { layout: DEFAULT_HUD, react: true };
+export const DEFAULT_HUD_PREFS: HudPrefs = { layout: DEFAULT_HUD };
 
 const num = (v: unknown, lo: number, hi: number, d: number): number => (typeof v === "number" && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d);
 const pin = (v: unknown, d: Pin): Pin => (v === 0 || v === 0.5 || v === 1 ? v : d);
 
 /** The overlay's settings from whatever was stored (missing or broken parts as they start). */
 export function hudPrefs(v: unknown): HudPrefs {
-  const o = (v && typeof v === "object" ? v : {}) as Partial<{ layout: Partial<Record<HudPartId, Partial<HudPart>>>; react: unknown }>;
+  const o = (v && typeof v === "object" ? v : {}) as Partial<{ layout: Partial<Record<HudPartId, Partial<HudPart>>> }>;
   const given = (o.layout && typeof o.layout === "object" ? o.layout : {}) as Partial<Record<HudPartId, Partial<HudPart>>>;
   const layout = {} as HudLayout;
   for (const { id } of HUD_PARTS) {
@@ -104,7 +102,7 @@ export function hudPrefs(v: unknown): HudPrefs {
       h: num(g.h, 0.02, 1, d.h),
     };
   }
-  return { layout, react: typeof o.react === "boolean" ? o.react : DEFAULT_HUD_PREFS.react };
+  return { layout };
 }
 
 /** Where a part is, from its own measured size (words) or its set one (lines' width, areas). */

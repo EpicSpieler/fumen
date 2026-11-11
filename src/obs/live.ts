@@ -7,6 +7,10 @@ import { Feel } from "../lib/vis/feel";
 
 /** ms between tries while tosu isn't there */
 const RETRY = 2000;
+/** messages in a row with the song moving on before a map counts as begun (not still loading) */
+const BEGIN_RUNS = 2;
+/** ms osu!'s time has to move on per message for that (a loading screen's time creeps, if at all) */
+const BEGIN_STEP = 30;
 
 /** in a map: playing it or on its results */
 export const inMap = (state: number): boolean => state === STATE.play || state === STATE.resultScreen;
@@ -17,8 +21,12 @@ class Live {
   readonly clock = new TosuClock();
   private hold = new StartHold();
   /** `msg`: every message; `map`: osu! is on another difficulty (its MD5); `start`: a map began;
-   * `leave`: out of a map (the MD5 left); `gone`: tosu went */
-  readonly bus = new Emitter<{ msg: TosuNow; map: string; start: TosuNow; leave: string; gone: void }>();
+   * `begin`: the map really runs (past the loading screen, the song moving); `leave`: out of a
+   * map (the MD5 left); `gone`: tosu went */
+  readonly bus = new Emitter<{ msg: TosuNow; map: string; start: TosuNow; begin: TosuNow; leave: string; gone: void }>();
+  /** the map being played really runs: past its loading screen (until it's left) */
+  begun = false;
+  private runs = 0;
   private url = "";
   private ws: WebSocket | null = null;
   private retry = 0;
@@ -69,6 +77,8 @@ class Live {
     if (!this.now) return;
     if (inMap(this.now.state)) this.bus.emit("leave", this.now.md5);
     this.now = null;
+    this.begun = false;
+    this.runs = 0;
     this.feel.stop();
     this.clock.reset();
     this.hold.clear();
@@ -96,6 +106,18 @@ class Live {
     } else if (now.state !== STATE.play) this.hold.clear();
     else this.hold.update(now.live, t);
     if (before && inMap(before.state) && !inMap(now.state)) this.bus.emit("leave", before.md5);
+    // the map begins once its song moves on for a few messages, not while it loads
+    if (now.state !== STATE.play) {
+      this.begun = false;
+      this.runs = 0;
+    } else if (!this.begun) {
+      const moving = before?.state === STATE.play && before.md5 === now.md5 && !now.paused && !this.hold.on && now.live - before.live >= BEGIN_STEP;
+      this.runs = moving ? this.runs + 1 : 0;
+      if (this.runs >= BEGIN_RUNS) {
+        this.begun = true;
+        this.bus.emit("begin", now);
+      }
+    }
     this.clock.update(now.live, now.rate, t);
     this.feel.feed(now, t / 1000);
     this.bus.emit("msg", now);

@@ -89,10 +89,12 @@ function tryAt(kind, s) {
     },
     ...extra,
   });
-  // song select with the menu's music, then loading (the music still running), then the lead-in
+  // song select with the menu's music, then loading: the music still running, then back at the
+  // beginning and still for a while, paused flickering (as lazer does), then the lead-in
   if (s < 2) return msg(5, 30000 + s * 1000);
   if (s < 3) return msg(2, 30000 + s * 1000);
-  const live = -1500 + (s - 3) * 1000;
+  if (s < 5) return msg(2, -1500, { paused: Math.floor(s * 4) % 2 === 0 });
+  const live = -1500 + (s - 5) * 1000;
   // misses (song s) and the health along the way
   const missAt = { fc: [], pass: [8.2], fail: [6, 11, 12.6, 14.2, 15.4] }[kind];
   const failAt = kind === "fail" ? 17 : Infinity;

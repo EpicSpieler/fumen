@@ -8,6 +8,9 @@
  * as they're uncovered line by line; the cover is uncovered from the left. It holds still, then
  * goes the way it came, quicker.
  *
+ * It comes when the map really runs (not on its loading screen). Playing the same map again comes
+ * without it, unless it was left for a while (AGAIN).
+ *
  * Address options: `delay` (seconds after the start, default 1), `hold` (seconds shown, default 7).
  * The source: the stream's size (1920 × 1080); the card sits on the left, a little below the middle. */
 import { bpm, duration, MODE_SHORT, pct, srColor, srInk } from "../lib/format";
@@ -15,6 +18,7 @@ import { t } from "../lib/i18n";
 import type { ObsMap } from "../lib/obs-parts";
 import { reduceMotion } from "../ui/controls";
 import { artUrl, link, params, parts } from "./link";
+import { STATE } from "../lib/tosu";
 import { live } from "./live";
 import { accentFrom } from "./look";
 
@@ -24,6 +28,11 @@ const num = (k: string, def: number, lo: number, hi: number): number => {
 };
 
 const esc = (s: string): string => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
+
+/** ms out of a map after which the same one brings the card again */
+const AGAIN = 10_000;
+/** ms the card waits for what Fumen's window knows of the map before it goes with osu!'s words */
+const WAIT_MAP = 4000;
 
 const RANK: Record<string, string> = { XH: "SS", SSH: "SS", X: "SS", SS: "SS", SH: "S", S: "S", A: "A", B: "B", C: "C", D: "D" };
 
@@ -87,15 +96,25 @@ export function start(): void {
     requestAnimationFrame(step);
   };
 
+  /** what osu! itself says of the map, when Fumen's window doesn't (yet) */
+  const fromOsu = (md5: string): ObsMap | null => {
+    const now = live.now;
+    if (!now || now.md5 !== md5 || !now.title) return null;
+    const none = { sr: null, srDt: null, srHt: null, bpm: 0, length: 0, dan: null, patterns: [], best: null, beats: [], kiai: [] };
+    return { md5, id: null, title: now.title, artist: now.artist, version: now.version, creator: "", mode: now.mode, keys: null, bg: null, audio: null, ...none };
+  };
+
   const show = (md5: string, wait = delay): void => {
     clear();
     const at = performance.now();
     const go = (): void => {
       const now = live.now;
-      const m = parts.map?.md5 === md5 ? parts.map : null;
+      // out of the map already: nothing to show
+      if (wait > 0 && now?.md5 !== md5) return;
       // what the window knows about it may come a moment after the start
+      const m = (parts.map?.md5 === md5 ? parts.map : null) ?? (performance.now() - at > wait + WAIT_MAP ? fromOsu(md5) : null);
       if (!m) {
-        if (performance.now() - at < wait + 3000) timers.push(window.setTimeout(go, 150));
+        timers.push(window.setTimeout(go, 150));
         return;
       }
       const stars = fill(m, now?.md5 === md5 ? now.rate : 1);
@@ -106,10 +125,15 @@ export function start(): void {
     timers.push(window.setTimeout(go, wait));
   };
 
-  live.bus.on("start", (now) => {
-    if (now.md5 === shown) return;
+  /** when the map last ran or showed its results */
+  let lastIn = -Infinity;
+  live.bus.on("msg", (now) => {
+    if (live.begun || now.state === STATE.resultScreen) lastIn = performance.now();
+  });
+  live.bus.on("begin", (now) => {
+    const again = now.md5 === shown && performance.now() - lastIn < AGAIN;
     shown = now.md5;
-    show(now.md5);
+    if (!again) show(now.md5);
   });
   // out of the map before the card has gone: it goes too
   live.bus.on("leave", () => {

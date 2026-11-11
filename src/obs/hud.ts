@@ -9,12 +9,14 @@
  * says so at the head of the line. The end says what it means against the tries before (Fumen's
  * lines): a first pass after N, a new best and what it gained, the same place again.
  *
- * Under it all the screen answers like Stage does (it is Stage, see-through, without words:
- * ./stage's mountVisualizer): the lamps light up with the combo and go out after a break, a
- * milestone runs along them, low health closes in from the edges with the song's beat, a full
- * combo sweeps light over everything. The numbers answer too: a miss makes the combo flicker, a
+ * Under it the lamps answer like Stage's do (it is Stage, see-through, without words and without
+ * anything across the whole screen: ./stage's mountVisualizer): they light up with the combo and go
+ * out after a break, a milestone runs along them; only while a map runs. The numbers answer too: a miss makes the combo flicker, a
  * combo break drops it away in red and shakes it by how much it hurt, a milestone pops it, a pass
  * turns it into the rank, a fail greys everything out.
+ *
+ * It all comes in when the map really runs (not on its loading screen); on osu!'s results the
+ * title, the stars, the progress line and the health go, osu! shows the map itself there.
  *
  * The source: the stream's size (1920 × 1080), over the game or over where the game sits. */
 import { pct, srColor, srInk } from "../lib/format";
@@ -190,7 +192,8 @@ export function start(): void {
     clear: true,
     lamps: () => look.layout.vis.on,
     strip,
-    screen: () => look.react,
+    // the whole screen stays the game's: no sweeps, no closing dark (Stage keeps them)
+    screen: () => false,
     fumen: false,
     prefs,
     play: () => feel,
@@ -382,9 +385,13 @@ export function start(): void {
     for (const e of f.events) onEvent(e, f);
     // osu!'s fail screen is still "playing" to tosu: here it's the end
     const failing = !!now && endKind === "fail" && now.state === STATE.play;
-    const playing = !!now && !failing && (f.phase === "play" || f.phase === "hold") && now.state === STATE.play;
+    // not on the loading screen: once the song runs (a retry keeps it in)
+    const playing = !!now && !failing && live.begun && (f.phase === "play" || f.phase === "hold") && now.state === STATE.play;
     const ended = !!now && (failing || (f.phase === "end" && inMap(now.state)));
     const phase = !now ? "off" : playing ? "play" : ended ? "end" : "select";
+    hud.toggleAttribute("data-results", phase === "end" && now?.state === STATE.resultScreen);
+    // the lamps only while a map runs or just ended (being arranged: always)
+    canvas.classList.toggle("off", !editing && phase !== "play" && phase !== "end");
     if (hud.dataset.phase !== phase) {
       if (phase === "play" && hud.dataset.phase !== "end") begin();
       // out of the map: the end's look goes with it
@@ -415,15 +422,15 @@ export function start(): void {
     const now = live.now!;
     // the numbers
     if (combo.current !== f.combo) combo.set(f.combo);
-    accShown = accShown < 0 ? f.accuracy : glide(accShown, f.accuracy, dt, 0.12);
+    accShown = accShown < 0 ? f.accuracy : glide(accShown, f.accuracy, dt, 0.06);
     acc.innerHTML = esc(pct(accShown)).replace(/(\s?%)$/, "<small>$1</small>");
     if (f.pp === null) pp.textContent = "–";
     else {
-      ppShown = ppShown < 0 ? f.pp : glide(ppShown, f.pp, dt, 0.2);
+      ppShown = ppShown < 0 ? f.pp : glide(ppShown, f.pp, dt, 0.1);
       pp.textContent = String(Math.round(ppShown));
     }
     const health = endKind === "fail" ? 0 : (f.health ?? 1);
-    hpShown = glide(hpShown, health, dt, 0.18);
+    hpShown = glide(hpShown, health, dt, 0.08);
     hpFill.style.transform = `scaleX(${hpShown.toFixed(4)})`;
     hud.style.setProperty("--low", f.danger.toFixed(3));
     const song = live.song();

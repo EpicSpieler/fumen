@@ -179,8 +179,6 @@
 .he-inspect-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
 
 .he-shot { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
-.he-opt { display: flex; align-items: flex-start; gap: 12px; }
-.he-opt .setting-text { flex: 1; min-width: 0; }
 
 @media (max-width: 1080px) {
   .he-body { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) auto; }

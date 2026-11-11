@@ -5,8 +5,8 @@ export const obs: Record<string, string> = {
   "Sources for OBS": "Quellen für OBS",
   "Pages for OBS's browser sources, from this PC only and while Fumen runs. In OBS: Sources, +, Browser, the address below, 1920 × 1080.":
     "Seiten für Browser-Quellen in OBS, nur von diesem PC aus und solange Fumen läuft. In OBS: Quellen, +, Browser, die Adresse unten, 1920 × 1080.",
-  "The visualizer as in Fumen, answering the play. With ?bg=none at the end of the address the game shows through it.":
-    "Der Visualizer wie in Fumen, er reagiert aufs Spiel. Mit ?bg=none am Ende der Adresse scheint das Spiel durch.",
+  "The visualizer as in Fumen, answering the play, while a map runs. With ?bg=none at the end of the address the game shows through it, with ?idle=1 it stays on in song select and for Fumen's player.":
+    "Der Visualizer wie in Fumen, er reagiert aufs Spiel, solange eine Map läuft. Mit ?bg=none am Ende der Adresse scheint das Spiel durch, mit ?idle=1 bleibt er auch in der Songauswahl und für Fumens Player an.",
   "Live overlay": "Live-Overlay",
   "Over the game: progress, combo, accuracy, pp, health, and what your tries before mean. Each part goes where your skin leaves room.":
     "Über dem Spiel: Fortschritt, Combo, Accuracy, pp, Leben und was deine Versuche davor bedeuten. Jedes Teil kommt dahin, wo dein Skin Platz lässt.",
@@ -52,8 +52,6 @@ export const obs: Record<string, string> = {
   "Take a screenshot in osu! and paste it here with Ctrl+V, or pick the file. It's only for arranging and stays on this PC.":
     "Mach in osu! einen Screenshot und füg ihn hier mit Strg+V ein, oder wähl die Datei. Er ist nur zum Anordnen da und bleibt auf diesem PC.",
   "That image couldn't be read.": "Das Bild ließ sich nicht lesen.",
-  "The screen answers": "Der Bildschirm reagiert",
-  "Low health closes in from the edges, a full combo sweeps light across.": "Wenig Leben zieht sich von den Rändern zu, ein Full Combo wischt Licht darüber.",
   Playing: "Spielen",
   "Combo break": "Combo-Bruch",
   "Low health": "Wenig Leben",

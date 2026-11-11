@@ -127,6 +127,15 @@ How they turned out, where it differs from the plan above:
   through, and counts one more on a fail there. "Further than ever" rides along the line. After
   the end: "Ended here N times now", "First pass after N tries", "New best, +N pp", "Your best
   stays N". osu!'s fail screen counts as the end (tosu still says playing).
+  After the first test (2026-11-11): it comes in when the map really runs (the song moving for a
+  few messages, not the menu's music or the loading screen); on osu!'s results the title, the
+  stars, the line and the health go; nothing across the whole screen any more (no sweeps, no
+  closing dark: Stage keeps them); the lamps only while a map runs or just ended.
+- **Visualizer source.** Shows while a map runs and on its results only; `?idle=1` keeps it on in
+  song select and for Fumen's player (music in a BRB scene).
+- **Song card.** Comes 1 s after the map really runs. The window sends the map before reading its
+  chart, and the card waits for it as long as the map runs (after 4 s it goes with osu!'s words).
+  The same map again within 10 s of leaving it counts as a retry: no card.
 - **Scenes.** A state has to hold before it switches: playing 0.35 s, results 0.6 s, song select
   0.9 s, osu! closed 3 s. Only from one of the four scenes set; a retry stays in playing.
 - **Clips.** Close pass: health under 10 % at some point, or the first pass after 3 or more fails.

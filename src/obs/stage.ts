@@ -1,14 +1,16 @@
 /* stage.ts — the visualizer as an OBS source (/obs/stage): the window's visualizer (views/vis)
- * with a host of its own. The song is osu!'s (tosu's time, the play answered as in the window);
- * while osu! plays nothing and Fumen does (music in a BRB scene), Fumen's. The levels come from the
+ * with a host of its own. The song is osu!'s (tosu's time, the play answered as in the window).
+ * It shows while a map runs and on its results; with `idle=1` also in song select, and while osu!
+ * plays nothing and Fumen does (music in a BRB scene), with Fumen's song. The levels come from the
  * song decoded here (./spectrum), the beats from what the window sent with the map.
  *
  * Address options: `style` (one of the visualizer's styles), `bg=none` (see-through over gameplay:
- * the strip of light and the words only), `title=0`, `stats=0|1`, `react=0`.
+ * the strip of light and the words only), `title=0`, `stats=0|1`, `react=0`, `idle=1`.
  *
  * The live overlay (./hud) draws its strip of light and the whole screen's answers with the same
  * (`mountVisualizer`), Stage see-through without words, the lamps where its part sits. */
 import { DEFAULT_PREFS } from "../lib/store";
+import { STATE } from "../lib/tosu";
 import type { VisPrefs, VisStyle } from "../lib/types";
 import type { Strip } from "../views/vis/draw";
 import type { FeelFrame } from "../lib/vis/feel";
@@ -154,15 +156,18 @@ export function start(): void {
   const canvas = document.createElement("canvas");
   canvas.className = "obs-canvas";
   document.getElementById("obs")!.append(canvas);
+  const idle = params.get("idle") === "1";
   const stage = mountVisualizer(canvas, {
     clear: params.get("bg") === "none",
     lamps: true,
-    fumen: true,
+    fumen: idle,
     prefs: addressPrefs,
     play: (dt, now) => live.feel.frame(dt, now),
   });
   let last = performance.now();
   const frame = (t: number): void => {
+    const now = live.now;
+    canvas.classList.toggle("off", !idle && !(now && (live.begun || now.state === STATE.resultScreen)));
     stage.frame(Math.min(0.1, Math.max(0, (t - last) / 1000)));
     last = t;
     requestAnimationFrame(frame);

@@ -177,16 +177,13 @@ async function sendMap(): Promise<void> {
   const tp = triesPart(md5, tries);
   send("tries", tp);
   const row = rowOf(id);
-  let beats: number[] = [];
-  let kiai: number[] = [];
-  if (row) {
-    const chart = await loadChart(row.m.id).catch(() => null);
-    if (job !== mapJob) return;
-    beats = chart?.beats ?? [];
-    kiai = chart?.kiai ?? [];
-  }
-  const map = toObsMap(md5, id, row, now, beats, kiai, tp.best);
+  // the map at once (the song card waits for it), its beats when the chart is read
+  const map = toObsMap(md5, id, row, now, [], [], tp.best);
   send("map", map, [map.bg], [map.audio]);
+  if (!row) return;
+  const chart = await loadChart(row.m.id).catch(() => null);
+  if (job !== mapJob || !chart) return;
+  send("map", { ...map, beats: chart.beats ?? [], kiai: chart.kiai ?? [] }, [map.bg], [map.audio]);
 }
 
 /** Fumen's own player. */
