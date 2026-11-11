@@ -6,6 +6,7 @@ import type { FeelFrame } from "../../lib/vis/feel";
 import { css, type Rgb } from "../../lib/vis/palette";
 import type { VisPrefs } from "../../lib/types";
 import { glowBox } from "../../ui/glow";
+import { canvasFilters } from "../../ui/soft-art";
 import { still } from "../../ui/still";
 import { isLinux } from "../../lib/api";
 
@@ -112,11 +113,39 @@ function fitImage(c: CanvasRenderingContext2D, img: CanvasImageSource & { width:
   c.drawImage(img, x + (w - dw) / 2 + px * w, y + (h - dh) / 2 + py * h, dw, dh);
 }
 
-/** The cover filling x/y/w/h (cropped to fit), the old one under it while the new one fades in. */
+/** where the video's blurred frame is made (small: it's drawn big and soft) */
+let soft: { canvas: HTMLCanvasElement; c: CanvasRenderingContext2D } | null = null;
+
+/** The video's frame now, blurred like the cover's copy (`amount` prefs `blur`); null at 0, where
+ * it's used as it is. */
+function blurredVideo(v: HTMLVideoElement, amount: number): HTMLCanvasElement | null {
+  const px = Math.round(24 * amount);
+  const vw = v.videoWidth;
+  const vh = v.videoHeight;
+  if (px <= 0 || !vw || !vh) return null;
+  // no canvas filters (WebKitGTK): just very small, which looks soft enough drawn big
+  const [W, H] = canvasFilters ? [320, 180] : [48, 27];
+  if (!soft) {
+    const canvas = document.createElement("canvas");
+    canvas.width = W;
+    canvas.height = H;
+    soft = { canvas, c: canvas.getContext("2d")! };
+  }
+  const c = soft.c;
+  c.filter = canvasFilters ? `blur(${px}px) saturate(1.35)` : "none";
+  // zoomed in far enough that the blur's see-through edges fall outside
+  const s = Math.max(W / vw, H / vh) * (canvasFilters ? 1 + (4 * px) / 180 : 1);
+  c.drawImage(v, (W - vw * s) / 2, (H - vh * s) / 2, vw * s, vh * s);
+  return soft.canvas;
+}
+
+/** The cover filling x/y/w/h (cropped to fit), the old one under it while the new one fades in;
+ * the map's video in its place while it plays (blurred too, where the cover would be). */
 export function drawArt(f: VisFrame, x: number, y: number, w: number, h: number, o: { blur?: boolean; zoom?: number; px?: number; py?: number } = {}): void {
   const c = f.c;
   const pick = (a: Art) => (o.blur && a.blur ? still(a.blur) : a.img);
-  const cur = !o.blur && f.video ? f.video : pick(f.art);
+  const video = f.video && o.blur ? (blurredVideo(f.video, f.o.blur) ?? f.video) : f.video;
+  const cur = video ?? pick(f.art);
   const prev = f.prevArt && f.artMix < 1 ? pick(f.prevArt) : null;
   const zoom = o.zoom ?? 1;
   if (!cur && !prev) {

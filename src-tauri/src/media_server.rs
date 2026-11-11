@@ -53,7 +53,7 @@ pub fn start(app: AppHandle) {
         for stream in listener.incoming().flatten() {
             let (app, token) = (app.clone(), token.clone());
             std::thread::spawn(move || {
-                let find = |key: &str| app.try_state::<AppState>().and_then(|s| s.files().path(key));
+                let find = |key: &str| app.try_state::<AppState>().and_then(|s| crate::remux::served(s.cache_dir(), key).or_else(|| s.files().path(key)));
                 let _ = answer(&find, &token, stream);
             });
         }

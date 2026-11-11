@@ -1,5 +1,17 @@
 [
   {
+    "version": "1.3.21",
+    "date": "2026-11-11",
+    "en": [
+      "Fix: Visualizer now plays most .avi and .flv beatmap videos too.",
+      "Fix: Beatmap video also shows with the Blurred background."
+    ],
+    "de": [
+      "Fix: Der Visualizer spielt jetzt auch die meisten Beatmap-Videos im Format .avi und .flv ab.",
+      "Fix: Das Beatmap-Video ist jetzt auch mit dem Hintergrund Unscharf zu sehen."
+    ]
+  },
+  {
     "version": "1.3.20",
     "date": "2026-11-08",
     "en": [
