@@ -1,0 +1,113 @@
+# OBS (1.4 Live)
+
+Fumen as part of a stream: four browser sources for OBS and a connection to OBS itself. Planned
+2026-11-11, built on branch `1.4`, ships with 1.4.0 (nothing of it as a patch before).
+
+## The pieces
+
+| # | What | Where |
+|---|------|-------|
+| 1 | The visualizer as a browser source (Stage with its reactions, all six styles; see-through over gameplay) | `/obs/stage` |
+| 2 | Live overlay: combo, accuracy, pp, health, with what only Fumen knows (try N, where tries ended, further than ever, new best) | `/obs/hud` |
+| 3 | Scenes switched by what osu! shows (song select, playing, results, osu! closed) | obs-websocket |
+| 4 | Song card when a map starts: cover, title, mapper, stars, BPM, length, dan, patterns, your best | `/obs/card` |
+| 5 | Highlight clips: the replay buffer saved after a full combo, a new best or a close pass; a chapter marker | obs-websocket |
+| 6 | Session card for a break or the end: tries, passes, fails, best plays, the costliest map, a timeline of every try | `/obs/session` |
+
+Each page is its own source so it can sit anywhere in any scene. Dropped from the first list: a
+bigger tournament overlay (the one in Pools stays as it is).
+
+## How it fits together
+
+- **One server.** The stream overlay's server (`src-tauri/src/overlay.rs`, 127.0.0.1:24180–24189,
+  this computer only, host checked) also serves the OBS pages. It starts with Fumen once switched on.
+- **Real Fumen code.** The pages are a Vite entry of their own (`obs.html`, like the companion
+  window), so Stage, Feel and the palette are the same code as in the window. The packaged app
+  serves them from its embedded files; a dev build points the page at Vite and lets it talk back.
+- **Live numbers straight from tosu.** Each page opens its own tosu connection and runs its own
+  `Feel`. Fumen's window is throttled when it's in the background (1–4 fps seen in testing); OBS's
+  sources aren't, so the moments land on time.
+- **What only Fumen knows** (tries on this map and where they ended, your best, patterns and dan,
+  beats and kiai, the session) is pushed by the window to the server and handed to the pages at
+  once as server-sent events (`/obs/events`), no polling.
+- **Sound for the visualizer.** A source can't hear Fumen. It loads the song that's playing (only
+  that one is served) and works out the spectrum itself at tosu's song time, so it's in step with
+  osu! at any rate and doesn't need Fumen to play along. With osu! closed it follows Fumen's own
+  player (music in a BRB scene).
+- **OBS** is reached over obs-websocket v5 (built into OBS 28+) from the window: address, password
+  (sealed like the osu! login), status in words. OBS on this computer for now.
+
+## Look
+
+Kodama as Fumen has it, adjusted for OBS:
+
+- Dark surfaces without outlines, text by white's opacity (t1–t4), small uppercase labels in t3,
+  Instrument Sans, tabular numbers with a slightly tight spacing.
+- One accent, taken from the cover of the map that plays (clamped so it stays readable), gliding
+  over 0.9 s on a map change.
+- No glass: a browser source can't see the scene behind it, so surfaces are solid and get their
+  depth from shadows.
+- No glow everywhere, nothing pulsing for its own sake, no LIVE badges. Things move when something
+  happens in the play, and then with weight: digits roll, lines are uncovered rather than faded,
+  springs instead of linear fades. Reduced motion is respected.
+
+## 1. Visualizer source (`/obs/stage`)
+
+- Parameters: `style` (default: the one set in Fumen), `bg=none` (see-through: only the lamp strip
+  and the title over gameplay), `title=0`, `stats=0`.
+- Stage reacts as in the window: misses, breaks, milestones, full combo, pass, fail, low health,
+  the lamps ringing out.
+
+## 2. Live overlay (`/obs/hud`)
+
+- Combo large (rolling digits), accuracy, pp, health as a thin bar, the song's progress below with
+  small ticks where your earlier tries on this map ended.
+- One Fumen line at a time, rolling on a change: "Try 7 on this map"; a few seconds before the part
+  where most tries ended, "3 tries ended here"; past your furthest point, "Further than ever";
+  after a pass, "New best, +14 pp" or "First pass after 9 tries".
+- Moments: a miss drops the combo away in red and the lost combo rises briefly; a milestone pops;
+  low health turns the bar red and lets it beat; a fail greys everything; a pass or full combo
+  opens the panel to rank, accuracy and pp.
+
+## 3. Scenes
+
+- Four states, each mapped to an OBS scene or to "don't switch": song select, playing, results,
+  osu! closed.
+- Fumen only switches while one of those scenes is on: a scene you picked yourself (BRB, starting
+  soon) is left alone. A retry doesn't switch; a state has to hold a moment before it counts.
+
+## 4. Song card (`/obs/card`)
+
+- Lower third: cover, title, artist, mapper, difficulty, stars in osu!'s colour, BPM and length at
+  the rate played, dan and patterns (mania), your best on the map.
+- In: an accent line draws from the left, the cover lands with a slight overshoot, the lines are
+  uncovered one after another, the stars count up. Out: short and clean. On a new map only, not on
+  every retry. `delay` and `hold` as parameters.
+
+## 5. Clips
+
+- Triggers, each switchable: full combo, new best, close pass (health under 10 % at some point, or
+  the first pass after 3 or more fails).
+- About 3 s after the end (so the moment is in it) the replay buffer is saved; one clip per play.
+- Optional: the clip named after the map, a chapter marker in the recording (OBS 30.2+, Hybrid MP4).
+- "Clip saved" with "Show in folder". If the replay buffer is off, Fumen says so and can start it.
+
+## 6. Session card (`/obs/session`)
+
+- Duration, tries, passes, fails, left early, the best three plays, the map that cost the most,
+  clips saved.
+- A timeline of the session: each try a stroke, its height how far it got, passes in the accent.
+- When the scene goes live the card builds up: numbers roll, the timeline draws from the left, the
+  plays slide in. Background: the blurred cover, or none.
+- A session runs from the last hour-long pause (as on Home); "New session" starts one by hand.
+
+## Order
+
+1. This plan.
+2. Foundation: server routes, events, the `obs.html` entry, the Settings section.
+3. Visualizer source. 4. Live overlay. 5. Song card. 6. Session card.
+7. OBS connection and scenes. 8. Clips.
+
+Tests for the logic (obs-websocket's handshake and password hash, scene rules, clip triggers, the
+spectrum, the session summary), Rust tests for the server, and a fake OBS next to the fake tosu in
+`tools/browser-preview/` to try scenes and clips without OBS.
