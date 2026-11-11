@@ -118,7 +118,7 @@ body.obs {
 }
 
 /* ── the progress line (the top edge at first; its words go away from the edge it's nearest) ── */
-.hud-part[data-part="bar"] .hud-in { opacity: 1; transform: none; }
+.hud-part[data-part="bar"] .hud-in { display: block; opacity: 1; transform: none; }
 .hud-bar {
   position: relative;
   height: calc(var(--u) * 0.375);
