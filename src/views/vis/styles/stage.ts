@@ -8,7 +8,10 @@
  * Low health closes in from the edges with a heartbeat on the song's beat. After the last note of
  * a full combo the stage holds its breath; then a sheen passes over it, light rises off the lamps
  * and its name comes up over the title. A fail goes out from the right. The combo, accuracy and pp
- * sit across from the title (the `stats` setting). */
+ * sit across from the title (the `stats` setting).
+ *
+ * See-through (an OBS source over gameplay, `f.clear`): no cover and no shades, only a soft dark
+ * under the strip and the words; the lamps, their light, the words and the moments stay. */
 import { isLinux } from "../../../lib/api";
 import { pct } from "../../../lib/format";
 import { t } from "../../../lib/i18n";
@@ -281,6 +284,16 @@ export function stage(): Style {
         cam.z.step(dt, 0.035 * danger + 0.028 * breath - 0.03 * failK - 0.012 * rest + 0.005 * hb * danger);
       }
 
+      if (f.clear) {
+        c.clearRect(0, 0, W, H);
+        // what the words and lamps stand on over someone's gameplay: dark from the floor up
+        const sg = c.createLinearGradient(0, H, 0, H * 0.55);
+        sg.addColorStop(0, `rgba(0,0,0,${0.62 + 0.2 * failK})`);
+        sg.addColorStop(0.55, `rgba(0,0,0,${0.22 + 0.1 * failK})`);
+        sg.addColorStop(1, "rgba(0,0,0,0)");
+        c.fillStyle = sg;
+        c.fillRect(0, 0, W, H);
+      } else {
       c.fillStyle = "#000";
       c.fillRect(0, 0, W, H);
       // a slow drift across the cover, by the time played
@@ -307,6 +320,7 @@ export function stage(): Style {
         c.globalAlpha = 1;
       }
       c.restore();
+      }
 
       // the lamps' light (how many are on, after a cut or a fail) dims or lifts the whole stage
       const m = Math.max(48, Math.min(220, Math.round(f.o.bars * 2.5)));
@@ -317,7 +331,9 @@ export function stage(): Style {
       for (let i = 0; i < m; i++) lit += powers[i] = react ? power(i, failT) * (1 - 0.6 * flick) : 1;
       lit /= m;
       const dark = 0.22 * (1 - lit) + 0.35 * failK;
-      if (isLinux) {
+      if (f.clear) {
+        // the gameplay underneath keeps its own colours
+      } else if (isLinux) {
         // the three shades over the cover put together once, then copied over as they are
         const bw = c.canvas.width;
         const bh = c.canvas.height;
@@ -363,14 +379,14 @@ export function stage(): Style {
         }
       }
       // a miss: the light dips with the lamps
-      if (flick > 0) {
+      if (flick > 0 && !f.clear) {
         c.fillStyle = `rgba(0,0,0,${0.12 * flick})`;
         c.fillRect(0, 0, W, H);
       }
       let g: CanvasGradient;
       if (f.kiai > 0.01) {
         g = c.createLinearGradient(0, H, 0, H * 0.4);
-        g.addColorStop(0, css(f.look.a, 0.35 * f.kiai));
+        g.addColorStop(0, css(f.look.a, (f.clear ? 0.2 : 0.35) * f.kiai));
         g.addColorStop(1, css(f.look.a, 0));
         c.fillStyle = g;
         c.fillRect(0, 0, W, H);
@@ -414,7 +430,7 @@ export function stage(): Style {
         bulb *= Math.exp(-dt / 0.22);
       }
       // low health: the dark closes in, beating with the song; a fail darkens the edges too
-      if (danger > 0.003 || failK > 0.003) closingDark(c, W, H, 1.15 + 1.1 * (1 - Math.max(danger, failK * 0.6)), Math.min(1, danger * (0.5 + 0.5 * hb * (calm ? 0.3 : 1)) + 0.55 * failK));
+      if (danger > 0.003 || failK > 0.003) closingDark(c, W, H, 1.15 + 1.1 * (1 - Math.max(danger, failK * 0.6)), Math.min(1, danger * (0.5 + 0.5 * hb * (calm ? 0.3 : 1)) + 0.55 * failK) * (f.clear ? 0.6 : 1));
 
       // the strip of light along the box's floor: lamps, taller as the stage lights up
       const v = bars(f, m, f.o.mirror);
@@ -492,7 +508,12 @@ export function stage(): Style {
       motes.step(dt);
       motes.draw(c, mix(f.look.ink, WHITE, 0.3), shine);
 
-      // the words
+      // the words (over gameplay with a soft shadow to stand on)
+      if (f.clear) {
+        c.shadowColor = "rgba(0,0,0,.55)";
+        c.shadowBlur = h * 0.012;
+        c.shadowOffsetY = h * 0.002;
+      }
       const mx = x + w * 0.05;
       const rx = x + w * 0.95;
       const settled = Math.abs(f.drop - textDrop) < 0.3;

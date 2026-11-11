@@ -26,6 +26,7 @@ export const rust: Record<string, string> = {
   "A match is best of an odd number, up to 21.": "Ein Match ist Best of einer ungeraden Zahl, bis 21.",
   "This match has no multiplayer room yet.": "Dieses Match hat noch keinen Multiplayer-Raum.",
   "That's too much for the overlay.": "Das ist zu viel für das Overlay.",
+  "The overlay doesn't know that part.": "Diesen Teil kennt das Overlay nicht.",
   "The overlay's ports (24180 to 24189) are all taken by other programs.": "Die Ports des Overlays (24180 bis 24189) sind alle von anderen Programmen belegt.",
   "Couldn't read this chart for pp.": "Dieses Chart ließ sich für pp nicht lesen.",
   "This chart is too unusual to work out pp for.": "Dieses Chart ist zu ungewöhnlich, um pp dafür zu berechnen.",

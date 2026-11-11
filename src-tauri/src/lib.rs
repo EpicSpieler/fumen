@@ -1148,12 +1148,19 @@ async fn refresh_match(app: AppHandle, id: String) -> Result<matches::Match> {
 /// Switches the OBS overlay on (overlay.rs); its port.
 #[tauri::command]
 fn overlay_start(app: AppHandle) -> Result<u16> {
-    let handle = app.clone();
-    overlay::start(Box::new(move |hash| {
-        let state = handle.state::<AppState>();
-        let source = state.files().path(hash).filter(|p| p.is_file())?;
-        thumbs::get_or_create(&state.thumbs_dir(), &source, hash, 640).ok()
-    }))
+    let (art, file, asset) = (app.clone(), app.clone(), app.clone());
+    // a debug build's pages come from Vite (the app's files aren't built in)
+    let dev = if cfg!(debug_assertions) { app.config().build.dev_url.as_ref().map(|u| u.as_str().trim_end_matches('/').to_string()) } else { None };
+    overlay::start(overlay::Sources {
+        art: Box::new(move |hash, width| {
+            let state = art.state::<AppState>();
+            let source = state.files().path(hash).filter(|p| p.is_file())?;
+            thumbs::get_or_create(&state.thumbs_dir(), &source, hash, width).ok()
+        }),
+        file: Box::new(move |key| file.state::<AppState>().files().path(key).filter(|p| p.is_file())),
+        asset: Box::new(move |name| asset.asset_resolver().get(name.to_string()).map(|a| (a.bytes, a.mime_type))),
+        dev,
+    })
 }
 
 #[tauri::command]
@@ -1170,6 +1177,12 @@ fn overlay_port() -> Option<u16> {
 #[tauri::command]
 fn overlay_state(state: serde_json::Value, art: Vec<String>) -> Result<()> {
     overlay::set_state(&state, art)
+}
+
+/// One part of what the OBS pages show, with the backgrounds and songs it may hand out.
+#[tauri::command]
+fn obs_part(part: String, value: serde_json::Value, art: Vec<String>, audio: Vec<String>) -> Result<()> {
+    overlay::set_obs(&part, &value, art, audio)
 }
 
 #[tauri::command]
@@ -2184,6 +2197,7 @@ pub fn run() {
             overlay_stop,
             overlay_port,
             overlay_state,
+            obs_part,
             create_collection,
             create_smart_collection,
             set_collection_query,

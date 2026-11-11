@@ -59,6 +59,7 @@ export function initOverlay(): void {
     port = p ?? null;
     rewatch();
     void push();
+    if (port) overlayEvents.emit("change", undefined);
   });
   const again = () => void push();
   matchEvents.on("matches", again);

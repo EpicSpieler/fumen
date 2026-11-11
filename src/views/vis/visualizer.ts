@@ -11,19 +11,17 @@
  * sharp cover, kept on the song's time; the blurred background stays the cover. Videos the webview
  * can't play (old .avi / .flv) just leave the cover. With the cover's colours, the colours follow the
  * video while it plays (a small frame read a few times a second, gliding slower than a cover change).
+ *
+ * Where the song, its time and the play come from is its host: Fumen's player in the window
+ * (./window-host), osu! through tosu in an OBS page (src/obs/stage.ts).
  */
-import { api, fileUrl, mediaUrl, thumbUrl } from "../../lib/api";
-import { loadChart } from "../../lib/charts";
-import { outputLatency } from "../../lib/eq";
 import { t } from "../../lib/i18n";
 import { DEFAULT_PREFS, setPrefs, store } from "../../lib/store";
 import type { VisPrefs, VisStyle } from "../../lib/types";
-import { Analysis } from "../../lib/vis/analysis";
+import { Analysis, type AnalyserSet } from "../../lib/vis/analysis";
 import type { FeelFrame } from "../../lib/vis/feel";
-import { follow } from "../../lib/tosu-follow";
 import { beatAt, inKiai } from "../../lib/vis/beat";
 import { css, hexRgb, mix, paletteOf, type Palette, type Rgb } from "../../lib/vis/palette";
-import { player } from "../../player";
 import { reduceMotion } from "../../ui/controls";
 import { pixelRatio } from "../../ui/render-scale";
 import { canvasFilters, soften } from "../../ui/soft-art";
@@ -61,6 +59,30 @@ export function visPrefs(): VisPrefs {
 
 export function setVis(patch: Partial<VisPrefs>): void {
   setPrefs({ visualizer: { ...visPrefs(), ...patch } });
+}
+
+/** Where a visualizer gets its song, the song's time, the play it answers and its settings. */
+export interface VisHost {
+  /** nothing behind what it draws (an OBS source over gameplay): no cover, no shades, no flashes */
+  clear: boolean;
+  prefs(): VisPrefs;
+  /** the song moves */
+  playing(): boolean;
+  rate(): number;
+  /** where the song is, seconds of the song */
+  position(): number;
+  /** how far what you hear lags behind `position`, seconds */
+  latency(): number;
+  /** the song's analysers, or null without any */
+  analysers(): AnalyserSet | null;
+  /** the play in osu! to answer, or null when there's none */
+  play(dt: number, now: number): FeelFrame | null;
+  /** a cover's address at about this width */
+  artUrl(bg: string, width: number): string;
+  /** the difficulty's beats and kiai */
+  timing(mapId: string): Promise<{ beats: number[]; kiai: number[] }>;
+  /** the difficulty's video, if it has one and it can be played here */
+  video(mapId: string): Promise<{ url: string; offset: number } | null>;
 }
 
 const WHITE: Rgb = [255, 255, 255];
@@ -126,7 +148,7 @@ export class Visualizer {
   private readonly a = new Analysis();
   private style: Style;
   private styleId: VisStyle;
-  private o: VisPrefs = visPrefs();
+  private o: VisPrefs;
   private art: Art = { img: null, blur: null };
   /** the `blur` the current blurred copy was made with */
   private blurred: number;
@@ -164,7 +186,9 @@ export class Visualizer {
     private readonly canvas: HTMLCanvasElement,
     /** asks for a frame when something arrives while nothing draws (a cover, the timing) */
     private readonly kick: () => void,
+    private readonly host: VisHost,
   ) {
+    this.o = host.prefs();
     this.styleId = this.o.style;
     this.blurred = this.o.blur;
     this.style = (STYLES.find((s) => s.id === this.styleId) ?? STYLES[0]).make();
@@ -172,7 +196,7 @@ export class Visualizer {
 
   /** Picks up changed settings (a new style crossfades from the old one). */
   sync(): void {
-    this.o = visPrefs();
+    this.o = this.host.prefs();
     if (this.o.blur !== this.blurred) {
       this.blurred = this.o.blur;
       if (this.art.img instanceof HTMLImageElement) this.art = { ...this.art, blur: blurCopy(this.art.img, this.blurred) };
@@ -205,7 +229,7 @@ export class Visualizer {
       this.kick();
     };
     if (o.bg) {
-      void loadArt(thumbUrl(o.bg, 1280), this.blurred).then((r) => {
+      void loadArt(this.host.artUrl(o.bg, 1280), this.blurred).then((r) => {
         if (job !== this.artJob) return;
         if (r) swap(r.art, r.palette);
         else swap({ img: null, blur: null }, null);
@@ -220,7 +244,8 @@ export class Visualizer {
     else if (this.timing?.map !== o.mapId) {
       const map = o.mapId;
       this.timing = null;
-      loadChart(map)
+      this.host
+        .timing(map)
         .then((d) => {
           if (job !== this.artJob) return;
           this.timing = { map, beats: d.beats, kiai: d.kiai };
@@ -233,8 +258,8 @@ export class Visualizer {
   }
 
   private loadVideo(map: string): void {
-    void api
-      .mapVideo(map)
+    void this.host
+      .video(map)
       .then((v) => {
         if (!v || this.mapId !== map || this.video || !this.o.video) return;
         const el = document.createElement("video");
@@ -251,7 +276,7 @@ export class Visualizer {
         el.addEventListener("seeked", () => this.kick());
         // a format the webview can't play: the cover stays
         el.addEventListener("error", () => this.video === video && this.dropVideo());
-        el.src = mediaUrl(v.file) ?? fileUrl(v.file);
+        el.src = v.url;
         this.video = video;
       })
       .catch(() => {});
@@ -350,29 +375,32 @@ export class Visualizer {
     }
     const c = c0.getContext("2d")!;
     const o = this.o;
-    const playing = player.playing;
+    const host = this.host;
+    const playing = host.playing();
     const now = performance.now() / 1000;
     const reduce = reduceMotion();
-    this.a.read(dt, now, playing, o.sensitivity, o.reaction);
+    this.a.read(dt, now, playing ? host.analysers() : null, o.sensitivity, o.reaction);
     if (playing) this.clock += dt;
 
     // the beat, at the song's time as heard
-    const rate = player.rate;
-    const songMs = (player.audio.currentTime - outputLatency() * rate) * 1000 + o.offset;
+    const rate = host.rate();
+    const position = host.position();
+    const heard = (position - host.latency() * rate) * 1000;
+    const songMs = heard + o.offset;
     const tm = this.timing;
     const beat = tm ? beatAt(tm.beats, songMs) : null;
     const newBeat = !!beat && beat.key !== this.lastBeat;
     this.lastBeat = beat ? beat.key : Number.NaN;
     const pulse = beat ? (playing ? Math.exp(-(beat.phase * beat.length) / rate / 1000 / 0.12) * (beat.inBar === 0 ? 1 : 0.65) : 0) : this.a.kick;
     // a video moves on its own: no beat pulse over it
-    const video = this.syncVideo((player.audio.currentTime - outputLatency() * rate) * 1000, playing, rate);
+    const video = this.syncVideo(heard, playing, rate);
     const amount = video ? 0 : o.pulse * (reduce ? 0.3 : 1);
     const hit = Math.min(1, Math.max(pulse, this.a.kick * 0.8)) * amount;
     const kiaiOn = !!tm && o.kiai && playing && inKiai(tm.kiai, songMs);
     const target = kiaiOn ? 1 : 0;
     this.kiai += (target - this.kiai) * (1 - Math.exp(-dt / (target > this.kiai ? 0.25 : 0.6)));
     // flashes: a bar's first beat in kiai (under one a second at 150 BPM); without a beatmap strong kicks, twice a second at most
-    if (!reduce && o.flashes !== "off" && playing) {
+    if (!reduce && !host.clear && o.flashes !== "off" && playing) {
       if (beat && newBeat && beat.inBar === 0 && kiaiOn) this.flashT = 1;
       if (!beat && this.a.onset === "kick" && o.flashes === "full" && now - this.lastFlash > 0.5) {
         this.flashT = 0.8;
@@ -392,7 +420,7 @@ export class Visualizer {
     this.look = lookOf({ a, b });
     const settling = Math.abs(a[0] - goal.a[0]) + Math.abs(a[1] - goal.a[1]) + Math.abs(b[2] - goal.b[2]) > 1.5;
     // the play in osu!, when Fumen plays its song along with it
-    const play = (o.react || o.stats) && follow.alongside ? follow.feel.frame(dt, now) : null;
+    const play = o.react || o.stats ? host.play(dt, now) : null;
     this.play = play;
     if (this.artMix < 1) this.artMix = Math.min(1, this.artMix + dt / 0.5);
     // the transport sliding away while idle (Stage): what sits on the floor goes with it
@@ -409,7 +437,7 @@ export class Visualizer {
       h: Math.max(1, H - box.top - box.bottom),
       dt,
       clock: this.clock,
-      time: player.audio.currentTime / rate,
+      time: position / rate,
       playing,
       a: this.a,
       beat,
@@ -427,6 +455,7 @@ export class Visualizer {
       meta: this.meta,
       o,
       play,
+      clear: host.clear,
     };
     c.setTransform(dpr, 0, 0, dpr, 0, 0);
     c.save();

@@ -7,7 +7,20 @@
  * so a loud master doesn't sit at the top and a quiet one still moves; how much of the range
  * shows is the sensitivity. Rise and fall are ours, per frame time, from the reaction setting.
  * Onsets are spectral flux above an adaptive threshold. */
-import { analysers } from "../eq";
+/** What a level is read from: Web Audio's AnalyserNode, or the song worked out by hand (src/obs/spectrum.ts). */
+export interface FreqSource {
+  readonly fftSize: number;
+  readonly frequencyBinCount: number;
+  getFloatFrequencyData(out: Float32Array): void;
+  getFloatTimeDomainData(out: Float32Array): void;
+}
+
+/** The two analysers (exact in the bass, quick above it) and their sample rate. */
+export interface AnalyserSet {
+  rate: number;
+  long: FreqSource;
+  short: FreqSource;
+}
 
 export const BANDS = 128;
 const LO = 30;
@@ -156,11 +169,10 @@ export class Analysis {
   private snares = new Onset(1.8, 0.12);
   private cache = new Map<number, Float32Array>();
 
-  /** Reads one frame; `playing` false lets everything fall. */
-  read(dt: number, now: number, playing: boolean, sensitivity: number, reaction: number): void {
+  /** Reads one frame from `a`; null (nothing playing) lets everything fall. */
+  read(dt: number, now: number, a: AnalyserSet | null, sensitivity: number, reaction: number): void {
     this.cache.clear();
     this.onset = null;
-    const a = playing ? analysers() : null;
     if (a) {
       if (this.fLong.length !== a.long.frequencyBinCount) this.fLong = new Float32Array(a.long.frequencyBinCount);
       if (this.fShort.length !== a.short.frequencyBinCount) this.fShort = new Float32Array(a.short.frequencyBinCount);
@@ -168,8 +180,8 @@ export class Analysis {
       a.long.getFloatFrequencyData(this.fLong);
       a.short.getFloatFrequencyData(this.fShort);
       a.short.getFloatTimeDomainData(this.wave);
-      const hzLong = a.ctx.sampleRate / a.long.fftSize;
-      const hzShort = a.ctx.sampleRate / a.short.fftSize;
+      const hzLong = a.rate / a.long.fftSize;
+      const hzShort = a.rate / a.short.fftSize;
       let kick = 0;
       let snare = 0;
       for (let i = 0; i < BANDS; i++) {

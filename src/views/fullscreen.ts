@@ -51,6 +51,7 @@ import type { CorePattern } from "../lib/types";
 import { ReplayPanel } from "./replay-panel";
 import { bindPanel, panelHtml } from "./vis/panel";
 import { setVis, STYLES, visPrefs, Visualizer } from "./vis/visualizer";
+import { windowHost } from "./vis/window-host";
 import { softArt, softArtByHand } from "../ui/soft-art";
 import { t } from "../lib/i18n";
 
@@ -293,7 +294,7 @@ class Fullscreen {
       img.addEventListener("load", () => img.classList.add("loaded"));
       img.addEventListener("error", () => img.classList.remove("loaded"));
     });
-    this.vis = new Visualizer(el.querySelector(".fs-vis")!, () => this.kick());
+    this.vis = new Visualizer(el.querySelector(".fs-vis")!, () => this.kick(), windowHost);
     for (const host of el.querySelectorAll(".fs-style-host, .vp-style-host")) {
       const sel = createSelect(
         STYLES.map((s) => ({ value: s.id, label: s.name })),

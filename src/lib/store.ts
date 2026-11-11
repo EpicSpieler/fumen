@@ -73,6 +73,15 @@ export const DEFAULT_PREFS: UiPrefs = {
   companionPool: null,
   followOsu: false,
   tosuAutostart: true,
+  obs: {
+    serve: false,
+    connect: false,
+    host: "127.0.0.1",
+    port: 4455,
+    scenes: { on: false, select: "", play: "", results: "", closed: "" },
+    clips: { on: false, fc: true, best: true, close: true, marker: false, rename: true },
+    sessionFrom: 0,
+  },
 };
 
 export const store = {

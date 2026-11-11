@@ -64,6 +64,8 @@ export interface VisFrame {
   o: VisPrefs;
   /** the play in osu! it follows (Follow osu!, lib/vis/feel); null when there's none to answer */
   play: FeelFrame | null;
+  /** nothing behind it (an OBS source over gameplay): the canvas starts see-through, no cover or shades */
+  clear: boolean;
 }
 
 export interface Style {
@@ -184,6 +186,10 @@ const vignette = (x: CanvasRenderingContext2D, W: number, H: number): CanvasGrad
 /** The whole canvas: the cover (blurred, as it is, or none) dimmed, a glow from below in kiai, a vignette. */
 export function background(f: VisFrame, o: { dim?: number; still?: boolean } = {}): void {
   const { c, W, H } = f;
+  if (f.clear) {
+    c.clearRect(0, 0, W, H);
+    return;
+  }
   const mode = f.o.background;
   if (isLinux) {
     const dim = o.dim ?? f.o.dim;

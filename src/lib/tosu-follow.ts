@@ -12,7 +12,7 @@ import { readTosu, StartHold, STATE, TosuClock, type TosuNow } from "./tosu";
 import { player } from "../player";
 
 /** tosu's address; the browser preview can point it at tools/browser-preview/fake-tosu.mjs */
-const URL = (() => {
+export const TOSU_URL = (() => {
   const own = isTauri ? null : safeGet("fumen-preview-tosu");
   return own ?? "ws://127.0.0.1:24050/websocket/v2";
 })();
@@ -49,8 +49,9 @@ export type FollowStatus =
 
 class Follow {
   /** `play`: a map started in osu! and Fumen plays along (its index in the library); `leave`:
-   * out of the map again (to song select or a menu), or osu! / tosu went (the MD5 of the map left) */
-  readonly bus = new Emitter<{ status: FollowStatus; play: number; leave: string; attempt: Attempt }>();
+   * out of the map again (to song select or a menu), or osu! / tosu went (the MD5 of the map left);
+   * `map`: osu! is on another difficulty (its MD5, "" for none); `tosu`: every message */
+  readonly bus = new Emitter<{ status: FollowStatus; play: number; leave: string; attempt: Attempt; map: string; tosu: TosuNow }>();
   /** every try at a map (lib/attempts), kept as it ends */
   private tries = new AttemptTracker();
   /** how the play goes, for the visualizer to answer (lib/vis/feel) */
@@ -97,6 +98,11 @@ class Follow {
   /** the difficulty osu! is on (MD5), "" without tosu */
   get current(): string {
     return this.now?.md5 ?? "";
+  }
+
+  /** what tosu said last, null without tosu (or osu! closed) */
+  get latest(): TosuNow | null {
+    return this.now;
   }
 
   /** Fumen's player has osu!'s map on (not something of your own) */
@@ -169,8 +175,10 @@ class Follow {
     if (this.now && this.mapIdx !== null && player.now?.map === this.mapIdx && player.playing) player.audio.pause();
     if (this.now) this.bus.emit("leave", this.now.md5);
     this.hold.clear();
+    const had = !!this.now?.md5;
     this.now = null;
     this.md5 = "";
+    if (had) this.bus.emit("map", "");
     this.mapIdx = null;
     this.started = false;
     this.yielded = false;
@@ -204,7 +212,7 @@ class Follow {
   private connect(): void {
     let ws: WebSocket;
     try {
-      ws = new WebSocket(URL);
+      ws = new WebSocket(TOSU_URL);
     } catch {
       this.retry = window.setTimeout(() => this.connect(), RETRY);
       return;
@@ -253,6 +261,7 @@ class Follow {
     if (now.md5 !== this.md5) {
       this.takeBack();
       this.md5 = now.md5;
+      this.bus.emit("map", now.md5);
       this.mapIdx = null;
       this.clock.reset();
       // osu!'s song isn't Fumen's any more: quiet until the new one is found
@@ -262,6 +271,7 @@ class Follow {
     this.clock.update(now.live, now.rate, performance.now());
     this.keep(this.tries.feed(now, Date.now()));
     this.feel.feed(now, performance.now() / 1000);
+    this.bus.emit("tosu", now);
     if (!now.md5 && this.status.kind !== "waiting") this.set({ kind: "waiting" });
   }
 

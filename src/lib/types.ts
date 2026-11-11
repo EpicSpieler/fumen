@@ -517,6 +517,24 @@ export interface UiPrefs {
   followOsu: boolean;
   /** Fumen starts tosu when osu! runs without it (while following) */
   tosuAutostart: boolean;
+  /** OBS (docs/OBS.md) */
+  obs: ObsPrefs;
+}
+
+/** OBS: the pages' server, the connection to OBS, its scenes and clips. */
+export interface ObsPrefs {
+  /** the overlay server (the OBS pages) starts with Fumen */
+  serve: boolean;
+  /** talk to OBS (obs-websocket) */
+  connect: boolean;
+  host: string;
+  port: number;
+  /** scenes by what osu! shows ("" = don't switch) */
+  scenes: { on: boolean; select: string; play: string; results: string; closed: string };
+  /** the replay buffer saved after these */
+  clips: { on: boolean; fc: boolean; best: boolean; close: boolean; marker: boolean; rename: boolean };
+  /** a session counts from here at the earliest (unix ms, "New session") */
+  sessionFrom: number;
 }
 
 export type VisStyle = "spectrum" | "ring" | "wave" | "stars" | "stage" | "hifi";

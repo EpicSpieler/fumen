@@ -17,6 +17,16 @@ let previewLoginCancelled = false;
 let previewImportCancel = false;
 let previewCompareCancel = false;
 
+// the OBS pages (src/obs): no server here, the parts go over a BroadcastChannel to pages opened
+// at /obs.html?view=…&fumen=preview; a page that comes later says hello and gets them all
+const OVERLAY_KEY = "fumen-preview-overlay";
+const obsParts = new Map<string, unknown>();
+const obsChannel = typeof BroadcastChannel === "undefined" ? null : new BroadcastChannel("fumen-obs");
+if (obsChannel)
+  obsChannel.onmessage = (e: MessageEvent<{ hello?: boolean }>) => {
+    if (e.data?.hello) for (const [part, value] of obsParts) obsChannel.postMessage({ part, value });
+  };
+
 export async function invoke<T>(cmd: string, args: Record<string, unknown> = {}, options?: { headers?: Record<string, string> }): Promise<T> {
   switch (cmd) {
     case "save_file": {
@@ -84,11 +94,19 @@ export async function invoke<T>(cmd: string, args: Record<string, unknown> = {},
     case "refresh_match":
       return previewMatches(cmd, args) as T;
     case "overlay_port":
+      return (localStorage.getItem(OVERLAY_KEY) ? 24180 : null) as T;
     case "overlay_stop":
+      localStorage.removeItem(OVERLAY_KEY);
+      return null as T;
     case "overlay_state":
       return null as T;
     case "overlay_start":
+      localStorage.setItem(OVERLAY_KEY, "1");
       return 24180 as T;
+    case "obs_part":
+      obsParts.set(String(args.part), args.value);
+      obsChannel?.postMessage({ part: args.part, value: args.value });
+      return null as T;
     case "get_pools":
     case "create_pool":
     case "update_pool":

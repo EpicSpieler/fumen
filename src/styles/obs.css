@@ -1,0 +1,43 @@
+/* ===========================================================================
+   The OBS pages (src/obs): transparent around what they show, Kodama's tokens
+   (tokens.css), no glass (a browser source can't see the scene behind it).
+   =========================================================================== */
+
+html,
+body.obs {
+  margin: 0;
+  background: transparent;
+  overflow: hidden;
+  color: var(--t1);
+  font-family: "Instrument Sans", ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+  font-size: 14px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums;
+  cursor: default;
+  user-select: none;
+}
+
+:root {
+  transition: --accent 0.9s cubic-bezier(0.2, 0.8, 0.2, 1), --accent-ink 0.9s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+#obs {
+  position: fixed;
+  inset: 0;
+}
+
+.obs-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.reduce-motion *,
+.reduce-motion *::before,
+.reduce-motion *::after {
+  transition-duration: 0.001ms !important;
+  animation-duration: 0.001ms !important;
+}
