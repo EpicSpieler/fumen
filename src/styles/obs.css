@@ -1,7 +1,13 @@
 /* ===========================================================================
    The OBS pages (src/obs): transparent around what they show, Kodama's tokens
    (tokens.css), no glass (a browser source can't see the scene behind it).
+   Sizes in rem, and a rem is 1/67.5 of the source's height: 16px at 1080p, so
+   the pages look the same at any size the source has.
    =========================================================================== */
+
+html {
+  font-size: calc(100vh / 67.5);
+}
 
 html,
 body.obs {
@@ -10,8 +16,7 @@ body.obs {
   overflow: hidden;
   color: var(--t1);
   font-family: "Instrument Sans", ui-sans-serif, system-ui, "Segoe UI", sans-serif;
-  font-size: 14px;
-  line-height: 1.45;
+  line-height: 1.35;
   -webkit-font-smoothing: antialiased;
   font-variant-numeric: tabular-nums;
   cursor: default;
@@ -35,9 +40,325 @@ body.obs {
   display: block;
 }
 
+.ic { display: block; flex: none; width: 1.125rem; height: 1.125rem; }
+[hidden] { display: none !important; }
+
 .reduce-motion *,
 .reduce-motion *::before,
 .reduce-motion *::after {
   transition-duration: 0.001ms !important;
   animation-duration: 0.001ms !important;
 }
+
+/* ── rolling digits (src/obs/odometer.ts) ── */
+.odo { display: inline-flex; }
+.odo-cell {
+  display: inline-block;
+  height: 1em;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(transparent, #000 14%, #000 86%, transparent);
+  mask-image: linear-gradient(transparent, #000 14%, #000 86%, transparent);
+}
+.odo-strip { display: flex; flex-direction: column; will-change: transform; }
+.odo-strip > span { display: block; height: 1em; line-height: 1em; text-align: center; }
+
+/* ══ the live overlay (src/obs/hud.ts): every part on its own (lib/hud-layout) ══ */
+.hud {
+  --low: 0;
+  position: absolute;
+  inset: 0;
+  color: #fff;
+  pointer-events: none;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55), 0 0.25rem 1.4rem rgba(0, 0, 0, 0.45);
+}
+
+/* a part: its pinned point at (x, y) of the source; words grow from there to their size, lines and
+   the lamps' area are as wide (and tall) as they were made */
+.hud-part {
+  --x: 0;
+  --y: 0;
+  --ax: 0;
+  --ay: 0;
+  --size: 1;
+  --w: 0.2;
+  --h: 0.1;
+  --dx: 0;
+  --dy: 0;
+  --k: 0;
+  --u: calc(var(--size) * 1rem);
+  position: absolute;
+  left: calc(var(--x) * 100%);
+  top: calc(var(--y) * 100%);
+  width: max-content;
+  transform: translate(calc(var(--ax) * -100%), calc(var(--ay) * -100%)) scale(var(--size));
+  transform-origin: calc(var(--ax) * 100%) calc(var(--ay) * 100%);
+  transition: opacity 0.8s var(--ease-std), filter 0.8s var(--ease-std);
+}
+.hud-part:is([data-part="bar"], [data-part="hp"], [data-part="vis"]) {
+  width: calc(var(--w) * 100%);
+  transform: translate(calc(var(--ax) * -100%), calc(var(--ay) * -100%));
+}
+.hud-part[data-part="vis"] { height: calc(var(--h) * 100%); }
+
+/* words line up on the side they're pinned to */
+.hud-in { display: flex; flex-direction: column; align-items: flex-start; }
+.hud-part[data-align="center"] .hud-in { align-items: center; text-align: center; }
+.hud-part[data-align="end"] .hud-in { align-items: flex-end; text-align: right; }
+
+/* everything waits off the edge it's pinned to until a map runs, and comes in one after another */
+.hud-in {
+  opacity: 0;
+  transform: translate(calc(var(--dx) * 1.75rem), calc(var(--dy) * 1.25rem));
+  transition: opacity 0.3s var(--ease-std), transform 0.35s var(--ease-std);
+}
+.hud:is([data-phase="play"], [data-phase="end"]) .hud-in {
+  opacity: 1;
+  transform: none;
+  transition: opacity 0.5s var(--ease-std) calc(0.12s + var(--k) * 0.06s), transform 0.7s var(--ease-out) calc(0.12s + var(--k) * 0.06s);
+}
+
+/* ── the progress line (the top edge at first; its words go away from the edge it's nearest) ── */
+.hud-part[data-part="bar"] .hud-in { opacity: 1; transform: none; }
+.hud-bar {
+  position: relative;
+  height: calc(var(--u) * 0.375);
+  clip-path: inset(calc(var(--u) * -4) 100% calc(var(--u) * -4) 0);
+  transition: clip-path 0.35s var(--ease-std);
+}
+.hud:is([data-phase="play"], [data-phase="end"]) .hud-bar { clip-path: inset(calc(var(--u) * -4) 0 calc(var(--u) * -4) 0); transition: clip-path 0.9s var(--ease-out); }
+.hud-bar-line { position: absolute; inset: 0; background: rgba(255, 255, 255, 0.16); box-shadow: 0 1px 0.6rem rgba(0, 0, 0, 0.4); }
+.hud-bar-fill {
+  --rec: 100%;
+  position: absolute;
+  inset: 0;
+  clip-path: inset(0 100% 0 0);
+  /* past the furthest any try got, the line is lighter: new ground */
+  background: linear-gradient(90deg, var(--accent) 0 var(--rec), color-mix(in srgb, var(--accent-ink) 70%, white) var(--rec) 100%);
+  transition: filter 0.8s var(--ease-std);
+}
+.hud[data-end="fail"] .hud-bar-fill { filter: grayscale(1) brightness(0.7); }
+.hud[data-end="fc"] .hud-bar-fill { animation: hud-warm 1.6s var(--ease-std); }
+@keyframes hud-warm { 25% { filter: brightness(1.6) sepia(0.4); } }
+
+/* where earlier tries ended: a notch each */
+.hud-ends i { position: absolute; top: 100%; width: 2px; height: calc(var(--u) * 0.55); margin-left: -1px; border-radius: 0 0 1px 1px; background: rgba(255, 255, 255, 0.5); }
+.hud-part[data-side="up"] .hud-ends i { top: auto; bottom: 100%; border-radius: 1px 1px 0 0; }
+
+/* the part where most of them did: a flag and how many; lit up coming up to it, ticked off once through */
+.hud-zone { position: absolute; top: 0; bottom: 0; }
+.hud-zone-band { position: absolute; inset: calc(var(--u) * -0.125) 0; background: var(--danger); opacity: 0.45; transition: opacity 0.45s var(--ease-std), background-color 0.6s var(--ease-std); }
+.hud-zone-tag {
+  position: absolute;
+  left: 0;
+  top: calc(100% + var(--u) * 0.55);
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 0.3);
+  font-size: var(--u);
+  font-weight: 700;
+  white-space: nowrap;
+  color: color-mix(in srgb, var(--danger) 72%, white);
+  opacity: 0.75;
+  transform-origin: 0 50%;
+  transition: opacity 0.45s var(--ease-std), color 0.6s var(--ease-std);
+}
+.hud-part[data-side="up"] .hud-zone-tag { top: auto; bottom: calc(100% + var(--u) * 0.55); }
+.hud-zone-tag .ic { width: 1.05em; height: 1.05em; }
+.hud-zone-tag .ic:nth-of-type(2) { display: none; }
+.hud-zone:is([data-state="near"], [data-state="in"], [data-state="failed"]) .hud-zone-band { opacity: 1; }
+.hud-zone:is([data-state="near"], [data-state="in"], [data-state="failed"]) .hud-zone-tag { opacity: 1; }
+.hud-zone[data-state="cleared"] .hud-zone-band { background: var(--success); opacity: 0.55; }
+.hud-zone[data-state="cleared"] .hud-zone-tag { color: color-mix(in srgb, var(--success) 70%, white); opacity: 1; }
+.hud-zone[data-state="cleared"] .hud-zone-tag .ic:nth-of-type(1) { display: none; }
+.hud-zone[data-state="cleared"] .hud-zone-tag .ic:nth-of-type(2) { display: block; }
+
+/* the furthest any try got, and the moment this one gets past it */
+.hud-far { position: absolute; top: 0; width: 2px; height: calc(100% + var(--u) * 0.85); margin-left: -1px; border-radius: 0 0 1px 1px; background: var(--accent-ink); transform-origin: 50% 0; }
+.hud-part[data-side="up"] .hud-far { top: auto; bottom: 0; border-radius: 1px 1px 0 0; transform-origin: 50% 100%; }
+.hud-far.passed { animation: hud-far 0.9s var(--ease-out) forwards; }
+@keyframes hud-far {
+  0% { background: #fff; transform: scaleY(1); }
+  30% { background: #fff; transform: scaleY(2.4); }
+  100% { transform: scaleY(1); opacity: 0.3; }
+}
+.hud-beyond {
+  position: absolute;
+  top: calc(100% + var(--u) * 0.55);
+  left: 0;
+  transform: translateX(calc(-100% - var(--u) * 0.4));
+  font-size: var(--u);
+  font-weight: 700;
+  white-space: nowrap;
+  color: color-mix(in srgb, var(--accent-ink) 70%, white);
+  opacity: 0;
+  transition: opacity 0.5s var(--ease-std);
+}
+.hud-part[data-side="up"] .hud-beyond { top: auto; bottom: calc(100% + var(--u) * 0.55); }
+.hud-beyond.on { opacity: 1; transition-duration: 0.2s; }
+.hud-beyond > span { display: inline-block; }
+.hud-beyond.on > span { animation: hud-rise 0.5s var(--ease-out); }
+@keyframes hud-rise { from { transform: translateY(0.5em); opacity: 0; } }
+
+/* ── the map: its title and difficulty, its stars ── */
+.hud-part[data-part="title"] { max-width: calc(42vw / var(--size)); }
+.hud-part[data-part="title"] .hud-in { max-width: 100%; }
+.hud-name, .hud-sub { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hud-name { font-size: 1.5rem; font-weight: 650; letter-spacing: -0.01em; }
+.hud-sub { font-size: 0.95rem; font-weight: 500; color: rgba(255, 255, 255, 0.74); }
+.hud-part[data-part="stars"] .hud-in { gap: 0.45rem; }
+.hud-sr {
+  font-size: 1.2rem;
+  font-weight: 700;
+  padding: 0.2rem 0.8rem;
+  border-radius: 999px;
+  background: var(--c);
+  color: var(--ink);
+  text-shadow: none;
+  box-shadow: 0 0.25rem 1rem rgba(0, 0, 0, 0.35);
+}
+.hud-sr small { font-size: 0.85em; margin-left: 0.15em; }
+.hud-mods { font-size: 0.95rem; font-weight: 700; letter-spacing: 0.08em; color: rgba(255, 255, 255, 0.82); }
+.hud-mods:empty { display: none; }
+
+/* ── the combo ── */
+.hud-label { display: block; font-size: 0.85rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(255, 255, 255, 0.64); margin-bottom: 0.3rem; }
+.hud-swap { display: grid; align-items: end; justify-items: start; }
+.hud-part[data-align="center"] .hud-swap { justify-items: center; }
+.hud-part[data-align="end"] .hud-swap { justify-items: end; }
+.hud-combo { display: flex; flex-direction: column; align-items: flex-start; }
+.hud-part[data-align="center"] .hud-combo { align-items: center; }
+.hud-part[data-align="end"] .hud-combo { align-items: flex-end; }
+.hud-combo, .hud-result { grid-area: 1 / 1; transition: opacity 0.32s var(--ease-std), transform 0.5s var(--ease-out); }
+.hud-big {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  font-size: 5.75rem;
+  font-weight: 650;
+  line-height: 1;
+  letter-spacing: -0.035em;
+  /* low health warms the number toward red */
+  color: color-mix(in srgb, #ff8f8f calc(var(--low) * 55%), white);
+  transform-origin: 0 75%;
+}
+.hud-part[data-align="center"] .hud-big { transform-origin: 50% 75%; }
+.hud-part[data-align="end"] .hud-big { transform-origin: 100% 75%; }
+.hud-x { font-size: 2.2rem; font-weight: 600; letter-spacing: 0; color: rgba(255, 255, 255, 0.6); margin: 0 0 0.55rem 0.4rem; }
+.hud-fall { position: absolute; left: 0; bottom: 0; display: flex; align-items: flex-end; color: #ff7c7c; white-space: nowrap; }
+.hud-part[data-align="end"] .hud-fall { left: auto; right: 0; }
+.hud-fall small { font-size: 2.2rem; margin: 0 0 0.55rem 0.4rem; }
+.hud-result { opacity: 0; transform: translateY(0.75rem); }
+.hud:is([data-end="fc"], [data-end="pass"]) .hud-result { opacity: 1; transform: none; }
+.hud:is([data-end="fc"], [data-end="pass"]) .hud-combo { opacity: 0; transform: translateY(-0.75rem); }
+.hud-rank { display: block; font-size: 5.75rem; font-weight: 700; line-height: 1; letter-spacing: -0.02em; }
+.hud:is([data-end="fc"], [data-end="pass"]) .hud-rank { animation: hud-rank 0.65s var(--ease-spring) both; }
+@keyframes hud-rank { from { transform: scale(0.6); opacity: 0; } 55% { opacity: 1; } to { transform: none; opacity: 1; } }
+
+/* ── health: a thin line that drains toward the side it's pinned to ── */
+.hud-part[data-part="hp"] .hud-in { display: block; }
+.hud-hp { height: calc(var(--u) * 0.375); border-radius: 999px; background: rgba(255, 255, 255, 0.2); overflow: hidden; box-shadow: 0 1px 0.6rem rgba(0, 0, 0, 0.35); }
+.hud-hp i { display: block; height: 100%; border-radius: inherit; transform-origin: left; background: color-mix(in srgb, var(--danger) calc(var(--low) * 100%), var(--accent)); }
+.hud-part[data-align="center"] .hud-hp i { transform-origin: center; }
+.hud-part[data-align="end"] .hud-hp i { transform-origin: right; }
+
+/* ── accuracy, pp ── */
+.hud-acc, .hud-pp { display: block; font-weight: 600; line-height: 1; }
+.hud-acc { font-size: 4rem; letter-spacing: -0.025em; }
+.hud-acc small { font-size: 2rem; color: rgba(255, 255, 255, 0.7); }
+.hud-pp { font-size: 2.6rem; letter-spacing: -0.02em; }
+
+/* ── Fumen's lines: how it ended, letter by letter, and what that means against the tries before ── */
+.hud-part[data-part="lines"] .hud-in { position: relative; }
+.hud-endname { min-height: 1.4em; font-size: 1.05rem; font-weight: 700; letter-spacing: 0.32em; white-space: nowrap; color: rgba(255, 255, 255, 0.9); }
+.hud[data-end="fc"] .hud-endname { color: color-mix(in srgb, var(--accent-ink) 75%, white); }
+.hud[data-end="fail"] .hud-endname { color: color-mix(in srgb, var(--danger) 75%, white); }
+.hud-endname span { display: inline-block; opacity: 0; transform: translateY(0.55em); animation: hud-letter 0.36s var(--ease-out) forwards; animation-delay: calc(0.15s + var(--i) * 35ms); }
+@keyframes hud-letter { to { opacity: 1; transform: none; } }
+.hud-say { min-height: 1.5em; margin-top: 0.35rem; font-size: 1rem; font-weight: 600; white-space: nowrap; }
+.hud-say > span { display: inline-flex; align-items: center; gap: 0.45rem; }
+.hud-say .ic { width: 1.1rem; height: 1.1rem; }
+.hud-say .tone-plain { color: rgba(255, 255, 255, 0.8); }
+.hud-say .tone-accent { color: color-mix(in srgb, var(--accent-ink) 75%, white); }
+.hud-say .tone-danger { color: color-mix(in srgb, var(--danger) 72%, white); }
+
+/* a fail greys the numbers and the map out; what it means stays in colour */
+.hud[data-end="fail"] .hud-part:is([data-part="title"], [data-part="stars"], [data-part="combo"], [data-part="hp"], [data-part="acc"], [data-part="pp"]) { filter: grayscale(1); opacity: 0.6; }
+
+/* ── being arranged in Fumen (views/hud-editor.ts): the parts stay in sight between maps, and
+   something stands in for Fumen's lines until the end brings the real ones ── */
+.edit .hud:not([data-phase="play"]):not([data-phase="end"]) .hud-in { opacity: 0.4; transform: none; }
+.edit .hud .hud-bar { clip-path: inset(calc(var(--u) * -4) 0 calc(var(--u) * -4) 0); }
+.hud-ghost { display: none; }
+.edit .hud[data-end=""] .hud-ghost { display: flex; flex-direction: column; align-items: inherit; position: absolute; inset: 0; opacity: 0.5; }
+.edit .hud[data-end=""] [data-part="lines"] .hud-in > :not(.hud-ghost) { visibility: hidden; }
+.hud-ghost .hud-endname span { animation: none; opacity: 1; transform: none; }
+
+/* ══ the song card (src/obs/card.ts): a lower third at a map's start ══ */
+.card {
+  --pad: 1.1rem;
+  position: absolute;
+  left: 3rem;
+  top: 60%;
+  display: flex;
+  align-items: stretch;
+  gap: 1.35rem;
+  max-width: min(62rem, calc(100vw - 6rem));
+  padding: var(--pad);
+  padding-right: 2rem;
+  border-radius: 1.1rem;
+  background: rgba(16, 16, 19, 0.94);
+  box-shadow: 0 1.1rem 3rem rgba(0, 0, 0, 0.5), 0 0.2rem 0.6rem rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+  /* out: closed from the right, the way it came */
+  clip-path: inset(0 100% 0 0 round 1.1rem);
+  opacity: 0;
+  transition: clip-path 0.45s cubic-bezier(0.55, 0, 0.75, 0.2), opacity 0.2s var(--ease-std) 0.3s;
+}
+.card[data-state="in"] {
+  clip-path: inset(0 0 0 0 round 1.1rem);
+  opacity: 1;
+  transition: clip-path 0.75s var(--ease-out), opacity 0.15s var(--ease-std);
+}
+.card-cover {
+  flex: none;
+  width: 9.5rem;
+  border-radius: 0.7rem;
+  overflow: hidden;
+  background: var(--placeholder-gradient);
+  transform: translateX(-1.5rem) scale(0.92);
+  opacity: 0;
+  transition: transform 0.3s var(--ease-std), opacity 0.2s var(--ease-std);
+}
+.card[data-state="in"] .card-cover { transform: none; opacity: 1; transition: transform 0.75s var(--ease-spring) 0.12s, opacity 0.35s var(--ease-std) 0.12s; }
+.card-cover img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.card-words { position: relative; min-width: 0; display: flex; flex-direction: column; justify-content: center; padding-left: 1.1rem; }
+.card-bar {
+  position: absolute;
+  left: 0;
+  top: 0.2rem;
+  bottom: 0.2rem;
+  width: 0.25rem;
+  border-radius: 999px;
+  background: var(--accent);
+  transform: scaleY(0);
+  transform-origin: 50% 0;
+  transition: transform 0.3s var(--ease-std);
+}
+.card[data-state="in"] .card-bar { transform: none; transition: transform 0.9s var(--ease-out) 0.2s; }
+/* each line uncovered from below, one after another */
+.card-line { overflow: hidden; }
+.card-line > div { display: flex; align-items: baseline; gap: 0.6rem; min-width: 0; transform: translateY(110%); transition: transform 0.25s var(--ease-std); }
+.card[data-state="in"] .card-line > div { transform: none; transition: transform 0.65s var(--ease-out) calc(0.28s + var(--i) * 0.07s); }
+.card-kind > div { font-size: 0.8rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent-ink); }
+.card-kind span { color: var(--t2); letter-spacing: 0.06em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card-title > div { display: block; font-size: 2.4rem; font-weight: 650; line-height: 1.12; letter-spacing: -0.02em; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-bottom: 0.08em; }
+.card-artist > div { display: block; font-size: 1.25rem; font-weight: 550; color: var(--t1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card-mapper > div { display: block; margin-top: 0.1rem; font-size: 0.95rem; font-weight: 500; color: var(--t3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card-facts { margin-top: 0.75rem; }
+.card-facts > div { align-items: center; gap: 0; font-size: 0.95rem; font-weight: 600; color: var(--t2); white-space: nowrap; }
+.card-facts > div > span:not(.card-sr) + span::before { content: "·"; margin: 0 0.55rem; color: var(--t4); }
+.card-sr { display: inline-flex; align-items: baseline; gap: 0.15em; margin-right: 0.8rem; padding: 0.12rem 0.65rem; border-radius: 999px; background: var(--c); color: var(--ink); font-weight: 700; }
+.card-sr small { font-size: 0.85em; }
+.card-best { margin-top: 0.5rem; }
+.card-best > div { font-size: 0.95rem; font-weight: 600; color: var(--t1); }
+.card-best span { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--t3); }

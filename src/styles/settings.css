@@ -74,3 +74,19 @@
 .setting-range { display: flex; align-items: center; gap: 12px; flex: none; }
 .setting-range input { width: 180px; }
 .setting-range b { min-width: 44px; text-align: right; font-size: var(--fs-13); font-weight: 600; color: var(--t2); }
+
+/* Stream & OBS: each page under the switch, with its address while the server is on */
+.setting-row:has(+ .obs-sources:not(:empty)) { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+.obs-sources > .obs-source {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 14px 18px;
+  background: color-mix(in srgb, var(--surface-1) 88%, transparent);
+}
+.obs-sources > .obs-source:last-child { border-bottom-left-radius: var(--r-2xl); border-bottom-right-radius: var(--r-2xl); }
+.obs-sources > .obs-source::before { content: ""; position: absolute; left: 18px; right: 18px; top: 0; height: 1px; background: var(--stroke-dim); }
+.obs-source .setting-text { flex: 1; }
+.ov-url.obs-url { grid-template-columns: minmax(0, 1fr) 28px; max-width: 460px; margin-top: 8px; }

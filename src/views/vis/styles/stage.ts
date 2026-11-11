@@ -258,6 +258,16 @@ export function stage(): Style {
   return {
     draw(f: VisFrame): boolean {
       const { c, x, y, w, h, W, H, dt } = f;
+      // the strip of light in a place of its own (the live overlay), hanging from its top when flipped
+      const S = f.strip;
+      const inStrip = (draw: () => void): void => {
+        if (!S?.flip) return draw();
+        c.save();
+        c.translate(0, 2 * S.y + S.h);
+        c.scale(1, -1);
+        draw();
+        c.restore();
+      };
       now += dt;
       const calm = reduceMotion();
       const P = f.play;
@@ -286,13 +296,43 @@ export function stage(): Style {
 
       if (f.clear) {
         c.clearRect(0, 0, W, H);
-        // what the words and lamps stand on over someone's gameplay: dark from the floor up
-        const sg = c.createLinearGradient(0, H, 0, H * 0.55);
-        sg.addColorStop(0, `rgba(0,0,0,${0.62 + 0.2 * failK})`);
-        sg.addColorStop(0.55, `rgba(0,0,0,${0.22 + 0.1 * failK})`);
-        sg.addColorStop(1, "rgba(0,0,0,0)");
-        c.fillStyle = sg;
-        c.fillRect(0, 0, W, H);
+        // what the words and lamps stand on over someone's gameplay: dark from the floor up, as far
+        // as there's something to stand on it (the lamps alone: a low band)
+        const words = f.o.title || f.o.stats;
+        if (S) {
+          // a strip of its own: a soft dark behind the lamps, up from its floor, its ends fading out
+          if (f.lamps)
+            inStrip(() => {
+              const top = S.y - S.h * 0.25;
+              const sg = c.createLinearGradient(0, S.y + S.h, 0, top);
+              sg.addColorStop(0, `rgba(0,0,0,${0.46 + 0.2 * failK})`);
+              sg.addColorStop(0.5, `rgba(0,0,0,${0.16 + 0.1 * failK})`);
+              sg.addColorStop(1, "rgba(0,0,0,0)");
+              c.fillStyle = sg;
+              c.fillRect(S.x, top, S.w, S.y + S.h - top);
+              if (S.x > 1 || S.x + S.w < W - 1) {
+                const ends = c.createLinearGradient(S.x, 0, S.x + S.w, 0);
+                const fade = Math.min(0.2, (S.h * 0.8) / Math.max(1, S.w));
+                ends.addColorStop(0, "rgba(0,0,0,0)");
+                ends.addColorStop(fade, "#000");
+                ends.addColorStop(1 - fade, "#000");
+                ends.addColorStop(1, "rgba(0,0,0,0)");
+                c.save();
+                c.globalCompositeOperation = "destination-in";
+                c.fillStyle = ends;
+                c.fillRect(0, 0, W, H);
+                c.restore();
+              }
+            });
+        } else if (words || f.lamps) {
+          const reach = words ? 0.55 : 0.84;
+          const sg = c.createLinearGradient(0, H, 0, H * reach);
+          sg.addColorStop(0, `rgba(0,0,0,${(words ? 0.62 : 0.5) + 0.2 * failK})`);
+          sg.addColorStop(0.55, `rgba(0,0,0,${(words ? 0.22 : 0.16) + 0.1 * failK})`);
+          sg.addColorStop(1, "rgba(0,0,0,0)");
+          c.fillStyle = sg;
+          c.fillRect(0, 0, W, H);
+        }
       } else {
       c.fillStyle = "#000";
       c.fillRect(0, 0, W, H);
@@ -384,7 +424,18 @@ export function stage(): Style {
         c.fillRect(0, 0, W, H);
       }
       let g: CanvasGradient;
-      if (f.kiai > 0.01) {
+      if (f.kiai > 0.01 && S) {
+        // kiai: light rising off a strip of its own
+        if (f.lamps)
+          inStrip(() => {
+            const reach = S.h * 3;
+            const kg = c.createLinearGradient(0, S.y + S.h, 0, S.y + S.h - reach);
+            kg.addColorStop(0, css(f.look.a, 0.2 * f.kiai));
+            kg.addColorStop(1, css(f.look.a, 0));
+            c.fillStyle = kg;
+            c.fillRect(S.x, S.y + S.h - reach, S.w, reach);
+          });
+      } else if (f.kiai > 0.01) {
         g = c.createLinearGradient(0, H, 0, H * 0.4);
         g.addColorStop(0, css(f.look.a, (f.clear ? 0.2 : 0.35) * f.kiai));
         g.addColorStop(1, css(f.look.a, 0));
@@ -392,11 +443,11 @@ export function stage(): Style {
         c.fillRect(0, 0, W, H);
       }
       // down to the window's edge while the transport is hidden, gliding as it fades
-      const floor = y + h + f.drop;
+      const floor = S ? S.y + S.h : y + h + f.drop;
       // the lamps' light spilling up over the picture
       swell *= Math.exp(-dt / 1.1);
       const wash = (0.05 + 0.17 * f.a.bass) * light * lit + 0.2 * swell + 0.12 * breath;
-      if (wash > 0.004) {
+      if (wash > 0.004 && f.lamps) {
         const q = f.look.a.map((v) => Math.round(v / 8) * 8) as Rgb;
         const spill = soft(`spill ${W}x${H} ${q}`, W, H, (s) => {
           const sg = s.createLinearGradient(0, H, 0, H * 0.35);
@@ -406,21 +457,23 @@ export function stage(): Style {
           s.fillStyle = sg;
           s.fillRect(0, 0, W, H);
         });
-        c.save();
-        c.globalCompositeOperation = "screen";
-        c.globalAlpha = Math.min(0.6, wash);
-        c.drawImage(spill, 0, floor - H, W, H);
-        c.restore();
+        inStrip(() => {
+          c.save();
+          c.globalCompositeOperation = "screen";
+          c.globalAlpha = Math.min(0.6, wash);
+          c.drawImage(spill, S ? S.x : 0, floor - H, S ? S.w : W, H);
+          c.restore();
+        });
       }
       // sheens: a milestone, the end
       const shine = mix(f.look.ink, WARM, 0.6);
       sweeps = sweeps.filter((s) => now - s.at < s.dur);
-      for (const s of sweeps) {
+      for (const s of f.screen ? sweeps : []) {
         const u = (now - s.at) / s.dur;
         if (u >= 0) sheen(c, 0, 0, W, H, -0.3 + 1.6 * easeInOut(u), { width: s.width, alpha: s.alpha * (calm ? 0.6 : 1), color: mix(f.look.ink, WARM, s.warm * 0.6), angle: 0.28 });
       }
       if (bulb > 0.005) {
-        if (flashes) {
+        if (flashes && f.screen) {
           c.save();
           c.globalCompositeOperation = "screen";
           c.fillStyle = css(shine, 0.2 * bulb);
@@ -430,7 +483,7 @@ export function stage(): Style {
         bulb *= Math.exp(-dt / 0.22);
       }
       // low health: the dark closes in, beating with the song; a fail darkens the edges too
-      if (danger > 0.003 || failK > 0.003) closingDark(c, W, H, 1.15 + 1.1 * (1 - Math.max(danger, failK * 0.6)), Math.min(1, danger * (0.5 + 0.5 * hb * (calm ? 0.3 : 1)) + 0.55 * failK) * (f.clear ? 0.6 : 1));
+      if ((danger > 0.003 || failK > 0.003) && f.screen) closingDark(c, W, H, 1.15 + 1.1 * (1 - Math.max(danger, failK * 0.6)), Math.min(1, danger * (0.5 + 0.5 * hb * (calm ? 0.3 : 1)) + 0.55 * failK) * (f.clear ? 0.6 : 1));
 
       // the strip of light along the box's floor: lamps, taller as the stage lights up
       const v = bars(f, m, f.o.mirror);
@@ -443,8 +496,12 @@ export function stage(): Style {
       }
       if (chord && (chord.length !== m || now - chordAt > 9 || !react)) chord = null;
       const ring = chord ? Math.exp(-(now - chordAt) / 2.8) : 0;
-      const sw = w / m;
-      const maxH = h * Math.min(0.125, 0.09 * (1 + 0.32 * light * lit + 0.5 * swell + 0.25 * breath));
+      const lx0 = S ? S.x : x;
+      const sw = (S ? S.w : w) / m;
+      const lift = 1 + 0.32 * light * lit + 0.5 * swell + 0.25 * breath;
+      // in a strip of its own the lamps fill most of it, all of it when the stage lights up
+      const maxH = S ? S.h * Math.min(1, 0.72 * lift) : h * Math.min(0.125, 0.09 * lift);
+      const least = S ? S.h * 0.02 : h * 0.003;
       const top = mix(mix(f.look.ink, DANGER, 0.55 * danger), GREY, 0.85 * failK);
       const bottom = mix(mix(f.look.a, DANGER, 0.35 * danger), GREY, 0.85 * failK);
       // by how lit they are: six levels, one fill each
@@ -456,8 +513,8 @@ export function stage(): Style {
         const p = powers[i];
         // a held chord breathes a little, each lamp in its own time
         const lv = chord ? Math.max(v[i], chord[i] * ring * (0.86 + 0.14 * Math.sin(now * 2.1 + i * 0.37))) : v[i];
-        const bh = Math.max(h * 0.003, lv * maxH) * (0.3 + 0.7 * p);
-        const lx = x + i * sw + sw * 0.15;
+        const bh = Math.max(least, lv * maxH) * (0.3 + 0.7 * p);
+        const lx = lx0 + i * sw + sw * 0.15;
         tops[i] = bh;
         levels[Math.round(clamp01(p) * 5)].rect(lx, floor - bh, sw * 0.7, bh);
         if (chase >= 0 && chase <= 1.2) {
@@ -466,20 +523,23 @@ export function stage(): Style {
           if (b > 0.2) hot.rect(lx, floor - bh * (1 + 0.4 * b), sw * 0.7, bh * (1 + 0.4 * b));
         }
       }
-      levels.forEach((path, k) => {
-        const a = 0.12 + 0.88 * (k / 5);
-        g = c.createLinearGradient(0, floor - maxH, 0, floor);
-        g.addColorStop(0, css(top, 0.9 * a));
-        g.addColorStop(1, css(bottom, 0.5 * a));
-        c.fillStyle = g;
-        c.fill(path);
-      });
-      if (chase >= 0 && chase <= 1.2) {
-        c.fillStyle = css(shine, 0.95);
-        c.fill(hot);
-      }
+      if (f.lamps)
+        inStrip(() => {
+          levels.forEach((path, k) => {
+            const a = 0.12 + 0.88 * (k / 5);
+            const lg = c.createLinearGradient(0, floor - maxH, 0, floor);
+            lg.addColorStop(0, css(top, 0.9 * a));
+            lg.addColorStop(1, css(bottom, 0.5 * a));
+            c.fillStyle = lg;
+            c.fill(path);
+          });
+          if (chase >= 0 && chase <= 1.2) {
+            c.fillStyle = css(shine, 0.95);
+            c.fill(hot);
+          }
+        });
       // light rising off the lamps (a full combo, a big milestone, a pass)
-      if (!calm) {
+      if (!calm && f.lamps) {
         let n = burst + emit * dt;
         burst = 0;
         emit *= Math.exp(-dt / 1.6);
@@ -489,7 +549,7 @@ export function stage(): Style {
           if (n >= 1 || rnd() < n) {
             const i = Math.floor(rnd() * m);
             motes.add({
-              x: x + (i + 0.15 + rnd() * 0.7) * sw,
+              x: lx0 + (i + 0.15 + rnd() * 0.7) * sw,
               y: floor - tops[i] * (0.3 + rnd() * 0.7),
               vx: (rnd() - 0.5) * h * 0.03,
               vy: -h * (0.07 + rnd() * 0.13),
@@ -506,7 +566,7 @@ export function stage(): Style {
         }
       } else burst = emit = 0;
       motes.step(dt);
-      motes.draw(c, mix(f.look.ink, WHITE, 0.3), shine);
+      inStrip(() => motes.draw(c, mix(f.look.ink, WHITE, 0.3), shine));
 
       // the words (over gameplay with a soft shadow to stand on)
       if (f.clear) {

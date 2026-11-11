@@ -59,16 +59,26 @@ class Live {
     ws.onclose = () => {
       if (this.ws !== ws) return;
       this.ws = null;
-      if (this.now) {
-        if (inMap(this.now.state)) this.bus.emit("leave", this.now.md5);
-        this.now = null;
-        this.feel.stop();
-        this.clock.reset();
-        this.hold.clear();
-        this.bus.emit("gone", undefined);
-      }
+      this.drop();
       this.retry = window.setTimeout(() => this.open(), RETRY);
     };
+  }
+
+  /** tosu went: nothing is known any more */
+  private drop(): void {
+    if (!this.now) return;
+    if (inMap(this.now.state)) this.bus.emit("leave", this.now.md5);
+    this.now = null;
+    this.feel.stop();
+    this.clock.reset();
+    this.hold.clear();
+    this.bus.emit("gone", undefined);
+  }
+
+  /** What tosu would say, made up (the editor's demo, ./demo); null: as if tosu went. */
+  take(now: TosuNow | null): void {
+    if (now) this.read(now);
+    else this.drop();
   }
 
   private read(now: TosuNow): void {

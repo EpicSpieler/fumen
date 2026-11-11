@@ -9,14 +9,18 @@ export const params = new URLSearchParams(location.search);
 const fumen = params.get("fumen");
 /** the browser preview (tools/browser-preview) */
 export const preview = fumen === "preview";
+/** in Fumen's own window, being arranged (views/hud-editor.ts): told everything by the window, a made-up try */
+export const editing = params.get("edit") === "1";
 const base = fumen && /^\d+$/.test(fumen) ? `http://127.0.0.1:${fumen}` : location.origin;
+/** Fumen's files as the window reads them (lib/api's fumen:// address) */
+const files = (window as { __FUMEN_BASE__?: string }).__FUMEN_BASE__ ?? (navigator.userAgent.includes("Windows") ? "http://fumen.localhost/" : "fumen://localhost/");
 
 const NAMES: PartName[] = ["config", "map", "tries", "player", "session", "cue"];
 
 export const parts: Parts = { config: null, map: null, tries: null, player: null, session: null, cue: null };
 export const link = new Emitter<Parts & { open: boolean }>();
 
-function take<K extends PartName>(name: K, value: Parts[K]): void {
+export function take<K extends PartName>(name: K, value: Parts[K]): void {
   parts[name] = value;
   link.emit(name, value as (Parts & { open: boolean })[K]);
 }
@@ -46,10 +50,10 @@ export function connect(): void {
 /** A background at about `width` (320, 640 or 1280). */
 export function artUrl(key: string, width: number): string {
   const w = width <= 320 ? 320 : width <= 640 ? 640 : 1280;
-  return preview ? `/__fumen/thumb/${w}/${key}` : `${base}/obs/art/${w}/${key}`;
+  return preview || editing ? `${files}thumb/${w}/${key}` : `${base}/obs/art/${w}/${key}`;
 }
 
 /** A song by its file key. */
 export function audioUrl(key: string): string {
-  return preview ? `/__fumen/file/${key}` : `${base}/obs/audio/${key}`;
+  return preview || editing ? `${files}file/${key}` : `${base}/obs/audio/${key}`;
 }

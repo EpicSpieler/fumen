@@ -25,7 +25,7 @@ import { css, hexRgb, mix, paletteOf, type Palette, type Rgb } from "../../lib/v
 import { reduceMotion } from "../../ui/controls";
 import { pixelRatio } from "../../ui/render-scale";
 import { canvasFilters, soften } from "../../ui/soft-art";
-import type { Art, Look, Style, VisFrame } from "./draw";
+import type { Art, Look, Strip, Style, VisFrame } from "./draw";
 import { hifi } from "./styles/hifi";
 import { ring } from "./styles/ring";
 import { spectrum } from "./styles/spectrum";
@@ -65,6 +65,12 @@ export function setVis(patch: Partial<VisPrefs>): void {
 export interface VisHost {
   /** nothing behind what it draws (an OBS source over gameplay): no cover, no shades, no flashes */
   clear: boolean;
+  /** Stage's strip of light (default on) */
+  lamps?: boolean;
+  /** where Stage's strip of light goes (default: along the floor) */
+  strip?(): Strip | null;
+  /** the whole canvas answers the play, not only the lamps (default on) */
+  screen?: boolean;
   prefs(): VisPrefs;
   /** the song moves */
   playing(): boolean;
@@ -456,6 +462,9 @@ export class Visualizer {
       o,
       play,
       clear: host.clear,
+      lamps: host.lamps ?? true,
+      strip: host.strip?.() ?? null,
+      screen: host.screen ?? true,
     };
     c.setTransform(dpr, 0, 0, dpr, 0, 0);
     c.save();

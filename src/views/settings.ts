@@ -18,6 +18,9 @@ import { icon } from "../ui/icons";
 import { ACCENT_PRESETS, applyAppearance } from "../ui/theme";
 import { openChangelog } from "./changelog";
 import { player } from "../player";
+import { openHudEditor } from "./hud-editor";
+import { cue, newSession } from "./obs-feed";
+import { overlayEvents, overlayPort, startOverlay, stopOverlay } from "./overlay";
 
 // the osu! login outlives the view: it waits for the browser while you look elsewhere
 let account: OsuAccount | null = null;
@@ -81,6 +84,7 @@ export class SettingsView {
       updateEvents.on("change", () => this.renderUpdate()),
       collectionEvents.on("collections", () => this.renderCollections()),
       follow.bus.on("status", () => void this.renderTosu()),
+      overlayEvents.on("change", () => this.renderObs()),
     );
     // tosu comes and goes on its own
     const tosuTimer = window.setInterval(() => void this.renderTosu(), 3000);
@@ -251,6 +255,18 @@ export class SettingsView {
         </section>
 
         <section class="settings-section">
+          <div class="label-caps settings-label">${t("Stream & OBS")}</div>
+          <div class="setting-row">
+            <div class="setting-text">
+              <div class="setting-title">${t("Sources for OBS")}</div>
+              <div class="setting-desc">${t("Pages for OBS's browser sources, from this PC only and while Fumen runs. In OBS: Sources, +, Browser, the address below, 1920 × 1080.")}</div>
+            </div>
+            <input type="checkbox" role="switch" data-obs="serve" aria-label="${t("Sources for OBS")}" ${overlayPort() ? "checked" : ""} />
+          </div>
+          <div class="obs-sources" data-row="obs-sources"></div>
+        </section>
+
+        <section class="settings-section">
           <div class="label-caps settings-label">${t("About")}</div>
           <div class="setting-row">
             <div class="setting-text">
@@ -299,9 +315,50 @@ export class SettingsView {
     this.renderAccount();
     this.renderUpdate();
     void this.renderTosu();
+    this.renderObs();
   }
 
   /** Where tosu is and whether it runs, under Follow osu! (while that's on). */
+  /** The OBS pages: each with its address while the server is on, and what can be done with it. */
+  private renderObs(): void {
+    const el = this.el.querySelector<HTMLElement>('[data-row="obs-sources"]');
+    if (!el) return;
+    const port = overlayPort();
+    const sw = this.el.querySelector<HTMLInputElement>('[data-obs="serve"]');
+    if (sw) sw.checked = !!port;
+    const base = port ? `http://127.0.0.1:${port}/obs/` : "";
+    const source = (name: string, desc: string, path: string, actions = ""): string => `
+      <div class="obs-source">
+        <div class="setting-text">
+          <div class="setting-title">${name}</div>
+          <div class="setting-desc">${desc}</div>
+          ${port ? `<div class="ov-url obs-url"><code>${esc(base + path)}</code><button class="icon-btn sm" type="button" data-copy="${esc(base + path)}" aria-label="${t("Copy")}" data-tip="${t("Copy")}">${icon("copy")}</button></div>` : ""}
+        </div>
+        ${actions ? `<div class="setting-actions">${actions}</div>` : ""}
+      </div>`;
+    el.innerHTML = [
+      source(t("Visualizer"), t("The visualizer as in Fumen, answering the play. With ?bg=none at the end of the address the game shows through it."), "stage"),
+      source(
+        t("Live overlay"),
+        t("Over the game: progress, combo, accuracy, pp, health, and what your tries before mean. Each part goes where your skin leaves room."),
+        "hud",
+        `<button class="btn btn-sm" type="button" data-obs-act="arrange">${icon("sliders")}${t("Arrange")}</button>`,
+      ),
+      source(
+        t("Song card"),
+        t("For a few seconds when a map starts: cover, title, mapper, stars, BPM, length, your best."),
+        "card",
+        port ? `<button class="btn btn-sm btn-ghost" type="button" data-obs-act="card">${t("Show now")}</button>` : "",
+      ),
+      source(
+        t("Session card"),
+        t("For a break or the end: tries, passes, your best plays, the map that cost the most, every try on one line."),
+        "session",
+        port ? `<button class="btn btn-sm btn-ghost" type="button" data-obs-act="session">${t("Show now")}</button><button class="btn btn-sm btn-ghost" type="button" data-obs-act="new-session">${t("New session")}</button>` : "",
+      ),
+    ].join("");
+  }
+
   private async renderTosu(): Promise<void> {
     const row = this.el.querySelector<HTMLElement>('[data-row="tosu"]');
     const auto = this.el.querySelector<HTMLElement>('[data-row="tosu-auto"]');
@@ -593,6 +650,22 @@ export class SettingsView {
       applyAppearance();
       return;
     }
+    const obsAct = target.closest<HTMLElement>("[data-obs-act]")?.dataset.obsAct;
+    if (obsAct === "arrange") return openHudEditor();
+    if (obsAct === "card" || obsAct === "session") {
+      cue(obsAct);
+      return void toast(t("Shown in OBS"), { kind: "success", timeout: 1600 });
+    }
+    if (obsAct === "new-session") {
+      newSession();
+      return void toast(t("A new session starts now"), { kind: "success", timeout: 1800 });
+    }
+    const copy = target.closest<HTMLElement>("[data-copy]");
+    if (copy)
+      return void navigator.clipboard.writeText(copy.dataset.copy!).then(
+        () => toast(t("Copied"), { kind: "success", timeout: 1600 }),
+        () => toast(t("Couldn't access the clipboard"), { kind: "danger" }),
+      );
     if (target.closest(".s-cloud-push")) return void this.cloudPush(target.closest<HTMLButtonElement>(".s-cloud-push")!);
     if (target.closest(".s-cloud-pull")) return void this.cloudPull(target.closest<HTMLButtonElement>(".s-cloud-pull")!);
     if (target.closest(".s-cols-lazer")) return void putIntoLazer(fumenCollections());
@@ -682,6 +755,9 @@ export class SettingsView {
       setPrefs({ [input.dataset.pref]: input.checked } as never);
       applyAppearance();
       if (input.dataset.pref === "followOsu") void this.renderTosu();
+    } else if (input.dataset.obs === "serve") {
+      setPrefs({ obs: { ...store.prefs.obs, serve: input.checked } });
+      void (input.checked ? startOverlay() : stopOverlay());
     } else if ("prefCompanion" in input.dataset) {
       setPrefs({ companion: input.checked });
       void (input.checked ? api.openCompanion() : api.closeCompanion()).catch((err) => toast(asApiError(err).message, { kind: "danger" }));

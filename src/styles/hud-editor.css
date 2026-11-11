@@ -1,0 +1,188 @@
+/* ===========================================================================
+   Arranging the live overlay (src/views/hud-editor.ts): the page itself in a
+   frame the shape of the stream, a frame over each part with its handles,
+   the parts and what's behind on the side.
+   =========================================================================== */
+
+.he-backdrop { z-index: 950; padding: calc(var(--topbar-h) + 12px) 20px 20px; }
+.he {
+  display: flex;
+  flex-direction: column;
+  width: min(1520px, 100%);
+  height: min(940px, 100%);
+  overflow: hidden;
+  scrollbar-gutter: auto;
+}
+
+.he-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px 14px;
+}
+.he-heading { min-width: 0; }
+.he-heading .dialog-title { margin-bottom: 2px; }
+.he-sub { font-size: var(--fs-12); color: var(--t2); }
+.he-head-actions { display: flex; gap: 8px; flex: none; }
+
+.he-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 288px;
+}
+
+/* ── the frame ── */
+.he-main { display: flex; flex-direction: column; gap: 12px; min-width: 0; min-height: 0; padding: 0 12px 18px 20px; }
+.he-stage-box { flex: 1; min-height: 0; container-type: size; display: grid; place-items: center; }
+.he-stage {
+  position: relative;
+  width: min(100cqw, calc(100cqh * 16 / 9));
+  aspect-ratio: 16 / 9;
+  border-radius: var(--r-xl);
+  overflow: hidden;
+  /* nothing behind it: a quiet check, the way an empty picture looks */
+  background-color: #101012;
+  background-image: conic-gradient(#141417 25%, #101012 0 50%, #141417 0 75%, #101012 0);
+  background-size: 24px 24px;
+  box-shadow: 0 0 0 1px var(--stroke), var(--elevation-2);
+  isolation: isolate;
+}
+.he-back {
+  position: absolute;
+  inset: 0;
+  background: center / cover no-repeat;
+  /* the map's own background: dimmed, so the parts stand out as they would over gameplay */
+  filter: brightness(0.42) saturate(0.85);
+  transition: filter 0.3s var(--ease-std);
+}
+.he-back.shot { filter: none; }
+.he-frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  color-scheme: dark;
+  pointer-events: none;
+}
+.he-layer { position: absolute; inset: 0; touch-action: none; cursor: default; }
+.he-layer[data-drag="move"] { cursor: grabbing; }
+
+/* a frame over each part: dashed until picked, its name on hover */
+.he-box {
+  position: absolute;
+  border-radius: 3px;
+  outline: 1px dashed rgba(255, 255, 255, 0.3);
+  outline-offset: 3px;
+  cursor: grab;
+  transition: outline-color 0.15s var(--ease-std), background-color 0.15s var(--ease-std);
+}
+/* thin parts (the progress line, health) are still easy to catch */
+.he-box::before { content: ""; position: absolute; inset: -7px; }
+.he-box:hover { outline-color: rgba(255, 255, 255, 0.7); background: rgba(255, 255, 255, 0.04); }
+.he-box.on { outline: 1.5px solid var(--accent); outline-offset: 3px; background: color-mix(in srgb, var(--accent) 7%, transparent); }
+.he-box.dragging { cursor: grabbing; }
+.he-tag {
+  position: absolute;
+  left: -4px;
+  bottom: calc(100% + 8px);
+  padding: 2px 8px;
+  border-radius: var(--r-full);
+  background: rgba(16, 16, 19, 0.92);
+  color: var(--t1);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(3px);
+  transition: opacity 0.15s var(--ease-std), transform 0.2s var(--ease-out);
+  box-shadow: var(--elevation-1);
+}
+.he-box[data-near="top"] .he-tag { bottom: auto; top: calc(100% + 8px); transform: translateY(-3px); }
+.he-box[data-end="1"] .he-tag { left: auto; right: -4px; }
+.he-box:hover .he-tag, .he-box.on .he-tag { opacity: 1; transform: none; }
+.he-box.on .he-tag { background: var(--accent); color: var(--on-accent); }
+
+.he-handle {
+  position: absolute;
+  z-index: 1;
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+  background: #fff;
+  box-shadow: 0 0 0 1.5px var(--accent), 0 1px 4px rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  transform: scale(0.6);
+  pointer-events: none;
+  transition: opacity 0.15s var(--ease-std), transform 0.2s var(--ease-spring);
+}
+.he-box.on .he-handle { opacity: 1; transform: none; pointer-events: auto; }
+.he-handle[data-h="nw"] { left: -9px; top: -9px; cursor: nwse-resize; }
+.he-handle[data-h="ne"] { right: -9px; top: -9px; cursor: nesw-resize; }
+.he-handle[data-h="sw"] { left: -9px; bottom: -9px; cursor: nesw-resize; }
+.he-handle[data-h="se"] { right: -9px; bottom: -9px; cursor: nwse-resize; }
+.he-handle:is([data-h="w"], [data-h="e"]) { top: 50%; width: 7px; height: 18px; margin-top: -9px; cursor: ew-resize; }
+.he-handle[data-h="w"] { left: -8px; }
+.he-handle[data-h="e"] { right: -8px; }
+.he-handle:hover { transform: scale(1.2); }
+
+/* where it snapped */
+.he-guide { position: absolute; z-index: 2; background: var(--accent); pointer-events: none; box-shadow: 0 0 6px color-mix(in srgb, var(--accent) 60%, transparent); }
+.he-guide-x { top: 0; bottom: 0; width: 1px; margin-left: -0.5px; }
+.he-guide-y { left: 0; right: 0; height: 1px; margin-top: -0.5px; }
+
+/* the made-up try: going on round and round, or a moment of it */
+.he-demo { display: flex; align-items: center; gap: 10px; flex: none; }
+.he-moments { display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* ── the side ── */
+.he-side {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 20px 18px 8px;
+}
+.he-label { margin-bottom: 6px; }
+.he-parts { display: flex; flex-direction: column; gap: 1px; }
+.he-part { display: flex; align-items: center; gap: 4px; border-radius: var(--r-md); transition: background-color 0.15s var(--ease-std); }
+.he-part:hover { background: var(--fill-subtle); }
+.he-part.sel { background: var(--accent-dim-hover); }
+.he-part-name {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+  padding: 0 10px;
+  text-align: left;
+  font-size: var(--fs-13);
+  font-weight: 550;
+  color: var(--t1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.he-part.sel .he-part-name { color: var(--accent-ink); }
+.he-part.off .he-part-name { color: var(--t3); text-decoration: line-through; text-decoration-color: var(--t4); }
+.he-eye { color: var(--t2); }
+.he-part.off .he-eye { color: var(--t4); }
+
+.he-inspect { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: var(--r-xl); background: var(--fill-subtle); }
+.he-inspect-name { font-size: var(--fs-14); font-weight: 650; }
+.he-note { margin: 0; font-size: var(--fs-12); line-height: 1.5; color: var(--t2); }
+.he-size { display: grid; grid-template-columns: auto 1fr 48px; align-items: center; gap: 10px; font-size: var(--fs-12); color: var(--t2); }
+.he-size b { text-align: right; font-weight: 600; color: var(--t1); }
+.he-inspect-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+
+.he-shot { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.he-opt { display: flex; align-items: flex-start; gap: 12px; }
+.he-opt .setting-text { flex: 1; min-width: 0; }
+
+@media (max-width: 1080px) {
+  .he-body { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) auto; }
+  .he-side { max-height: 260px; padding: 0 20px 16px; }
+}

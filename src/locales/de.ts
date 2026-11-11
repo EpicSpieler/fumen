@@ -20,8 +20,9 @@ import { live } from "./de/live";
 import { pools } from "./de/pools";
 import { matches } from "./de/matches";
 import { visualizer } from "./de/visualizer";
+import { obs } from "./de/obs";
 
 /** what Fumen's Rust side says, for fromRust() (apart: the code doesn't name these texts) */
 export { rust } from "./de/rust";
 
-export const de: Record<string, string> = { ...common, ...shell, ...settings, ...player, ...menus, ...home, ...library, ...set, ...chart, ...history, ...skills, ...manage, ...live, ...pools, ...matches, ...visualizer };
+export const de: Record<string, string> = { ...common, ...shell, ...settings, ...player, ...menus, ...home, ...library, ...set, ...chart, ...history, ...skills, ...manage, ...live, ...pools, ...matches, ...visualizer, ...obs };

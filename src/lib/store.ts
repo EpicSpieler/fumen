@@ -1,5 +1,6 @@
 /* store.ts — app-wide state and a tiny typed event bus. */
 import { api } from "./api";
+import { DEFAULT_HUD_PREFS } from "./hud-layout";
 import { buildIndex, type LibIndex } from "./search";
 import type { LibraryStatus, ScanProgress, Settings, Snapshot, UiPrefs } from "./types";
 
@@ -81,6 +82,7 @@ export const DEFAULT_PREFS: UiPrefs = {
     scenes: { on: false, select: "", play: "", results: "", closed: "" },
     clips: { on: false, fc: true, best: true, close: true, marker: false, rename: true },
     sessionFrom: 0,
+    hud: DEFAULT_HUD_PREFS,
   },
 };
 

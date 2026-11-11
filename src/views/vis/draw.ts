@@ -66,6 +66,21 @@ export interface VisFrame {
   play: FeelFrame | null;
   /** nothing behind it (an OBS source over gameplay): the canvas starts see-through, no cover or shades */
   clear: boolean;
+  /** the strip of light along the floor (Stage; off in the live overlay without its equalizer) */
+  lamps: boolean;
+  /** where the strip of light goes when it isn't along the box's floor (the live overlay's part) */
+  strip: Strip | null;
+  /** the whole canvas answers the play (low health closing in, sweeps of light); off: the lamps only */
+  screen: boolean;
+}
+
+/** A place of its own for Stage's strip of light, px of the canvas; `flip`: hanging from its top edge. */
+export interface Strip {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  flip: boolean;
 }
 
 export interface Style {

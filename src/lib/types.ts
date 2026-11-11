@@ -1,4 +1,5 @@
 /* Shapes shared with the Rust backend (see src-tauri/src/library.rs, lib.rs). */
+import type { HudPrefs } from "./hud-layout";
 
 export type Mode = 0 | 1 | 2 | 3;
 
@@ -535,6 +536,8 @@ export interface ObsPrefs {
   clips: { on: boolean; fc: boolean; best: boolean; close: boolean; marker: boolean; rename: boolean };
   /** a session counts from here at the earliest (unix ms, "New session") */
   sessionFrom: number;
+  /** the live overlay: where each part sits (lib/hud-layout) */
+  hud: HudPrefs;
 }
 
 export type VisStyle = "spectrum" | "ring" | "wave" | "stars" | "stage" | "hifi";

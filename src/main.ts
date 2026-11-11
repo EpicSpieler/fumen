@@ -18,6 +18,7 @@ import "./styles/matches.css";
 import "./styles/delete.css";
 import "./styles/skills.css";
 import "./styles/browse.css";
+import "./styles/hud-editor.css";
 import "./styles/score.css";
 
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -46,7 +47,7 @@ import type { Attempt } from "./lib/attempts";
 import { CareView } from "./views/care";
 import { PoolsView } from "./views/pools";
 import { MatchView } from "./views/match";
-import { initOverlay } from "./views/overlay";
+import { initOverlay, startOverlay } from "./views/overlay";
 import { initObsFeed } from "./views/obs-feed";
 import { initMatches } from "./lib/matches";
 import { initPools } from "./lib/pools";
@@ -929,6 +930,7 @@ async function boot(): Promise<void> {
   initMatches();
   initOverlay();
   initObsFeed();
+  if (store.prefs.obs?.serve) void startOverlay();
   initLivePlays();
   initFollow();
   document.body.classList.add("ready");

@@ -8,10 +8,12 @@ import type { Attempt } from "../lib/attempts";
 import { loadChart } from "../lib/charts";
 import { shortDan } from "../lib/dan";
 import { holdRatio, patternWords, rankInfo } from "../lib/format";
+import { hudPrefs } from "../lib/hud-layout";
 import { lang } from "../lib/i18n";
-import { better, triesPart, type ObsBest, type ObsCue, type ObsMap, type ObsPlayer, type ObsSession, type ObsSessionPlay, type PartName } from "../lib/obs-parts";
+import { better, triesPart, type ObsBest, type ObsConfig, type ObsCue, type ObsMap, type ObsPlayer, type ObsSession, type ObsSessionPlay, type ObsTries, type PartName } from "../lib/obs-parts";
+import { DEMO_LAST, DEMO_MD5 } from "../obs/demo";
 import { progress } from "../lib/attempts";
-import { DEFAULT_ACCENT, events, store } from "../lib/store";
+import { DEFAULT_ACCENT, events, setPrefs, store } from "../lib/store";
 import { follow, TOSU_URL } from "../lib/tosu-follow";
 import type { MapRow, SetRow } from "../lib/types";
 import { player } from "../player";
@@ -75,9 +77,81 @@ function bestOf(m: MapRow, tries: ObsBest | null): ObsBest | null {
 
 // ── the parts ──
 
-function sendConfig(): void {
+/** What the pages follow: the language, tosu's address, the looks, where the overlay's parts sit. */
+export function obsConfig(): ObsConfig {
   const p = store.prefs;
-  send("config", { tosu: TOSU_URL, lang, accent: p.accent || DEFAULT_ACCENT, vis: visPrefs(), reduceMotion: !!p.reduceMotion });
+  return { tosu: TOSU_URL, lang, accent: p.accent || DEFAULT_ACCENT, vis: visPrefs(), reduceMotion: !!p.reduceMotion, hud: hudPrefs(p.obs?.hud) };
+}
+
+function sendConfig(): void {
+  send("config", obsConfig());
+}
+
+/** What the pages are told about a difficulty: the library's, or what tosu says when it isn't there. */
+function toObsMap(
+  md5: string,
+  id: string | null,
+  row: { m: MapRow; s: SetRow } | null,
+  now: { title: string; artist: string; version: string; mode: number } | null,
+  beats: number[],
+  kiai: number[],
+  best: ObsBest | null,
+): ObsMap {
+  const m = row?.m;
+  const s = row?.s;
+  return {
+    md5,
+    id,
+    title: s?.title ?? now?.title ?? "",
+    artist: s?.artist ?? now?.artist ?? "",
+    version: m?.version ?? now?.version ?? "",
+    creator: s?.creator ?? "",
+    mode: m?.mode ?? now?.mode ?? 0,
+    keys: m && m.mode === 3 ? Math.round(m.cs) : null,
+    bg: m?.bg ?? s?.bg ?? null,
+    audio: m?.audio ?? s?.audio ?? null,
+    beats,
+    kiai,
+    sr: m?.sr ?? null,
+    srDt: m?.srDt ?? null,
+    srHt: m?.srHt ?? null,
+    bpm: m?.bpm ?? 0,
+    length: m?.length ?? 0,
+    dan: m?.dan ? shortDan(m.dan, holdRatio(m)) : null,
+    patterns: m ? patternsOf(m) : [],
+    best: m ? bestOf(m, best) : best,
+  };
+}
+
+/** For arranging the overlay (views/hud-editor.ts): a difficulty from the library standing in
+ * for the map osu! plays (the one that plays now, else one with a background), with made-up
+ * tries at it: some ended early, most around one part, a best to beat. */
+export async function demoParts(): Promise<{ map: ObsMap | null; tries: ObsTries }> {
+  const snap = store.snap;
+  let row: { m: MapRow; s: SetRow } | null = null;
+  const np = player.now;
+  if (np && snap?.maps[np.map]) row = { m: snap.maps[np.map], s: snap.sets[np.set] };
+  if (!row && follow.latest?.md5) row = rowOf(await idOf(follow.latest.md5));
+  if (!row && snap) {
+    const pick = snap.maps.find((m) => m.mode === 3 && (m.bg || snap.sets[m.set]?.bg)) ?? snap.maps.find((m) => m.bg || snap.sets[m.set]?.bg) ?? snap.maps[0];
+    if (pick) row = { m: pick, s: snap.sets[pick.set] };
+  }
+  const chart = row ? await loadChart(row.m.id).catch(() => null) : null;
+  const map = row ? toObsMap(DEMO_MD5, row.m.id, row, null, chart?.beats ?? [], chart?.kiai ?? [], null) : null;
+  if (map) map.best = { accuracy: 0.9621, rank: "A", pp: 196, score: 610_000 };
+  const tries: ObsTries = {
+    md5: DEMO_MD5,
+    count: 11,
+    passes: 0,
+    fails: 9,
+    left: 2,
+    ends: [0.12, 0.3, 0.33, 0.34, 0.36, 0.37, 0.5, 0.55, 0.58],
+    furthest: 0.58,
+    spot: { a: DEMO_LAST * 0.31, b: DEMO_LAST * 0.37, stops: 4 },
+    sincePass: 11,
+    best: null,
+  };
+  return { map, tries };
 }
 
 /** The map osu! is on, and your tries at it. */
@@ -104,30 +178,7 @@ async function sendMap(): Promise<void> {
     beats = chart?.beats ?? [];
     kiai = chart?.kiai ?? [];
   }
-  const m = row?.m;
-  const s = row?.s;
-  const map: ObsMap = {
-    md5,
-    id,
-    title: s?.title ?? now?.title ?? "",
-    artist: s?.artist ?? now?.artist ?? "",
-    version: m?.version ?? now?.version ?? "",
-    creator: s?.creator ?? "",
-    mode: m?.mode ?? now?.mode ?? 0,
-    keys: m && m.mode === 3 ? Math.round(m.cs) : null,
-    bg: m?.bg ?? s?.bg ?? null,
-    audio: m?.audio ?? s?.audio ?? null,
-    beats,
-    kiai,
-    sr: m?.sr ?? null,
-    srDt: m?.srDt ?? null,
-    srHt: m?.srHt ?? null,
-    bpm: m?.bpm ?? 0,
-    length: m?.length ?? 0,
-    dan: m?.dan ? shortDan(m.dan, holdRatio(m)) : null,
-    patterns: m ? patternsOf(m) : [],
-    best: m ? bestOf(m, tp.best) : tp.best,
-  };
+  const map = toObsMap(md5, id, row, now, beats, kiai, tp.best);
   send("map", map, [map.bg], [map.audio]);
 }
 
@@ -251,6 +302,7 @@ export function clipSaved(): void {
 
 /** Starts a new session now (Settings). */
 export function newSession(): void {
+  setPrefs({ obs: { ...store.prefs.obs, sessionFrom: Date.now() } });
   void sendSession();
 }
 

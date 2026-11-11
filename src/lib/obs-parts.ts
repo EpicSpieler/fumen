@@ -3,6 +3,7 @@
  * Each part is replaced whole when it changes. */
 import type { Attempt } from "./attempts";
 import { progress, stopSpot, tally } from "./attempts";
+import type { HudPrefs } from "./hud-layout";
 import type { VisPrefs } from "./types";
 
 export type PartName = "config" | "map" | "tries" | "player" | "session" | "cue";
@@ -15,6 +16,8 @@ export interface ObsConfig {
   accent: string;
   vis: VisPrefs;
   reduceMotion: boolean;
+  /** the live overlay's parts, where each sits */
+  hud: HudPrefs;
 }
 
 /** A best on a map, from the plays Fumen knows. */
