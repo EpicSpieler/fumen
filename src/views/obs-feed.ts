@@ -10,7 +10,7 @@ import { shortDan } from "../lib/dan";
 import { holdRatio, patternWords, rankInfo } from "../lib/format";
 import { hudPrefs } from "../lib/hud-layout";
 import { lang } from "../lib/i18n";
-import { better, triesPart, type ObsBest, type ObsConfig, type ObsCue, type ObsMap, type ObsPlayer, type ObsSession, type ObsSessionPlay, type ObsTries, type PartName } from "../lib/obs-parts";
+import { better, sessionStartOf, triesPart, type ObsBest, type ObsConfig, type ObsCue, type ObsMap, type ObsPlayer, type ObsSession, type ObsSessionPlay, type ObsTries, type PartName } from "../lib/obs-parts";
 import { DEMO_LAST, DEMO_MD5 } from "../obs/demo";
 import { progress } from "../lib/attempts";
 import { DEFAULT_ACCENT, events, setPrefs, store } from "../lib/store";
@@ -20,8 +20,6 @@ import { player } from "../player";
 import { overlayEvents, overlayPort } from "./overlay";
 import { visPrefs } from "./vis/visualizer";
 
-/** a session ends after this long without a try (as on Home) */
-const SESSION_GAP = 60 * 60 * 1000;
 /** how far back a session may reach */
 const SESSION_MAX = 24 * 60 * 60 * 1000;
 /** ms between looks at the session while nothing happens (its length grows) */
@@ -29,6 +27,9 @@ const SESSION_EVERY = 60_000;
 
 const sent = new Map<PartName, string>();
 const ids = new Map<string, string | null>();
+/** what osu! called the maps it was on while Fumen ran, for tries at maps the library doesn't
+ * have (played in stable, downloaded since the last look at lazer) */
+const named = new Map<string, { title: string; version: string }>();
 let started = false;
 let cueN = 0;
 let clips = 0;
@@ -61,6 +62,12 @@ function rowOf(id: string | null): { m: MapRow; s: SetRow } | null {
   if (!id || !snap) return null;
   const m = snap.maps.find((x) => x.id === id);
   return m ? { m, s: snap.sets[m.set] } : null;
+}
+
+/** A map's title and difficulty: the library's, else osu!'s; null when neither knows it. */
+function wordsOf(md5: string, row: { m: MapRow; s: SetRow } | null): { title: string; version: string } | null {
+  if (row) return { title: row.s.title, version: row.m.version };
+  return named.get(md5) ?? null;
 }
 
 function patternsOf(m: MapRow): string[] {
@@ -209,18 +216,6 @@ async function sendPlayer(): Promise<void> {
   send("player", part, [part.bg], [part.audio]);
 }
 
-/** Where the session began: the first try after the last hour without one (or "New session"). */
-export function sessionStartOf(tries: readonly Pick<Attempt, "started" | "ended">[], now: number, from = 0): number {
-  const list = [...tries].sort((a, b) => b.started - a.started);
-  if (!list.length || now - list[0].ended >= SESSION_GAP) return Math.max(now, from);
-  let start = list[0].started;
-  for (let i = 1; i < list.length; i++) {
-    if (start - list[i].ended >= SESSION_GAP) break;
-    start = list[i].started;
-  }
-  return Math.max(start, from);
-}
-
 async function sendSession(): Promise<void> {
   const job = ++sessionJob;
   const now = Date.now();
@@ -238,13 +233,16 @@ async function sendSession(): Promise<void> {
     if (top.length >= 3 || seen.has(a.md5)) continue;
     seen.add(a.md5);
     const row = rowOf(await idOf(a.md5));
+    if (job !== sessionJob) return;
+    // a map nothing here has a name for stays out
+    const words = wordsOf(a.md5, row);
+    if (!words) continue;
     const before = (await api.attemptsForMap(a.md5, 500).catch(() => [] as Attempt[])).filter((b) => b.outcome === "pass" && b.started < a.started);
     if (job !== sessionJob) return;
     const bg = row?.m.bg ?? row?.s.bg ?? null;
     if (bg) art.push(bg);
     top.push({
-      title: row?.s.title ?? a.md5.slice(0, 8),
-      version: row?.m.version ?? "",
+      ...words,
       bg,
       rank: a.rank,
       accuracy: a.accuracy,
@@ -253,26 +251,28 @@ async function sendSession(): Promise<void> {
       fc: a.misses === 0,
     });
   }
-  // the map that took the most tries (then the most fails)
+  // the map that took the most tries (then the most fails), of the ones with a name
   const by = new Map<string, Attempt[]>();
   for (const a of tries) by.set(a.md5, [...(by.get(a.md5) ?? []), a]);
   const fails = (l: Attempt[]) => l.filter((a) => a.outcome === "fail").length;
-  const most = [...by.entries()].sort((x, y) => y[1].length - x[1].length || fails(y[1]) - fails(x[1]))[0];
   let costly: ObsSession["costly"] = null;
-  if (most && most[1].length >= 2) {
+  for (const most of [...by.entries()].sort((x, y) => y[1].length - x[1].length || fails(y[1]) - fails(x[1]))) {
+    if (most[1].length < 2) break;
     const row = rowOf(await idOf(most[0]));
     if (job !== sessionJob) return;
+    const words = wordsOf(most[0], row);
+    if (!words) continue;
     const bg = row?.m.bg ?? row?.s.bg ?? null;
     if (bg) art.push(bg);
     costly = {
-      title: row?.s.title ?? most[0].slice(0, 8),
-      version: row?.m.version ?? "",
+      ...words,
       bg,
       tries: most[1].length,
       fails: fails(most[1]),
       minutes: Math.round(most[1].reduce((n, a) => n + Math.max(0, a.ended - a.started), 0) / 60_000),
       passed: most[1].some((a) => a.outcome === "pass"),
     };
+    break;
   }
   const count = (o: Attempt["outcome"]) => tries.filter((a) => a.outcome === o).length;
   const session: ObsSession = {
@@ -289,9 +289,12 @@ async function sendSession(): Promise<void> {
   send("session", session, art);
 }
 
-/** Shows something on the pages right now (a button in Settings). */
+/** Shows something on the pages right now (a button in Settings); the session card with the
+ * session as it is this moment. */
 export function cue(kind: ObsCue["kind"]): void {
-  send("cue", { n: ++cueN, kind } satisfies ObsCue);
+  const go = (): void => send("cue", { n: ++cueN, kind } satisfies ObsCue);
+  if (kind === "session") void sendSession().then(go, go);
+  else go();
 }
 
 /** A clip was saved: the session card counts it. */
@@ -326,7 +329,11 @@ export function initObsFeed(): void {
     void sendMap();
     void sendPlayer();
   });
-  follow.bus.on("map", () => void sendMap());
+  follow.bus.on("map", (md5) => {
+    const now = follow.latest;
+    if (md5 && now?.md5 === md5 && now.title) named.set(md5, { title: now.title, version: now.version });
+    void sendMap();
+  });
   follow.bus.on("attempt", () => {
     void sendMap();
     void sendSession();

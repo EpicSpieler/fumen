@@ -4,6 +4,7 @@
 import type { Attempt } from "./attempts";
 import { progress, stopSpot, tally } from "./attempts";
 import type { HudPrefs } from "./hud-layout";
+import { SESSION_GAP } from "./live";
 import type { VisPrefs } from "./types";
 
 export type PartName = "config" | "map" | "tries" | "player" | "session" | "cue";
@@ -174,6 +175,19 @@ export function triesPart(md5: string, list: readonly Attempt[]): ObsTries {
     sincePass: last < 0 ? tries.length : tries.length - 1 - last,
     best: top ? { accuracy: top.accuracy, rank: top.rank, pp: top.pp, score: top.score } : null,
   };
+}
+
+/** Where the session began: the first try after the last hour without one (as on Home), not
+ * before `from` ("New session"). No try for an hour: a new session starts now. */
+export function sessionStartOf(tries: readonly Pick<Attempt, "started" | "ended">[], now: number, from = 0): number {
+  const list = [...tries].sort((a, b) => b.started - a.started);
+  if (!list.length || now - list[0].ended >= SESSION_GAP) return Math.max(now, from);
+  let start = list[0].started;
+  for (let i = 1; i < list.length; i++) {
+    if (start - list[i].ended >= SESSION_GAP) break;
+    start = list[i].started;
+  }
+  return Math.max(start, from);
 }
 
 /** `a` beats `b`: more pp when both have them, else the higher score. */
