@@ -107,6 +107,18 @@ export async function invoke<T>(cmd: string, args: Record<string, unknown> = {},
       obsParts.set(String(args.part), args.value);
       obsChannel?.postMessage({ part: args.part, value: args.value });
       return null as T;
+    // OBS itself (views/obs-control.ts; tools/browser-preview/fake-obs.mjs): the password kept here
+    case "obs_password_set":
+      if (args.password) localStorage.setItem("fumen-preview-obs-pw", String(args.password));
+      else localStorage.removeItem("fumen-preview-obs-pw");
+      return null as T;
+    case "obs_password_get":
+      return localStorage.getItem("fumen-preview-obs-pw") as T;
+    case "rename_clip":
+      return String(args.path).replace(/[^/\\]+(\.\w+)$/, (_m: string, ext: string) => `${String(args.name)}${ext}`) as T;
+    case "reveal_clip":
+      console.log("[preview] would show", args.path);
+      return null as T;
     case "get_pools":
     case "create_pool":
     case "update_pool":

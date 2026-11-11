@@ -4,20 +4,9 @@ import { DEFAULT_HUD_PREFS } from "./hud-layout";
 import { buildIndex, type LibIndex } from "./search";
 import type { LibraryStatus, ScanProgress, Settings, Snapshot, UiPrefs } from "./types";
 
-type Handler<T> = (payload: T) => void;
+import { Emitter } from "./emitter";
 
-export class Emitter<E extends Record<string, unknown>> {
-  private handlers: { [K in keyof E]?: Set<Handler<E[K]>> } = {};
-
-  on<K extends keyof E>(evt: K, fn: Handler<E[K]>): () => void {
-    (this.handlers[evt] ??= new Set()).add(fn);
-    return () => this.handlers[evt]?.delete(fn);
-  }
-
-  emit<K extends keyof E>(evt: K, payload: E[K]): void {
-    this.handlers[evt]?.forEach((fn) => fn(payload));
-  }
-}
+export { Emitter };
 
 export const DEFAULT_ACCENT = "#8b7cff";
 

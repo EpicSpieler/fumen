@@ -7,6 +7,7 @@ mod chart;
 mod cloud;
 mod replay;
 mod charts;
+mod clips;
 mod collections;
 mod db;
 mod downloads;
@@ -1179,6 +1180,44 @@ fn overlay_state(state: serde_json::Value, art: Vec<String>) -> Result<()> {
     overlay::set_state(&state, art)
 }
 
+/// OBS's websocket password, sealed for this Windows user like the osu! login (secret.rs);
+/// empty or none forgets it.
+#[tauri::command]
+fn obs_password_set(state: State<'_, AppState>, password: Option<String>) -> Result<()> {
+    let path = state.data_dir.join(OBS_PASSWORD);
+    match password.filter(|p| !p.is_empty()) {
+        Some(p) => {
+            std::fs::create_dir_all(&state.data_dir)?;
+            std::fs::write(&path, secret::seal(p.as_bytes())?)?;
+        }
+        None => {
+            let _ = std::fs::remove_file(&path);
+        }
+    }
+    Ok(())
+}
+
+/// OBS's websocket password, when one is kept.
+#[tauri::command]
+fn obs_password_get(state: State<'_, AppState>) -> Option<String> {
+    let (plain, _) = secret::open(&std::fs::read(state.data_dir.join(OBS_PASSWORD)).ok()?)?;
+    String::from_utf8(plain).ok()
+}
+
+const OBS_PASSWORD: &str = "obs-password";
+
+/// A clip OBS just saved, named after the map (clips.rs); its new path.
+#[tauri::command]
+fn rename_clip(path: String, name: String) -> Result<String> {
+    clips::rename(&path, &name)
+}
+
+/// A saved clip in its folder.
+#[tauri::command]
+fn reveal_clip(path: String) -> Result<()> {
+    clips::reveal(&path)
+}
+
 /// One part of what the OBS pages show, with the backgrounds and songs it may hand out.
 #[tauri::command]
 fn obs_part(part: String, value: serde_json::Value, art: Vec<String>, audio: Vec<String>) -> Result<()> {
@@ -2198,6 +2237,10 @@ pub fn run() {
             overlay_port,
             overlay_state,
             obs_part,
+            obs_password_set,
+            obs_password_get,
+            rename_clip,
+            reveal_clip,
             create_collection,
             create_smart_collection,
             set_collection_query,

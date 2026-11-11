@@ -135,4 +135,5 @@ export const rust: Record<string, string> = {
   "osu!lazer can't be started from here.": "osu!lazer kann von hier aus nicht gestartet werden.",
   "osu!stable's osu!.exe wasn't found in its folder.": "Die osu!.exe von osu!stable liegt nicht in seinem Ordner.",
   "osu!stable can only be started from Fumen on Windows.": "osu!stable lässt sich nur unter Windows aus Fumen starten.",
+  "That isn't a clip OBS saved.": "Das ist kein Clip, den OBS gespeichert hat.",
 };

@@ -90,3 +90,18 @@
 .obs-sources > .obs-source::before { content: ""; position: absolute; left: 18px; right: 18px; top: 0; height: 1px; background: var(--stroke-dim); }
 .obs-source .setting-text { flex: 1; }
 .ov-url.obs-url { grid-template-columns: minmax(0, 1fr) 28px; max-width: 460px; margin-top: 8px; }
+
+/* OBS itself: how the connection goes, the scene for each state, the clips' triggers */
+.obs-link { margin-top: 12px; }
+.obs-said.ok { color: var(--success); }
+.obs-said.bad { color: var(--warning); }
+.obs-warn { color: var(--warning); }
+.obs-login input[type="number"] { width: 84px; }
+.obs-login input[type="password"] { width: 170px; }
+.obs-scenes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 20px; align-items: center; }
+.obs-scene { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; font-size: var(--fs-12); font-weight: 600; color: var(--t2); }
+.obs-scene > span:last-child { min-width: 0; display: flex; justify-content: flex-end; }
+.obs-scene .cs { max-width: 220px; }
+.obs-clips { flex-wrap: wrap; }
+.obs-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.obs-chip-gap { width: 10px; }

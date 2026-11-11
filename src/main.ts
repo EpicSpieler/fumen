@@ -49,6 +49,7 @@ import { PoolsView } from "./views/pools";
 import { MatchView } from "./views/match";
 import { initOverlay, startOverlay } from "./views/overlay";
 import { initObsFeed } from "./views/obs-feed";
+import { initObsControl } from "./views/obs-control";
 import { initMatches } from "./lib/matches";
 import { initPools } from "./lib/pools";
 import { importProgressText, isImporting, openImport } from "./views/import";
@@ -931,6 +932,7 @@ async function boot(): Promise<void> {
   initOverlay();
   initObsFeed();
   if (store.prefs.obs?.serve) void startOverlay();
+  initObsControl();
   initLivePlays();
   initFollow();
   document.body.classList.add("ready");

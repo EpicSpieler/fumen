@@ -20,6 +20,7 @@ import { openChangelog } from "./changelog";
 import { player } from "../player";
 import { openHudEditor } from "./hud-editor";
 import { cue, newSession } from "./obs-feed";
+import { mountObsSettings } from "./obs-settings";
 import { overlayEvents, overlayPort, startOverlay, stopOverlay } from "./overlay";
 
 // the osu! login outlives the view: it waits for the browser while you look elsewhere
@@ -264,6 +265,7 @@ export class SettingsView {
             <input type="checkbox" role="switch" data-obs="serve" aria-label="${t("Sources for OBS")}" ${overlayPort() ? "checked" : ""} />
           </div>
           <div class="obs-sources" data-row="obs-sources"></div>
+          <div class="obs-link" data-row="obs-link"></div>
         </section>
 
         <section class="settings-section">
@@ -316,9 +318,10 @@ export class SettingsView {
     this.renderUpdate();
     void this.renderTosu();
     this.renderObs();
+    const link = this.el.querySelector<HTMLElement>('[data-row="obs-link"]');
+    if (link) this.offs.push(mountObsSettings(link));
   }
 
-  /** Where tosu is and whether it runs, under Follow osu! (while that's on). */
   /** The OBS pages: each with its address while the server is on, and what can be done with it. */
   private renderObs(): void {
     const el = this.el.querySelector<HTMLElement>('[data-row="obs-sources"]');
@@ -359,6 +362,7 @@ export class SettingsView {
     ].join("");
   }
 
+  /** Where tosu is and whether it runs, under Follow osu! (while that's on). */
   private async renderTosu(): Promise<void> {
     const row = this.el.querySelector<HTMLElement>('[data-row="tosu"]');
     const auto = this.el.querySelector<HTMLElement>('[data-row="tosu-auto"]');
