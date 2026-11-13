@@ -10,7 +10,8 @@
 //!      and the one on GitHub once the repo is public; a version blocked in either is off). A
 //!      lazer update switches imports off until its version is tested and listed
 //!      (`npm run verify-lazer`, see `verify_installed_lazer` below);
-//!   2. only while lazer isn't running;
+//!   2. only while lazer isn't running (while it runs, sets are handed to it instead: lazer's own
+//!      `osu!.exe` passes them to the running game, which imports them itself; see [`hand_over`]);
 //!   3. a backup of `client.realm` before every import (`lazer-backups/`, the last five);
 //!   4. the importer opens the database only at exactly its lazer's schema version — after a
 //!      lazer update the database is migrated by lazer's next start, not by Fumen;
@@ -277,6 +278,8 @@ pub struct Status {
     pub version: Option<String>,
     pub tested: bool,
     pub running: bool,
+    /// lazer runs and downloads can be handed to it ([`hand_over`]): an import can start anyway
+    pub handoff: bool,
     /// versions listed as tested, newest first
     pub tested_versions: Vec<String>,
     /// sets in lazer without their details (imported by an older Fumen), from Fumen's library
@@ -290,6 +293,8 @@ pub fn status(storage: Option<&Path>, compat: &Compat) -> Status {
     let version = lazer.as_ref().map(|l| l.version.clone());
     let tested = version.as_deref().is_some_and(|v| compat.allows(v));
     let running = lazer.as_ref().is_some_and(|l| lazer_running(&l.dir));
+    let library = storage.is_some_and(|s| s.join("client.realm").is_file());
+    let handoff = running && library && lazer.as_ref().is_some_and(can_hand_over);
     let (reason, message) = match &lazer {
         None => (Some("not-installed"), Some(format!("osu!lazer's installation wasn't found (it's looked for in {INSTALL_HINT})."))),
         Some(_) if storage.map_or(true, |s| !s.join("client.realm").is_file()) => {
@@ -302,7 +307,55 @@ pub fn status(storage: Option<&Path>, compat: &Compat) -> Status {
         Some(_) if running => (Some("running"), Some("osu!lazer is running. Close it to import.".to_string())),
         Some(_) => (None, None),
     };
-    Status { ready: reason.is_none(), reason, message, version, tested, running, tested_versions, unfinished: 0 }
+    Status { ready: reason.is_none(), reason, message, version, tested, running, handoff, tested_versions, unfinished: 0 }
+}
+
+// ── handing sets to a running lazer ─────────────────────────────────────
+
+/// Whether sets can go to this lazer while it runs. lazer's own `osu!.exe`, started with an
+/// archive, passes it to the game that's running (lazer's IPC, the way a double-click on an .osz
+/// does) and quits; the game imports it with its own code, tested with Fumen or not, and deletes
+/// the archive once it's in. Windows only for now.
+pub fn can_hand_over(lazer: &Installed) -> bool {
+    cfg!(windows) && lazer.dir.join("osu!.exe").is_file()
+}
+
+/// Hands one archive to the running lazer: moved into `staging` under a name of its own (lazer
+/// deletes what it imported), then lazer's exe started with its path. Returns where it is: gone
+/// once lazer has imported it.
+pub fn hand_over(lazer: &Installed, archive: &Path, staging: &Path) -> Result<PathBuf> {
+    std::fs::create_dir_all(staging)?;
+    let name = archive.file_name().and_then(|n| n.to_str()).unwrap_or("set.osz");
+    let staged = staging.join(format!("{}-{name}", crate::lazer::now_ms()));
+    if std::fs::rename(archive, &staged).is_err() {
+        std::fs::copy(archive, &staged)?;
+        let _ = std::fs::remove_file(archive);
+    }
+    let mut cmd = Command::new(lazer.dir.join("osu!.exe"));
+    cmd.arg(&staged).current_dir(&lazer.dir).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        // CREATE_NO_WINDOW
+        cmd.creation_flags(0x0800_0000);
+    }
+    let fail = |staged: &Path, why: String| {
+        let _ = std::fs::remove_file(staged);
+        Error::known("lazer-handoff", why)
+    };
+    let mut child = cmd.spawn().map_err(|e| fail(&staged, format!("osu!lazer couldn't be reached: {e}")))?;
+    // it quits as soon as the game has the path (lazer gives that 3 s); one that stays is a game
+    // starting after all (lazer closed in between): it's left alone and imports the set itself
+    let started = std::time::Instant::now();
+    while started.elapsed() < Duration::from_secs(20) {
+        match child.try_wait() {
+            Ok(Some(status)) if status.success() => return Ok(staged),
+            Ok(Some(_)) => return Err(fail(&staged, "osu!lazer didn't take the beatmap.".into())),
+            Ok(None) => std::thread::sleep(Duration::from_millis(100)),
+            Err(e) => return Err(fail(&staged, format!("osu!lazer couldn't be reached: {e}"))),
+        }
+    }
+    Ok(staged)
 }
 
 /// A status reason as one of Fumen's error codes.

@@ -331,7 +331,7 @@ class ImportDialog {
 
   /** the import can start (lazer is ready, or it goes into stable) */
   private ready(): boolean {
-    return goesTo() === "stable" || !!this.status?.ready;
+    return goesTo() === "stable" || !!this.status?.ready || !!this.status?.handoff;
   }
 
   private async refreshStatus(): Promise<void> {
@@ -425,14 +425,15 @@ class ImportDialog {
       delete el.dataset.tip;
       return;
     }
-    el.className = `imp-lazer ${st.ready ? "ok" : st.reason === "running" ? "wait" : "off"}`;
-    const ic = icon(st.ready ? "check" : "alert", "imp-lazer-ic");
-    el.innerHTML =
-      st.ready && st.version
+    el.className = `imp-lazer ${st.ready || st.handoff ? "ok" : st.reason === "running" ? "wait" : "off"}`;
+    const ic = icon(st.ready || st.handoff ? "check" : "alert", "imp-lazer-ic");
+    el.innerHTML = st.handoff
+      ? `${ic}<span class="imp-lazer-text">${t("osu!lazer is open: each set goes straight to it once it's downloaded, and lazer adds it itself.")}</span>`
+      : st.ready && st.version
         ? `${ic}<span class="meta-line imp-lazer-text"><span>osu!lazer ${esc(short(st.version))}</span><span>${t("Tested with Fumen")}</span><span>${t("Closed")}</span></span>`
         : `${ic}<span class="imp-lazer-text">${esc(st.message ?? t("Importing isn't possible right now."))}</span>${st.reason === "running" ? closeLazerHtml() : ""}`;
     this.renderRepair();
-    if (st.reason === "untested") {
+    if (st.reason === "untested" && !st.handoff) {
       el.dataset.tip = st.testedVersions.length
         ? `${t("Tested: {versions}", { versions: st.testedVersions.map(short).join(", ") })}\n${t("Importing comes back once this version is checked.")}`
         : t("No osu!lazer version is tested yet.");

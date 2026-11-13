@@ -461,6 +461,24 @@ fn looks_like_osr(head: &[u8]) -> bool {
     (20_000_000..40_000_000).contains(&version) && (head[5] == 0x0b || head[5] == 0)
 }
 
+/// Whether the first bytes are a beatmap's: "osu file format v…" (after a byte-order mark and
+/// blank lines, which some editors leave).
+fn looks_like_osu(head: &[u8]) -> bool {
+    let head = head.strip_prefix(b"\xEF\xBB\xBF").unwrap_or(head);
+    let start = head.iter().position(|b| !b.is_ascii_whitespace()).unwrap_or(head.len());
+    head[start..].starts_with(b"osu file format v")
+}
+
+/// Whether a file that just appeared in lazer's files/ is a difficulty (lazer imported or saved a
+/// beatmap: its library has changed).
+pub fn is_new_map(path: &Path) -> bool {
+    use std::io::Read;
+    let Ok(mut f) = std::fs::File::open(path) else { return false };
+    let mut head = [0u8; 64];
+    let n = f.read(&mut head).unwrap_or(0);
+    looks_like_osu(&head[..n])
+}
+
 /// Reads a file that just appeared in lazer's files/: the play, when it's a fresh replay.
 pub fn read_new(path: &Path, now: i64) -> Option<LivePlay> {
     use std::io::Read;
@@ -483,8 +501,9 @@ pub fn read_new(path: &Path, now: i64) -> Option<LivePlay> {
     Some(play_of(&id, &h))
 }
 
-/// Watches lazer's files/ until the returned watcher is dropped; `found` gets every fresh play.
-pub fn watch(storage: &Path, found: impl Fn(LivePlay) + Send + 'static) -> Option<notify::RecommendedWatcher> {
+/// Watches lazer's files/ until the returned watcher is dropped; `found` gets every fresh play,
+/// `maps` hears of new difficulties (a beatmap imported or saved in lazer, by Fumen or not).
+pub fn watch(storage: &Path, found: impl Fn(LivePlay) + Send + 'static, maps: impl Fn() + Send + 'static) -> Option<notify::RecommendedWatcher> {
     use notify::{RecursiveMode, Watcher};
     let files = storage.join("files");
     if !files.is_dir() {
@@ -528,6 +547,8 @@ pub fn watch(storage: &Path, found: impl Fn(LivePlay) + Send + 'static) -> Optio
                 }
                 if let Some(play) = read_new(&p, crate::lazer::now_ms()) {
                     found(play);
+                } else if is_new_map(&p) {
+                    maps();
                 }
             }
             if waiting.len() > 10_000 {
@@ -542,6 +563,16 @@ pub fn watch(storage: &Path, found: impl Fn(LivePlay) + Send + 'static) -> Optio
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn beatmaps_by_their_first_line() {
+        assert!(looks_like_osu(b"osu file format v14\r\n\r\n[General]"));
+        assert!(looks_like_osu(b"\xEF\xBB\xBFosu file format v128\n"));
+        assert!(looks_like_osu(b"\r\n  osu file format v3"));
+        assert!(!looks_like_osu(b"\x03\x10\x2e\x34\x01\x0b"));
+        assert!(!looks_like_osu(b"[Events]"));
+        assert!(!looks_like_osu(b""));
+    }
 
     #[test]
     fn accuracy_like_lazer() {
@@ -654,9 +685,16 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("files").join("a").join("ab")).unwrap();
         let (tx, rx) = mpsc::channel();
-        let _w = watch(&dir, move |p| {
-            let _ = tx.send(p);
-        })
+        let (map_tx, map_rx) = mpsc::channel();
+        let _w = watch(
+            &dir,
+            move |p| {
+                let _ = tx.send(p);
+            },
+            move || {
+                let _ = map_tx.send(());
+            },
+        )
         .unwrap();
         let now = crate::lazer::now_ms();
         let name = |c: char| std::iter::repeat_n(c, 64).collect::<String>();
@@ -667,6 +705,11 @@ mod tests {
         let p = rx.recv_timeout(Duration::from_secs(10)).expect("the play");
         assert_eq!((p.md5.as_str(), p.id.as_str()), ("new", name('c').as_str()));
         assert!(rx.recv_timeout(Duration::from_millis(1500)).is_err(), "nothing else");
+        assert!(map_rx.try_recv().is_err(), "no beatmap yet");
+        // a difficulty: lazer imported or saved a beatmap
+        std::fs::write(dir.join("files/a/ab").join(name('d')), b"osu file format v14\r\n\r\n[General]\r\nMode: 3\r\n").unwrap();
+        map_rx.recv_timeout(Duration::from_secs(10)).expect("the new beatmap");
+        assert!(rx.try_recv().is_err(), "not a play");
         drop(_w);
         let _ = std::fs::remove_dir_all(&dir);
     }

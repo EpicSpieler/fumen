@@ -862,10 +862,13 @@ function applyFirstRunDefaults(): void {
   setPrefs(patch);
 }
 
+/** ms without new beatmaps in lazer before the library catches up with them */
+const MAPS_QUIET = 4000;
+
 async function maybeAutoRescan(): Promise<void> {
   const st = await refreshStatus().catch(() => null);
   // an import into lazer rescans by itself when it's done
-  if (!st?.changed || store.settings?.autoRescan === false || isImporting()) return;
+  if (!st?.changed || st.scanning || store.settings?.autoRescan === false || isImporting()) return;
   const res = await runScan();
   if (!res.ok) toast(t("Couldn't update the library: {error}", { error: res.error.message }), { kind: "danger", timeout: 6000 });
 }
@@ -968,6 +971,18 @@ function initLivePlays(): void {
     const what = [p.title ?? t("A play"), p.version ? `[${p.version}]` : "", playMods(p)].filter(Boolean).join(" ");
     toast(t("{what}: {acc}", { what, acc: pct(p.accuracy) }), { timeout: 9000, action: { label: t("Show"), run: show } });
   });
+  // lazer imported or saved a beatmap (through Fumen or not): the library catches up once it's
+  // quiet; while an import or a scan runs, later (an import updates the library when it's done)
+  let mapsTimer = 0;
+  const lazerMaps = (): void => {
+    clearTimeout(mapsTimer);
+    mapsTimer = window.setTimeout(async () => {
+      const st = await refreshStatus().catch(() => null);
+      if (isImporting() || isScanning() || st?.scanning) return lazerMaps();
+      void maybeAutoRescan();
+    }, MAPS_QUIET);
+  };
+  void listen("lazer-maps", lazerMaps);
   // from the companion window: a play to show, or it was closed
   void listen<string>("show-score", (e) => go({ name: "score", id: e.payload }));
   void listen("companion-closed", () => setPrefs({ companion: false }));

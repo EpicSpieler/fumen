@@ -280,7 +280,7 @@ export class SettingsView {
           <div class="setting-row">
             <div class="setting-text">
               <div class="setting-title about-version">Fumen ${esc(this.version)}</div>
-              <div class="setting-desc">${t("Fumen reads osu!lazer's database from a private copy. Beatmaps and collections you put into lazer go in through lazer's own code, only while lazer is closed, only on lazer versions tested with Fumen, and with a backup of its database first.")}</div>
+              <div class="setting-desc">${t("Fumen reads osu!lazer's database from a private copy. Beatmaps and collections you put into lazer go in through lazer's own code: while lazer is closed only on versions tested with Fumen and with a backup of its database first, while it's open beatmaps are handed to lazer, which adds them itself.")}</div>
             </div>
           </div>
           <div class="setting-row">

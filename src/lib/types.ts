@@ -746,6 +746,8 @@ export interface LazerImportStatus {
   version: string | null;
   tested: boolean;
   running: boolean;
+  /** lazer is open and takes downloads itself (they're handed to it): imports can run anyway */
+  handoff?: boolean;
   testedVersions: string[];
   /** sets in lazer without their details (an older Fumen imported them so) */
   unfinished: number;

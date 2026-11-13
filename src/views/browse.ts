@@ -327,7 +327,7 @@ export class BrowseView {
 
   /** Sets can be added: osu!lazer takes them, or they go into osu!stable (Add beatmaps' target). */
   private canAdd(): boolean {
-    return importTarget() === "stable" || !!this.status?.ready;
+    return importTarget() === "stable" || !!this.status?.ready || !!this.status?.handoff;
   }
 
   /** Why sets can't go into osu!lazer right now (the bar under the toolbar says it too). */
@@ -341,7 +341,7 @@ export class BrowseView {
   private renderLazer(): void {
     const el = this.el.querySelector<HTMLElement>(".br-lazer")!;
     const s = this.status;
-    if (!s || s.ready || importTarget() === "stable") {
+    if (!s || s.ready || s.handoff || importTarget() === "stable") {
       el.hidden = true;
       return;
     }

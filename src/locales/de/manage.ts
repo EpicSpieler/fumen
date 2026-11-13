@@ -144,6 +144,8 @@ export const manage: Record<string, string> = {
   "Add the new set": "Das neue Set hinzufügen",
   "Add all {n} new": "Alle {n} neuen hinzufügen",
   "Fumen couldn't check osu!lazer": "Fumen konnte osu!lazer nicht prüfen",
+  "osu!lazer is open: each set goes straight to it once it's downloaded, and lazer adds it itself.":
+    "osu!lazer ist offen: Jedes Set geht nach dem Download direkt dorthin, und lazer fügt es selbst hinzu.",
   "Close osu!lazer to add sets": "Schließ osu!lazer, um Sets hinzuzufügen",
   "osu!lazer can't take sets right now": "osu!lazer kann gerade keine Sets aufnehmen",
   "osu!lazer is open. Fumen adds sets with lazer's own code while it's closed, so close it to add these.":

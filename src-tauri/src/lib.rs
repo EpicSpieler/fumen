@@ -94,6 +94,10 @@ pub struct AppState {
     map_synced: Mutex<std::collections::HashMap<i64, std::time::Instant>>,
     /// lazer's storage folder being watched for new plays, and the watcher (`live.rs`)
     live: Mutex<Option<(PathBuf, notify::RecommendedWatcher)>>,
+    /// when a new difficulty last turned up in lazer's files (unix ms; lazer imported or saved a
+    /// beatmap), and when the last scan began: the library is behind when the first is later
+    maps_seen: std::sync::atomic::AtomicI64,
+    scan_started: std::sync::atomic::AtomicI64,
 }
 
 impl AppState {
@@ -271,23 +275,32 @@ fn watch_plays(app: &AppHandle) {
     *live = None;
     let Some(storage) = storage else { return };
     let handle = app.clone();
-    let watcher = live::watch(&storage, move |play| {
-        let state = handle.state::<AppState>();
-        let play = {
-            let conn = state.db();
-            match live::store(&conn, &play) {
-                Ok(true) => live::with_library(&conn, play),
-                Ok(false) => return,
-                Err(e) => Err(e),
+    let seen = app.clone();
+    let watcher = live::watch(
+        &storage,
+        move |play| {
+            let state = handle.state::<AppState>();
+            let play = {
+                let conn = state.db();
+                match live::store(&conn, &play) {
+                    Ok(true) => live::with_library(&conn, play),
+                    Ok(false) => return,
+                    Err(e) => Err(e),
+                }
+            };
+            match play {
+                Ok(p) => {
+                    let _ = handle.emit("live-play", p);
+                }
+                Err(e) => eprintln!("[live] {e}"),
             }
-        };
-        match play {
-            Ok(p) => {
-                let _ = handle.emit("live-play", p);
-            }
-            Err(e) => eprintln!("[live] {e}"),
-        }
-    });
+        },
+        // a beatmap imported or saved in lazer: the library is behind until the next scan
+        move || {
+            seen.state::<AppState>().maps_seen.store(lazer::now_ms(), Ordering::SeqCst);
+            let _ = seen.emit("lazer-maps", ());
+        },
+    );
     if let Some(w) = watcher {
         *live = Some((storage, w));
     }
@@ -613,7 +626,7 @@ fn library_status(state: State<'_, AppState>) -> Result<LibraryStatus> {
                 || db::get_meta(&conn, "lazer.keyBindings")?.is_none()
         }
         _ => false,
-    };
+    } || (lazer_scanned.is_some() && state.maps_seen.load(Ordering::SeqCst) > state.scan_started.load(Ordering::SeqCst));
     Ok(LibraryStatus {
         install,
         default_path: paths::default_lazer_dir().map(|p| p.to_string_lossy().into_owned()),
@@ -688,6 +701,7 @@ fn run_scan(app: &AppHandle, state: &AppState) -> Result<ImportCounts> {
         return Err(Error::known("lazer-not-found", "osu!lazer's data folder wasn't found. Pick it in Settings."));
     }
 
+    state.scan_started.store(lazer::now_ms(), Ordering::SeqCst);
     let mut counts = ImportCounts::default();
     if let Some(install) = &install {
         std::fs::create_dir_all(&state.cache_dir)?;
@@ -1676,6 +1690,10 @@ struct ImportSummary {
 
 /// Sets per run of lazer's importer (each run: one backup of client.realm, one importer start).
 const IMPORT_BATCH: usize = 20;
+/// a set handed to a running lazer that's still not in after this long…
+const HANDOFF_WAIT: std::time::Duration = std::time::Duration::from_secs(90);
+/// …while lazer hasn't taken any other for this long either, is given up on
+const HANDOFF_IDLE: std::time::Duration = std::time::Duration::from_secs(30);
 /// Downloads at once.
 const DOWNLOADERS: usize = 3;
 /// Downloaded sets waiting for the importer, at most (they take disk space).
@@ -1833,7 +1851,8 @@ fn run_import(app: &AppHandle, state: &AppState, links: &[String], into_stable: 
             .storage()
             .ok_or_else(|| Error::known("lazer-not-found", "osu!lazer's data folder wasn't found. Pick it in Settings."))?;
         let st = lazer_import::status(Some(&storage), &compat);
-        if let Some(reason) = st.reason {
+        // lazer open: the sets go to it, it imports them itself
+        if let Some(reason) = st.reason.filter(|_| !st.handoff) {
             return Err(Error::known(lazer_import::error_code(reason), st.message.unwrap_or_default()));
         }
         (storage, None)
@@ -1957,6 +1976,10 @@ fn run_import(app: &AppHandle, state: &AppState, links: &[String], into_stable: 
         let mut ready: Vec<(usize, u32, PathBuf)> = Vec::new();
         let mut downloading = true;
         let mut repaired = false;
+        // handed to the running lazer, waiting for it to take them (its copy gone)
+        let mut handed: Vec<(usize, u32, PathBuf, std::time::Instant)> = Vec::new();
+        let mut last_taken = std::time::Instant::now();
+        let staging = state.cache_dir.join("handoff");
         loop {
             match rx.recv_timeout(std::time::Duration::from_millis(100)) {
                 Ok((i, set, Ok(path))) => {
@@ -1974,8 +1997,27 @@ fn run_import(app: &AppHandle, state: &AppState, links: &[String], into_stable: 
                 Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
                 Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => downloading = false,
             }
+            // handed to lazer: in once it has deleted its copy; one it doesn't take for a long while
+            // (and nothing else either) has gone wrong
+            handed.retain(|(i, set, staged, at)| {
+                if !staged.exists() {
+                    last_taken = std::time::Instant::now();
+                    emit(*i, "done", Some(*set), None, None);
+                    imported.push((*i, *set));
+                    summary.imported += 1;
+                    return false;
+                }
+                if at.elapsed() > HANDOFF_WAIT && last_taken.elapsed() > HANDOFF_IDLE {
+                    let _ = std::fs::remove_file(staged);
+                    emit(*i, "error", Some(*set), None, Some("osu!lazer didn't import it. Is it still open?".into()));
+                    summary.failed += 1;
+                    return false;
+                }
+                true
+            });
             if cancel.load(Ordering::SeqCst) {
-                if !downloading {
+                // what lazer already has goes in anyway: waited for
+                if !downloading && handed.is_empty() {
                     break;
                 }
                 continue;
@@ -2003,6 +2045,27 @@ fn run_import(app: &AppHandle, state: &AppState, links: &[String], into_stable: 
                 // into lazer, the batch at once (one backup, one start of the importer)
                 for &(i, set, _) in &batch {
                     emit(i, "importing", Some(set), None, None);
+                }
+                // lazer open: each set to it, it imports them itself
+                let open = lazer_import::installed().filter(|l| lazer_import::can_hand_over(l) && lazer_import::lazer_running(&l.dir));
+                if let Some(lazer) = open {
+                    for (i, set, path) in batch {
+                        match lazer_import::hand_over(&lazer, &path, &staging) {
+                            Ok(staged) => {
+                                if handed.is_empty() {
+                                    last_taken = std::time::Instant::now();
+                                }
+                                handed.push((i, set, staged, std::time::Instant::now()));
+                            }
+                            Err(e) => {
+                                let _ = std::fs::remove_file(&path);
+                                emit(i, "error", Some(set), None, Some(e.to_string()));
+                                summary.failed += 1;
+                            }
+                        }
+                        waiting.fetch_sub(1, Ordering::SeqCst);
+                    }
+                    continue;
                 }
                 let paths: Vec<PathBuf> = batch.iter().map(|(_, _, p)| p.clone()).collect();
                 // the run's first batch also finishes sets an older Fumen imported without details
@@ -2044,7 +2107,7 @@ fn run_import(app: &AppHandle, state: &AppState, links: &[String], into_stable: 
                     }
                 }
             }
-            if !downloading && ready.is_empty() {
+            if !downloading && ready.is_empty() && handed.is_empty() {
                 break;
             }
         }
@@ -2175,6 +2238,8 @@ pub fn run() {
                 compare_cancel: AtomicBool::new(false),
                 map_synced: Mutex::new(std::collections::HashMap::new()),
                 live: Mutex::new(None),
+                maps_seen: std::sync::atomic::AtomicI64::new(0),
+                scan_started: std::sync::atomic::AtomicI64::new(0),
             };
             state.refresh_storage();
             state.reload_stable_files();

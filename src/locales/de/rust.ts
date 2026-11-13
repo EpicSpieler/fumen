@@ -48,6 +48,9 @@ export const rust: Record<string, string> = {
   "osu!lazer {version} isn't tested with Fumen's import yet; importing stays off until it is.":
     "osu!lazer {version} ist noch nicht mit Fumens Import getestet; Importieren bleibt aus, bis es das ist.",
   "osu!lazer is running. Close it to import.": "osu!lazer läuft. Schließ es, um zu importieren.",
+  "osu!lazer couldn't be reached: {error}": "osu!lazer war nicht erreichbar: {error}",
+  "osu!lazer didn't take the beatmap.": "osu!lazer hat die Beatmap nicht angenommen.",
+  "osu!lazer didn't import it. Is it still open?": "osu!lazer hat sie nicht importiert. Ist es noch offen?",
   "{what} failed: {msg}": "{what} ist fehlgeschlagen: {msg}",
   "Importing into lazer": "Importieren in lazer",
   "Writing lazer's collections": "Schreiben von lazers Sammlungen",

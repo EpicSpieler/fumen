@@ -90,8 +90,8 @@ export const settings: Record<string, string> = {
 
   // about and updates
   About: "Über",
-  "Fumen reads osu!lazer's database from a private copy. Beatmaps and collections you put into lazer go in through lazer's own code, only while lazer is closed, only on lazer versions tested with Fumen, and with a backup of its database first.":
-    "Fumen liest die Datenbank von osu!lazer aus einer eigenen Kopie. Beatmaps und Sammlungen, die du in lazer einfügst, gehen durch lazers eigenen Code, nur solange lazer geschlossen ist, nur bei lazer-Versionen, die mit Fumen getestet sind, und mit einem Backup seiner Datenbank vorher.",
+  "Fumen reads osu!lazer's database from a private copy. Beatmaps and collections you put into lazer go in through lazer's own code: while lazer is closed only on versions tested with Fumen and with a backup of its database first, while it's open beatmaps are handed to lazer, which adds them itself.":
+    "Fumen liest die Datenbank von osu!lazer aus einer eigenen Kopie. Beatmaps und Sammlungen, die du in lazer einfügst, gehen durch lazers eigenen Code: bei geschlossenem lazer nur mit Versionen, die mit Fumen getestet sind, und mit einem Backup seiner Datenbank vorher. Ist lazer offen, bekommt es die Beatmaps übergeben und fügt sie selbst hinzu.",
   Updates: "Updates",
   "Fumen looks for updates when it starts and every few hours. Installing one restarts it.":
     "Fumen sucht beim Start und alle paar Stunden nach Updates. Eins zu installieren startet Fumen neu.",
