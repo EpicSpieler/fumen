@@ -1,6 +1,6 @@
 /* actions.ts — things you can do with a set or difficulty, shared by every view. */
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { osuMapUrl, osuSetUrl } from "../lib/api";
+import { osuGameUrl, osuMapUrl, osuSetUrl } from "../lib/api";
 import {
   addToCollection, collectionMaps, copyLazerCollection, createCollection, deleteCollection, fumenCollection, fumenCollections,
   isSmart, lazerTarget, putIntoLazer, removeFromCollection, renameCollection, saveCollectionDb,
@@ -74,6 +74,7 @@ export function setMenu(
   if (set.onlineId) {
     const url = map?.onlineId ? osuMapUrl(set.onlineId, map.onlineId, map.mode) : osuSetUrl(set.onlineId);
     entries.push(
+      { label: t("Open in osu!"), icon: "play", action: () => void openUrl(osuGameUrl(set.onlineId!, map?.onlineId)) },
       { label: t("View on osu! website"), icon: "external", action: () => void openUrl(url) },
       { label: t("Copy link"), icon: "link", action: () => void copy(url, t("Link copied")) },
     );

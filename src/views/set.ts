@@ -1,6 +1,6 @@
 /* set.ts — a beatmap set: artwork hero, difficulties (each opens its chart), details. */
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { osuSetUrl, thumbUrl } from "../lib/api";
+import { osuGameUrl, osuSetUrl, thumbUrl } from "../lib/api";
 import {
   bpm, date, displayArtist, displayTitle, duration, esc, fixed, holdRatio, keysOrMode, mapPatternText, modeLabel, nps, num,
   pct, rankInfo, relativeTime, srChip, statusLabel,
@@ -89,6 +89,7 @@ export class SetView {
           <div class="meta-line set-meta">${meta.join("")}</div>
           <div class="set-actions">
             <button class="btn btn-primary btn-lg set-play" type="button">${icon("play", "ic-play")}${icon("pause", "ic-pause")}<span>${t("Play")}</span></button>
+            ${set.onlineId ? `<button class="btn btn-lg set-osu" type="button" data-tip="${t("Opens the map in osu!lazer, where Go to beatmap picks it in song select.")}">${icon("play")}<span>${t("Open in osu!")}</span></button>` : ""}
             ${set.onlineId ? `<button class="btn btn-lg set-web" type="button">${icon("external")}<span>${t("osu! website")}</span></button>` : ""}
             <button class="icon-btn set-more" type="button" data-tip="${t("More")}" aria-label="${t("More actions")}">${icon("more")}</button>
           </div>
@@ -264,6 +265,13 @@ export class SetView {
       if (t.closest(".set-play")) {
         const open = this.openId ? store.snap?.sets[this.setIdx].maps.find((mi) => store.snap!.maps[mi].id === this.openId) : undefined;
         return player.playSet(this.setIdx, open);
+      }
+      if (t.closest(".set-osu")) {
+        const set = store.snap?.sets[this.setIdx];
+        // the difficulty that's open, else the set
+        const open = this.openId ? store.snap?.maps.find((m) => m.id === this.openId) : undefined;
+        if (set?.onlineId) void openUrl(osuGameUrl(set.onlineId, open?.onlineId));
+        return;
       }
       if (t.closest(".set-web")) {
         const set = store.snap?.sets[this.setIdx];

@@ -6,6 +6,8 @@ export const menus: Record<string, string> = {
   "Add to collection…": "Zu Sammlung hinzufügen…",
   "Remove from collection": "Aus Sammlung entfernen",
   "Remove set from collection": "Set aus Sammlung entfernen",
+  "Open in osu!": "In osu! öffnen",
+  "Opens the map in osu!lazer, where Go to beatmap picks it in song select.": "Öffnet die Map in osu!lazer, dort wählt „Go to beatmap“ sie in der Songauswahl aus.",
   "View on osu! website": "Auf der osu!-Website ansehen",
   "Copy link": "Link kopieren",
   "Link copied": "Link kopiert",

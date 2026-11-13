@@ -279,6 +279,9 @@ export type BuiltinSkin = "classic" | "retro" | "triangles" | "argon" | "argon-p
 export const builtinSkinUrl = (skin: BuiltinSkin, name: string): string => `${BASE}skin/${skin}/${encodeURIComponent(name)}`;
 
 export const osuSetUrl = (onlineId: number): string => `https://osu.ppy.sh/beatmapsets/${onlineId}`;
+/** The map in osu! itself (its osu:// link): osu!lazer opens the map's page over the game, where
+ * "Go to beatmap" picks it in song select; nothing can pick a map there directly. */
+export const osuGameUrl = (setId: number, mapId?: number | null): string => (mapId ? `osu://b/${mapId}` : `osu://s/${setId}`);
 export const osuMapUrl = (setId: number, mapId: number, mode: number): string =>
   `https://osu.ppy.sh/beatmapsets/${setId}#${["osu", "taiko", "fruits", "mania"][mode] ?? "osu"}/${mapId}`;
 export const osuScoreUrl = (id: number): string => `https://osu.ppy.sh/scores/${id}`;

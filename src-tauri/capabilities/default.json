@@ -19,6 +19,12 @@
       "allow": [
         {
           "url": "https://osu.ppy.sh/*"
+        },
+        {
+          "url": "osu://b/*"
+        },
+        {
+          "url": "osu://s/*"
         }
       ]
     },
