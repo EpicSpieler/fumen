@@ -165,5 +165,8 @@ like the title.
   Stream & OBS; only the keys lazer binds to play (from lazer's key bindings, exported by the
   sidecar with the library); only while osu! is the window in front; nothing kept. Keys are told
   apart by scan code like osu!framework does, and the caps are named in the keyboard's layout.
-- **Coming in.** Measured again (docs/tosu.md): lazer's time sits at the start while the loading
-  screen is up, so the overlay now comes in with the first step forward, its parts a little quicker.
+- **Coming in.** With the gameplay screen: lazer's time jumps back to the map's start when it
+  comes in and then sits there through the lead-in (up to 2 s before a first note at 0:00), so
+  waiting for the song to move brought the overlay in at the first note (docs/tosu.md, checked in
+  lazer's code). The overlay, the song card and the visualizer source now go by that jump, the
+  parts a little quicker than before.

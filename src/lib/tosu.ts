@@ -18,7 +18,8 @@ export interface TosuNow {
   artist: string;
   title: string;
   version: string;
-  /** osu! is paused: the pause menu, the fail screen (and moments while loading) */
+  /** osu!'s time didn't move since tosu's last look (that's all tosu means by it): the pause menu,
+   * the fail screen, a moment while loading, lazer's lead-in before the song starts */
   paused: boolean;
   /** "lazer" or "stable" */
   client: string;
@@ -214,6 +215,14 @@ export const NEAR_START = 3000;
 export const HOLD_MAX = 10_000;
 
 /**
+ * Whether osu!'s time `live` is back at a map's start, `before` being the time a message earlier.
+ * lazer seeks there the moment its gameplay screen comes in (Player.OnEntering resets the gameplay
+ * clock to the map's start) and on a restart; during the lead-in tosu's time stays there, a little
+ * under 0 (the track at 0 plus lazer's offsets, docs/tosu.md).
+ */
+export const backToStart = (live: number, before: number): boolean => live < 0 || (live < before - JUMP && live < NEAR_START);
+
+/**
  * Starting a map: the menu's music runs on into the loading screen for a second or two, so osu!'s
  * time still says the middle of the song. Fumen waits at the beginning until osu! jumps back to it
  * ("menu" → "start") and its time moves from there (done).
@@ -256,6 +265,6 @@ export class StartHold {
   }
 
   private isStart(live: number, before: number): boolean {
-    return live < 0 || (live < before - JUMP && live < NEAR_START);
+    return backToStart(live, before);
   }
 }

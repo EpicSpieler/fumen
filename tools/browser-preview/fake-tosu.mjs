@@ -22,7 +22,8 @@ const SHOW = process.argv.includes("--show") ? (process.argv[process.argv.indexO
 const SCRIPT = [
   [0, 9, 5, 1, false, 40000],
   [5, 9, 2, 1, false, null],
-  [6.5, 9, 2, 1.5, false, -1500],
+  [6.5, 9, 2, 1.5, true, -13],
+  [7.8, 9, 2, 1.5, false, 0],
   [12, 9, 2, 1.5, true, null],
   [14, 9, 2, 1.5, false, null],
   [20, 9, 7, 1, true, null],
@@ -33,7 +34,9 @@ const SCRIPT = [
   [35, 5, 5, 1, false, 30000],
   [38, null, 2, 1, false, 0],
   [41, 13, 5, 1, false, 30000],
-  [44, 13, 2, 1, false, -1500, 0],
+  [44, 13, 2, 1, false, null, 0],
+  [45.5, 13, 2, 1, true, -13, 0],
+  [47.5, 13, 2, 1, false, 0, 0],
   [50, 13, 2, 1, false, null, 2],
   [53, 13, 2, 1, false, null, 5],
   [55, 13, 2, 1, false, null, 8, true],
@@ -89,12 +92,15 @@ function tryAt(kind, s) {
     },
     ...extra,
   });
-  // song select with the menu's music, then loading: the music still running, then back at the
-  // beginning and still for a while, paused flickering (as lazer does), then the lead-in
+  // song select with the menu's music; lazer's loading screen with the music running on until it
+  // stops; then the gameplay screen: the time back at the song's start (-13, the track at 0 plus
+  // lazer's offsets) and still through the lead-in (2 s before a first note at 0:00, "paused" to
+  // tosu as its time doesn't move); then the song from 0 (docs/tosu.md)
   if (s < 2) return msg(5, 30000 + s * 1000);
-  if (s < 3) return msg(2, 30000 + s * 1000);
-  if (s < 5) return msg(2, -1500, { paused: Math.floor(s * 4) % 2 === 0 });
-  const live = -1500 + (s - 5) * 1000;
+  if (s < 4.4) return msg(2, 30000 + s * 1000);
+  if (s < 4.6) return msg(2, 32400, { paused: true });
+  if (s < 6.6) return msg(2, -13, { paused: s >= 4.75 });
+  const live = (s - 6.6) * 1000;
   // misses (song s) and the health along the way
   const missAt = { fc: [], pass: [8.2], fail: [6, 11, 12.6, 14.2, 15.4] }[kind];
   const failAt = kind === "fail" ? 17 : Infinity;
@@ -116,7 +122,7 @@ function tryAt(kind, s) {
   const play = { combo, max, misses, hits: notes + misses, health, accuracy, rank, pp: Math.round(notes * 0.11) };
   if (live / 1000 >= failAt) {
     // the fail screen: paused, the time creeping on, then back to song select
-    if (s - 3 - 1.5 - failAt > 4) return null;
+    if (live / 1000 - failAt > 4) return null;
     return msg(2, failAt * 1000 + (live - failAt * 1000) * 0.2, { ...play, failed: true, paused: true });
   }
   if (live < LAST + 1500) return msg(2, live, play);
@@ -131,6 +137,8 @@ let roundAt = Date.now();
 
 let start = Date.now();
 let live = 40000;
+/** the map's gameplay screen came in (its time was set back to the start): judgements count */
+let inMap = false;
 let lastStep = -1;
 let last = Date.now();
 setInterval(() => {
@@ -155,6 +163,7 @@ setInterval(() => {
   const [, map, state, rate, paused, from, misses = 0, failed = false] = SCRIPT[step];
   if (step !== lastStep) {
     if (from !== null) live = from;
+    inMap = state === 2 && (inMap || (from !== null && from <= 0));
     console.log(`${s.toFixed(1)}s  map ${map ?? "(not in library)"}  state ${state}  ${rate}×${paused ? "  paused" : ""}`);
     lastStep = step;
   }
@@ -173,7 +182,7 @@ setInterval(() => {
       mods: { number: 0, name: rate === 1.5 ? "DT" : "", array: rate === 1.5 ? [{ acronym: "DT" }] : [], rate },
       failed,
       accuracy: misses ? 100 - misses * 0.6 : 100,
-      hits: state === 2 ? { 300: Math.max(0, Math.floor(live / 150)), 0: misses } : {},
+      hits: inMap ? { 300: Math.max(0, Math.floor(live / 150)), 0: misses } : {},
     },
   });
   for (const c of clients) c.write(frame(msg));

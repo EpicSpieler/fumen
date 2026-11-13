@@ -117,6 +117,8 @@ export function demoAt(kind: DemoKind, s: number, map: DemoMap): TosuNow | null 
       results: { scoreId: 1, rank: play.rank, accuracy: play.accuracy, score: play.score, maxCombo: play.maxCombo, pp: play.pp },
     });
   }
+  // lazer's lead-in: the gameplay screen is in, the song held at its start (docs/tosu.md)
+  if (t < 0) return make(STATE.play, 0, play, { paused: true });
   return make(STATE.play, t * 1000, play);
 }
 

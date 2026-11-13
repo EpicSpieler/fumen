@@ -1,18 +1,32 @@
 /* live.ts — an OBS page's own line to tosu: what osu! shows, where its song is between tosu's
  * messages, and how the play goes (lib/vis/feel). Straight from tosu rather than through Fumen's
  * window, which a browser slows down while it's in the background; OBS's sources it doesn't. */
-import { Emitter } from "../lib/store";
-import { readTosu, STATE, StartHold, TosuClock, type TosuNow } from "../lib/tosu";
+import { Emitter } from "../lib/emitter";
+import { backToStart, readTosu, STATE, StartHold, TosuClock, type TosuNow } from "../lib/tosu";
 import { Feel } from "../lib/vis/feel";
 
 /** ms between tries while tosu isn't there */
 const RETRY = 2000;
-/** messages with the song moving on before a map counts as begun: lazer's time sits at the start
- * (paused, or not moving) while the loading screen is still up and starts with the gameplay
- * screen, so the first step forward after the jump back is the map beginning (docs/tosu.md) */
-const BEGIN_RUNS = 1;
-/** ms osu!'s time has to move on per message for that (a loading screen's time creeps, if at all) */
+/** ms osu!'s time has to move on in a message for a map joined in the middle to count as running */
 const BEGIN_STEP = 30;
+
+/**
+ * Whether the map being played begins with `now` (osu! is playing it; `before` is the message
+ * earlier). lazer's gameplay screen comes in when its time jumps back to the map's start: until
+ * then the loading screen runs on with the menu's music, from then the lead-in runs with the song
+ * held at the start, up to 2 s before a first note at 0:00. So the map begins at that jump, not
+ * when the song moves, which would be the first note (docs/tosu.md). `fromStart`: the start of
+ * this map was seen (osu! went from another screen to playing it while the page was open).
+ */
+export function mapBegins(now: TosuNow, before: TosuNow | null, fromStart: boolean): boolean {
+  if (!before || before.md5 !== now.md5) return false;
+  if (backToStart(now.live, before.live)) return true;
+  if (before.state !== STATE.play) return false;
+  // no jump seen (osu!'s time was near the start already): the first note judged
+  if (now.play.hits > before.play.hits) return true;
+  // joined in the middle of a map: once the song moves
+  return !fromStart && !now.paused && now.live - before.live >= BEGIN_STEP;
+}
 
 /** in a map: playing it or on its results */
 export const inMap = (state: number): boolean => state === STATE.play || state === STATE.resultScreen;
@@ -23,12 +37,13 @@ class Live {
   readonly clock = new TosuClock();
   private hold = new StartHold();
   /** `msg`: every message; `map`: osu! is on another difficulty (its MD5); `start`: a map began;
-   * `begin`: the map really runs (past the loading screen, the song moving); `leave`: out of a
-   * map (the MD5 left); `gone`: tosu went */
+   * `begin`: the map really runs (its gameplay screen came in, past the loading screen); `leave`:
+   * out of a map (the MD5 left); `gone`: tosu went */
   readonly bus = new Emitter<{ msg: TosuNow; map: string; start: TosuNow; begin: TosuNow; leave: string; gone: void }>();
-  /** the map being played really runs: past its loading screen (until it's left) */
+  /** the map being played really runs: its gameplay screen is in (until it's left) */
   begun = false;
-  private runs = 0;
+  /** the start of the map being played was seen (see mapBegins) */
+  private fromStart = false;
   private url = "";
   private ws: WebSocket | null = null;
   private retry = 0;
@@ -80,7 +95,7 @@ class Live {
     if (inMap(this.now.state)) this.bus.emit("leave", this.now.md5);
     this.now = null;
     this.begun = false;
-    this.runs = 0;
+    this.fromStart = false;
     this.feel.stop();
     this.clock.reset();
     this.hold.clear();
@@ -108,14 +123,13 @@ class Live {
     } else if (now.state !== STATE.play) this.hold.clear();
     else this.hold.update(now.live, t);
     if (before && inMap(before.state) && !inMap(now.state)) this.bus.emit("leave", before.md5);
-    // the map begins once its song moves on for a few messages, not while it loads
+    // the map begins when its gameplay screen comes in, not on the loading screen
     if (now.state !== STATE.play) {
       this.begun = false;
-      this.runs = 0;
+      this.fromStart = false;
     } else if (!this.begun) {
-      const moving = before?.state === STATE.play && before.md5 === now.md5 && !now.paused && !this.hold.on && now.live - before.live >= BEGIN_STEP;
-      this.runs = moving ? this.runs + 1 : 0;
-      if (this.runs >= BEGIN_RUNS) {
+      if (before && before.state !== STATE.play) this.fromStart = true;
+      if (mapBegins(now, before, this.fromStart)) {
         this.begun = true;
         this.bus.emit("begin", now);
       }

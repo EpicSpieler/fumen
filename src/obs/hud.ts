@@ -626,7 +626,7 @@ export function start(): void {
     for (const e of f.events) onEvent(e, f);
     // osu!'s fail screen is still "playing" to tosu: here it's the end
     const failing = !!now && endKind === "fail" && now.state === STATE.play;
-    // not on the loading screen: once the song runs (a retry keeps it in)
+    // not on the loading screen: from when the gameplay screen comes in (a retry keeps it in)
     const playing = !!now && !failing && live.begun && (f.phase === "play" || f.phase === "hold") && now.state === STATE.play;
     const ended = !!now && (failing || (f.phase === "end" && inMap(now.state)));
     const phase = !now ? "off" : playing ? "play" : ended ? "end" : "select";
