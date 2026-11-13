@@ -88,6 +88,29 @@
   transition: background-color .15s var(--ease-std);
 }
 .score-band:hover { background: var(--accent-dim-hover); }
+/* a try's pulse (views/pulse.ts): its curve over the density, the fastest part behind it */
+.pulse-facts { margin-bottom: 12px; flex-wrap: wrap; row-gap: 10px; }
+.pulse-facts small { font-size: var(--fs-11); color: var(--t3); font-weight: 500; }
+.pulse-graph { height: 120px; }
+.pulse-graph .score-density { opacity: .55; }
+.pulse-graph svg { position: absolute; left: 0; right: 0; top: 12px; width: 100%; height: calc(100% - 18px); overflow: visible; pointer-events: none; }
+.pulse-line { fill: none; stroke: var(--danger); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.pulse-area { fill: color-mix(in srgb, var(--danger) 13%, transparent); }
+.pulse-band { cursor: default; }
+.pulse-band:hover { background: var(--accent-dim); }
+.pulse-peak {
+  position: absolute;
+  top: calc(12px + var(--y) * (100% - 18px));
+  width: 9px;
+  height: 9px;
+  margin: -4.5px 0 0 -4.5px;
+  border-radius: 50%;
+  background: var(--danger);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 28%, transparent);
+}
+.tries-pulse { white-space: nowrap; }
+.tries-pulse svg { display: inline-block; width: 11px; height: 11px; margin-right: 3px; vertical-align: -1px; color: var(--danger); }
+
 .score-graph-axis { display: flex; justify-content: space-between; margin-top: 4px; font-size: var(--fs-11); color: var(--t3); }
 
 .score-stretches { display: flex; flex-direction: column; gap: 4px; margin-top: 14px; }

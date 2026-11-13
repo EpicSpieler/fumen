@@ -114,4 +114,15 @@ export const live: Record<string, string> = {
   "New best, +{pp} pp": "Neues Best, +{pp} pp",
   "New best": "Neues Best",
   "Your best stays {acc}": "Dein Best bleibt {acc}",
+
+  // the pulse during a try
+  "Your pulse": "Dein Puls",
+  Average: "Durchschnitt",
+  Highest: "Höchster",
+  Lowest: "Tiefster",
+  "In the fastest part": "Im schnellsten Teil",
+  "The map's fastest part": "Der schnellste Teil der Map",
+  "Your pulse over the song": "Dein Puls über den Song",
+  "Highest: {bpm} bpm at {at}": "Höchster: {bpm} bpm bei {at}",
+  "Your pulse on average": "Dein Puls im Schnitt",
 };

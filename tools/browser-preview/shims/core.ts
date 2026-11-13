@@ -619,6 +619,27 @@ export async function invoke<T>(cmd: string, args: Record<string, unknown> = {},
         return { md5: mid, map: m ? mid : null, title: s?.title ?? null, version: m?.version ?? null, stars: m?.sr ?? null, plays: p ? 1 : 0, bestNow: p?.accuracy ?? null, best: m?.best?.acc ?? null };
       }) as T;
     }
+    // the heart rate monitor (src-tauri/src/heart.rs): a made-up strap whose pulse goes up and
+    // down every minute or so
+    case "heart_scan":
+      await new Promise((r) => setTimeout(r, 1200));
+      return [
+        { id: "AA:BB:CC:00:11:22", name: "Moofit HW401", rssi: -58 },
+        { id: "AA:BB:CC:33:44:55", name: "Polar H10 1A2B3C4D", rssi: -81 },
+      ] as T;
+    case "heart_connect":
+      fakeHeart(String(args.name));
+      return undefined as T;
+    case "heart_disconnect":
+      fakeHeart(null);
+      return undefined as T;
+    case "heart_tries":
+      return previewAttempts()
+        .filter((a) => a.heart)
+        .map((a) => {
+          const h = a.heart as { avg: number; max: number; min: number; fast: number | null };
+          return { id: a.id, md5: a.md5, mode: a.mode, started: a.started, outcome: a.outcome, mods: a.mods, avg: h.avg, max: h.max, min: h.min, fast: h.fast };
+        }) as T;
     case "open_companion":
       window.open("/companion.html", "fumen-companion", "width=300,height=440");
       return undefined as T;
@@ -629,6 +650,34 @@ export async function invoke<T>(cmd: string, args: Record<string, unknown> = {},
     default:
       throw { code: "preview", message: `${cmd} isn't available in the browser preview` };
   }
+}
+
+let heartTimer: ReturnType<typeof setInterval> | null = null;
+/** The preview's strap: connects after a moment, then a reading a second (part `heart` too). */
+function fakeHeart(name: string | null): void {
+  if (heartTimer) clearInterval(heartTimer);
+  heartTimer = null;
+  const status = (state: string, battery: number | null = null) => emit("heart-status", { state, name, battery, message: null });
+  if (!name) {
+    status("off");
+    obsChannel?.postMessage({ part: "heart", value: null });
+    return;
+  }
+  status("connecting");
+  let bpm = 78;
+  const from = Date.now();
+  setTimeout(() => {
+    status("on", 64);
+    heartTimer = setInterval(() => {
+      const goal = 112 + 38 * Math.sin((Date.now() - from) / 12_000);
+      bpm += (goal - bpm) * 0.25 + (Math.random() - 0.5) * 4;
+      const r = { bpm: Math.round(bpm), contact: true };
+      emit("heart", r);
+      const value = { ...r, at: Date.now() };
+      obsParts.set("heart", value);
+      obsChannel?.postMessage({ part: "heart", value });
+    }, 1000);
+  }, 1500);
 }
 
 type PreviewCollection = { id: string; name: string; created: number; maps: string[]; missing: number; query?: string; lazerId?: string };

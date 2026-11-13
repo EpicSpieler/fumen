@@ -65,4 +65,20 @@ export const history: Record<string, string> = {
   Fri: "Fr",
   Today: "Heute",
   Yesterday: "Gestern",
+
+  // the pulse
+  "No pulse in {mode} yet": "Noch kein Puls in {mode}",
+  "Connect a heart rate monitor in Settings, While you play. Every try at a map with it on shows up here: your average, your highest, your lowest and your pulse in each map's fastest part.":
+    "Verbinde einen Pulsmesser in den Einstellungen unter Beim Spielen. Jeder Versuch an einer Map mit ihm landet hier: dein Durchschnitt, dein höchster und dein tiefster Puls und dein Puls im schnellsten Teil jeder Map.",
+  "Connect one": "Einen verbinden",
+  "By difficulty": "Nach Schwierigkeitsgrad",
+  "Fastest part": "Schnellster Teil",
+  "By day": "Nach Tag",
+  "Average pulse": "Puls im Schnitt",
+  "In the fastest parts": "In den schnellsten Teilen",
+  "passes {a}, the rest {b} on average": "Passes {a}, der Rest {b} im Schnitt",
+  "on average": "im Schnitt",
+  "average {a}, highest {b}": "Schnitt {a}, höchster {b}",
+  "<b>{n}</b> try|<b>{n}</b> tries": "<b>{n}</b> Versuch|<b>{n}</b> Versuche",
+  "over {n} try|over {n} tries": "über {n} Versuch|über {n} Versuche",
 };

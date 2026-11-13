@@ -17,6 +17,8 @@ import { claimContentArt } from "../player";
 import { icon } from "../ui/icons";
 import { toast } from "../ui/controls";
 import { collectionPicker, openSet } from "./actions";
+import { pulseSection } from "./pulse";
+import type { Attempt } from "../lib/attempts";
 import { practiceChart, watchPlay } from "./fullscreen";
 import { t, tn } from "../lib/i18n";
 
@@ -43,6 +45,8 @@ const SHOWN: Record<number, string[]> = {
 const LEAN = 5;
 /** tries counted for the "Your tries" button at most */
 const TRIES_COUNTED = 100;
+/** a try and a score this close (ms) are the same pass */
+const PASS_NEAR = 3 * 60_000;
 
 export class ScoreView {
   readonly el: HTMLElement;
@@ -52,6 +56,8 @@ export class ScoreView {
   private rv: Review | null = null;
   /** tries at the difficulty kept through Follow osu! (views/tries), this pass among them */
   private tries = 0;
+  /** this pass as a try (lib/attempts), for the pulse during it */
+  private attempt: Attempt | null = null;
   private job = 0;
 
   constructor(private id: string) {
@@ -90,6 +96,7 @@ export class ScoreView {
     const start = sessionStart(day.filter((p) => p.date <= play.date + 1), play.date);
     this.session = day.filter((p) => p.date >= start - 1);
     this.tries = tries.length;
+    this.attempt = tries.find((a) => this.isThis(a)) ?? null;
     this.render();
     // the judging needs the chart (built with the score's chart mods) and its replay
     const mi = this.mapIdx();
@@ -106,6 +113,20 @@ export class ScoreView {
       console.warn("[score]", asApiError(e).message);
     }
     if (job === this.job) this.render();
+  }
+
+  /** the try this pass was: a pass at the map that ended about when the score came */
+  private isThis(a: Attempt): boolean {
+    const p = this.play;
+    return !!p && a.outcome === "pass" && a.md5 === p.md5 && Math.abs(a.ended - p.date) < PASS_NEAR;
+  }
+
+  /** a try came in (main.ts): this pass's comes a moment after its score */
+  add(a: Attempt): void {
+    if (this.attempt || !this.isThis(a)) return;
+    this.attempt = a;
+    this.tries++;
+    this.render();
   }
 
   private render(): void {
@@ -155,6 +176,7 @@ export class ScoreView {
         ${this.actions(map)}
         ${this.lossSection(map)}
         ${this.timingSection()}
+        ${pulseSection(this.attempt?.heart, this.data)}
         ${this.sessionSection()}
       </div>`;
     claimContentArt(set?.bg ? thumbUrl(set.bg, 640) : null);

@@ -2,6 +2,7 @@
  * fail, a quit or a restart, with how far it got and where the health ran out. lazer only keeps a
  * replay when you pass, so this is the one place fails and quits are seen at all. lib/tosu-follow
  * feeds it and keeps what comes out (src-tauri/src/attempts.rs). */
+import { summarize, type HeartTrack } from "./heart-stats";
 import type { Section } from "./practice";
 import { NEAR_START, STATE, StartHold, type TosuNow } from "./tosu";
 
@@ -34,6 +35,8 @@ export interface Attempt {
   pp: number | null;
   scoreId: number | null;
   rank: string | null;
+  /** the pulse during it, with a heart rate monitor (lib/heart-stats) */
+  heart?: HeartTrack | null;
 }
 
 /** a restart jumps back at least this far (ms) */
@@ -42,6 +45,8 @@ const RESTART_JUMP = 1000;
 const RESULTS_WAIT = 3000;
 /** misses remembered per try at most */
 const MISSES_KEPT = 5000;
+/** readings kept per try at most (about one a second) */
+const PULSE_KEPT = 20_000;
 /** mods that play by themselves */
 const AUTO = new Set(["AT", "CN", "AP"]);
 
@@ -59,6 +64,8 @@ interface Open {
   missCount: number;
   /** the latest message while playing it */
   last: TosuNow;
+  /** the pulse while it ran: [song ms, bpm] */
+  pulse: [number, number][];
 }
 
 export class AttemptTracker {
@@ -105,6 +112,14 @@ export class AttemptTracker {
     return out;
   }
 
+  /** A reading from the heart rate monitor: kept with the try under way, where its song is (not
+   * while it loads, nor behind the fail screen). */
+  pulse(bpm: number, contact: boolean | null): void {
+    const cur = this.cur;
+    if (!cur || cur.hold.on || cur.failedAt !== null || bpm <= 0 || contact === false || cur.pulse.length >= PULSE_KEPT) return;
+    cur.pulse.push([Math.round(cur.prevLive), Math.round(bpm)]);
+  }
+
   /** tosu went (or following stopped): a try under way ends as a quit, a pass without its score. */
   end(now: number): Attempt[] {
     const out: Attempt[] = [];
@@ -126,7 +141,7 @@ export class AttemptTracker {
   private open(n: TosuNow, before: number | null, now: number): void {
     const hold = new StartHold();
     hold.begin(n.live, before, now);
-    this.cur = { md5: n.md5, hold, started: now, reached: 0, failedAt: null, prevLive: n.live, maxHits: 0, missesAt: [], missCount: 0, last: n };
+    this.cur = { md5: n.md5, hold, started: now, reached: 0, failedAt: null, prevLive: n.live, maxHits: 0, missesAt: [], missCount: 0, last: n, pulse: [] };
   }
 
   private track(cur: Open, n: TosuNow, now: number, out: Attempt[]): void {
@@ -192,6 +207,8 @@ export class AttemptTracker {
       pp: p.pp,
       scoreId: null,
       rank: null,
+      // the fastest part comes with the chart, as the try is kept (lib/tosu-follow)
+      heart: summarize(cur.pulse),
     };
   }
 }

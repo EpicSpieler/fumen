@@ -132,4 +132,22 @@ export const settings: Record<string, string> = {
   "How softly a song comes in after another one.": "Wie sanft ein Song nach einem anderen einsetzt.",
   "Fade out": "Ausblenden",
   "How softly a song goes before the next one: at its end, and when you skip it.": "Wie sanft ein Song vor dem nächsten ausklingt: an seinem Ende und wenn du ihn überspringst.",
+
+  // the heart rate monitor
+  "Heart rate monitor": "Pulsmesser",
+  "A Bluetooth chest strap or watch that shares your pulse, like Moofit's, Polar's or Garmin's. Fumen keeps your pulse with every try at a map and shows it after the play and in History. The live overlay can show it too.":
+    "Ein Bluetooth-Brustgurt oder eine Uhr, die deinen Puls teilt, etwa von Moofit, Polar oder Garmin. Fumen hält deinen Puls bei jedem Versuch an einer Map fest und zeigt ihn nach dem Play und im Verlauf. Das Live-Overlay kann ihn auch zeigen.",
+  Connected: "Verbunden",
+  "Battery {n} %": "Akku {n} %",
+  "{name} isn't there right now. Fumen keeps trying.": "{name} ist gerade nicht da. Fumen versucht es weiter.",
+  "Connecting to {name}…": "Verbinde mit {name}…",
+  "Nothing found. Is it on and worn? A strap shares its pulse with one app at a time, so close its own app on your phone first.":
+    "Nichts gefunden. Ist er an und angelegt? Ein Gurt teilt seinen Puls nur mit einer App gleichzeitig, schließ also zuerst seine eigene App auf dem Handy.",
+  "Searching…": "Suche…",
+  "Another device": "Anderes Gerät",
+  "Not touching skin": "Kein Hautkontakt",
+  "No pulse yet": "Noch kein Puls",
+  strong: "stark",
+  good: "gut",
+  weak: "schwach",
 };

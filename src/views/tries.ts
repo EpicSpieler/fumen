@@ -17,6 +17,7 @@ import { claimContentArt } from "../player";
 import { icon } from "../ui/icons";
 import { toast } from "../ui/controls";
 import { openSet } from "./actions";
+import { pulseSection } from "./pulse";
 import { practiceChart } from "./fullscreen";
 import { t, tn } from "../lib/i18n";
 
@@ -138,6 +139,7 @@ export class TriesView {
         </div>
         ${this.actions(a, map)}
         ${this.heatSection(a, map)}
+        ${pulseSection(a.heart, this.data)}
         ${this.listSection(a)}
       </div>`;
     claimContentArt(set?.bg ? thumbUrl(set.bg, 640) : null);
@@ -268,7 +270,7 @@ export class TriesView {
                 <span class="tries-outcome ${a.outcome}">${g ? `<span class="grade" style="--c:${g.color}">${g.label}</span>` : esc(OUTCOME[a.outcome]())}</span>
                 <span class="tries-progress" aria-label="${p === null ? "" : pct(p, 0)}"><i style="width:${((p ?? 0) * 100).toFixed(1)}%"></i></span>
                 <span class="num">${pct(a.accuracy)}</span>
-                <span class="tries-misses num">${tn(a.misses, "{n} miss", "{n} misses")}${a.mods ? ` · ${esc(a.mods)}` : ""}</span>
+                <span class="tries-misses num">${tn(a.misses, "{n} miss", "{n} misses")}${a.mods ? ` · ${esc(a.mods)}` : ""}${a.heart ? ` · <span class="tries-pulse" data-tip="${t("Your pulse on average")}">${icon("heart-fill")}${Math.round(a.heart.avg)}</span>` : ""}</span>
                 <span class="num score-session-when">${relativeTime(a.ended)}</span>
               </button>`;
           })

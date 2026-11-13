@@ -7,6 +7,10 @@ import { api, isTauri } from "./api";
 import { startAnalyser } from "./eq";
 import { Emitter, store } from "./store";
 import { AttemptTracker, type Attempt } from "./attempts";
+import { heart } from "./heart";
+import { averageIn } from "./heart-stats";
+import { chartMods } from "./mods";
+import { hardest } from "./practice";
 import { Feel } from "./vis/feel";
 import { readTosu, StartHold, STATE, TosuClock, type TosuNow } from "./tosu";
 import { player } from "../player";
@@ -161,11 +165,15 @@ class Follow {
   /** Keeps tries that ended and tells about them (`attempt`). */
   private keep(done: Attempt[]): void {
     for (const a of done) {
-      api
-        .saveAttempt(a)
-        .then((id) => this.bus.emit("attempt", { ...a, id }))
+      void withFastPart(a)
+        .then((x) => api.saveAttempt(x).then((id) => this.bus.emit("attempt", { ...x, id })))
         .catch((e) => console.warn("[attempts] keep", e));
     }
+  }
+
+  /** A reading from the heart rate monitor (lib/heart): kept with the try under way. */
+  pulse(bpm: number, contact: boolean | null): void {
+    this.tries.pulse(bpm, contact);
   }
 
   /** tosu is gone (or following stopped): Fumen's song stops and Fumen has its sound again. */
@@ -350,4 +358,19 @@ class Follow {
 /** in a map: playing it or on its results */
 const inMap = (state: number): boolean => state === STATE.play || state === STATE.resultScreen;
 
+/** A try with a pulse: the average in the map's fastest part too, when its chart is there. */
+async function withFastPart(a: Attempt): Promise<Attempt> {
+  if (!a.heart) return a;
+  try {
+    const id = await api.mapByMd5(a.md5);
+    if (!id) return a;
+    const part = hardest(await api.getChart(id, chartMods([], a.mode)));
+    const fast = averageIn(a.heart.samples, part.a, part.b);
+    return fast === null ? a : { ...a, heart: { ...a.heart, fast: Math.round(fast * 10) / 10 } };
+  } catch {
+    return a;
+  }
+}
+
 export const follow = new Follow();
+heart.bus.on("reading", (r) => follow.pulse(r.bpm, r.contact));

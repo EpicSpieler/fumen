@@ -132,6 +132,30 @@
 .setting-row > .btn, .setting-row > .seg-pill, .setting-row > input { flex: none; }
 .is-missing { color: var(--warning); }
 .s-tosu-on { color: var(--success, var(--accent)); font-weight: 600; }
+.s-heart-now { white-space: nowrap; }
+.s-heart-now svg { display: inline-block; width: 13px; height: 13px; margin-right: 4px; vertical-align: -2px; color: var(--danger); }
+
+/* the heart rate monitors a search found: one button each */
+.heart-devs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.heart-dev {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--stroke-dim);
+  border-radius: var(--r-full);
+  background: var(--fill-subtle);
+  color: var(--t1);
+  font: inherit;
+  font-size: var(--fs-12);
+  cursor: pointer;
+  transition: background 0.15s var(--ease-std), border-color 0.15s var(--ease-std);
+}
+.heart-dev:hover { background: var(--fill-mod); border-color: var(--accent-line); }
+.heart-dev svg { width: 15px; height: 15px; color: var(--danger); }
+.heart-dev small { color: var(--t3); font-size: var(--fs-11); }
+.heart-note { margin: 8px 0 0; font-size: var(--fs-12); color: var(--t3); line-height: 1.45; }
 
 .swatches { display: flex; flex-wrap: wrap; gap: 10px; }
 .swatch {

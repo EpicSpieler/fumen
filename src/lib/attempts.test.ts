@@ -80,6 +80,29 @@ describe("AttemptTracker", () => {
     expect(progress(out[0])).toBeCloseTo((33656 - 4802) / (120000 - 4802));
   });
 
+  it("keeps the pulse with the try under way, not while it loads or behind the fail", () => {
+    const t = new AttemptTracker();
+    const out: Attempt[] = [];
+    let i = 0;
+    const feed = (s: Step, bpm: number): void => {
+      out.push(...t.feed(msg(s), 1_000_000 + i++ * 150));
+      t.pulse(bpm, true);
+    };
+    for (const s of start()) feed(s, 80);
+    playing(500, 30000).forEach((s, k) => feed(s, 100 + k));
+    t.pulse(200, false);
+    t.pulse(0, true);
+    feed({ state: 2, live: 30656, play: { failed: true, hits: 258, misses: 20 } }, 150);
+    feed({ state: 2, live: 31000, paused: true, play: { failed: true, hits: 258, misses: 20 } }, 175);
+    feed({ state: 5, live: 50000 }, 90);
+    expect(out.map((a) => a.outcome)).toEqual(["fail"]);
+    const h = out[0].heart!;
+    expect(h.samples.length).toBeGreaterThanOrEqual(28);
+    expect(h.samples.every(([at, bpm]) => at >= 500 && at <= 30656 && bpm >= 100 && bpm <= 129)).toBe(true);
+    expect(h.max).toBe(129);
+    expect(h.min).toBeGreaterThanOrEqual(100);
+  });
+
   it("a pass takes the first score the results screen shows", () => {
     const out = run([
       ...start(),

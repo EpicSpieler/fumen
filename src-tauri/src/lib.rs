@@ -49,6 +49,7 @@ mod taiko;
 mod test_http;
 mod thumbs;
 mod tosu;
+mod heart;
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -1200,6 +1201,45 @@ fn overlay_stop() {
     overlay::stop()
 }
 
+/// Every try with its pulse, in short (History's heart rate).
+#[tauri::command]
+fn heart_tries(state: State<'_, AppState>) -> Result<Vec<attempts::HeartTry>> {
+    attempts::heart_tries(&state.db())
+}
+
+/// Heart rate straps in reach (heart.rs).
+#[tauri::command]
+async fn heart_scan() -> Result<Vec<heart::Device>> {
+    heart::scan().await
+}
+
+/// Connects to a strap and keeps it: how it goes to the window (`heart-status`), every reading to
+/// the window (`heart`) and the OBS pages (the `heart` part, gone while there's none).
+#[tauri::command]
+fn heart_connect(app: AppHandle, id: String, name: String) {
+    let told = app.clone();
+    heart::connect(
+        id,
+        name,
+        move |s| {
+            if s.state != "on" {
+                let _ = overlay::set_obs("heart", &serde_json::Value::Null, vec![], vec![]);
+            }
+            let _ = told.emit("heart-status", s);
+        },
+        move |r| {
+            let _ = overlay::set_obs("heart", &serde_json::json!({ "bpm": r.bpm, "contact": r.contact, "at": lazer::now_ms() }), vec![], vec![]);
+            let _ = app.emit("heart", r);
+        },
+    );
+}
+
+#[tauri::command]
+fn heart_disconnect() {
+    heart::disconnect();
+    let _ = overlay::set_obs("heart", &serde_json::Value::Null, vec![], vec![]);
+}
+
 /// The live overlay's key part (keys.rs): reads the keys lazer binds to play while osu! is in
 /// front, and hands them to the OBS pages (parts `keymap` and `keys`). Whether it runs.
 #[tauri::command]
@@ -2339,6 +2379,10 @@ pub fn run() {
             overlay_state,
             obs_part,
             obs_keys,
+            heart_scan,
+            heart_tries,
+            heart_connect,
+            heart_disconnect,
             obs_password_set,
             obs_password_get,
             rename_clip,

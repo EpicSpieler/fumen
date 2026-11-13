@@ -2,6 +2,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type { Attempt } from "./attempts";
+import type { HeartDevice } from "./heart";
+import type { HeartTry } from "./heart-stats";
 import type { Comparison } from "./compare";
 import type { Goal } from "./goals";
 import { fromRust } from "./i18n";
@@ -112,6 +114,12 @@ export const api = {
   saveAttempt: (attempt: Attempt) => invoke<number>("save_attempt", { attempt }),
   attemptsForMap: (md5: string, limit?: number) => invoke<Attempt[]>("attempts_for_map", { md5, limit }),
   attemptsSince: (since: number) => invoke<Attempt[]>("attempts_since", { since }),
+  /** the heart rate monitor (src-tauri/src/heart.rs, lib/heart) */
+  heartScan: () => invoke<HeartDevice[]>("heart_scan"),
+  heartConnect: (id: string, name: string) => invoke<void>("heart_connect", { id, name }),
+  heartDisconnect: () => invoke<void>("heart_disconnect"),
+  /** every try with its pulse, in short */
+  heartTries: () => invoke<HeartTry[]>("heart_tries"),
   liveReplay: (id: string) => invoke<ReplayData>("live_replay", { id }),
   poolChoices: () => invoke<PoolChoice[]>("pool_choices"),
   poolRows: (id: string, since: number) => invoke<PoolRow[]>("pool_rows", { id, since }),

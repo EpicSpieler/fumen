@@ -54,6 +54,8 @@ const ICONS = {
   metronome: `<path ${S} d="M9.4 3.8h5.2l3.9 16.4h-13z"/><path ${S} d="M12 15.6l4.6-8.6M6.9 14.6h10.2"/>`,
   music: `<path ${S} d="M9 17.6V5.8l10-2v11.6"/><circle ${S} cx="6.6" cy="17.6" r="2.4"/><circle ${S} cx="16.6" cy="15.4" r="2.4"/>`,
   star: `<path ${S} d="M12 4.2l2.35 4.76 5.25.77-3.8 3.7.9 5.23L12 16.2l-4.7 2.47.9-5.23-3.8-3.7 5.25-.77z"/>`,
+  heart: `<path ${S} d="M12 19.6s-7.6-4.5-7.6-10.2a4.2 4.2 0 0 1 7.6-2.5 4.2 4.2 0 0 1 7.6 2.5c0 5.7-7.6 10.2-7.6 10.2z"/>`,
+  "heart-fill": `<path fill="currentColor" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" d="M12 19.6s-7.6-4.5-7.6-10.2a4.2 4.2 0 0 1 7.6-2.5 4.2 4.2 0 0 1 7.6 2.5c0 5.7-7.6 10.2-7.6 10.2z"/>`,
   "star-fill": `<path fill="currentColor" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" d="M12 4.2l2.35 4.76 5.25.77-3.8 3.7.9 5.23L12 16.2l-4.7 2.47.9-5.23-3.8-3.7 5.25-.77z"/>`,
   user: `<circle ${S} cx="12" cy="8.2" r="3.7"/><path ${S} d="M4.8 20c.9-3.6 3.8-5.6 7.2-5.6s6.3 2 7.2 5.6"/>`,
   tag: `<path ${S} d="M4.5 12.2V5.6a1.1 1.1 0 0 1 1.1-1.1h6.6l7.3 7.3a1.4 1.4 0 0 1 0 2l-5.6 5.6a1.4 1.4 0 0 1-2 0z"/><circle ${F} cx="8.4" cy="8.4" r="1.3"/>`,

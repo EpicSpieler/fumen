@@ -20,7 +20,7 @@ concurrency:
 
 env:
   # what Tauri needs to build on Linux (WebKitGTK and the bundlers' tools)
-  APT: libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev patchelf file
+  APT: libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev libdbus-1-dev pkg-config patchelf file
 
 jobs:
   lazer:

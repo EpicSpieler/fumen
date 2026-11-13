@@ -7,7 +7,7 @@ import type { HudPrefs } from "./hud-layout";
 import { SESSION_GAP } from "./live";
 import type { VisPrefs } from "./types";
 
-export type PartName = "config" | "map" | "tries" | "player" | "session" | "cue" | "keymap" | "keys";
+export type PartName = "config" | "map" | "tries" | "player" | "session" | "cue" | "keymap" | "keys" | "heart";
 
 export interface ObsConfig {
   /** tosu's websocket */
@@ -158,6 +158,16 @@ export interface ObsKeys {
   count: Record<string, number>;
 }
 
+/** The pulse from a heart rate monitor (src-tauri/src/heart.rs), sent by Fumen itself with each
+ * reading; null while there's none. */
+export interface ObsHeart {
+  bpm: number;
+  /** the strap touches skin (when it says) */
+  contact: boolean | null;
+  /** when it came, Unix ms */
+  at: number;
+}
+
 export type Parts = {
   config: ObsConfig | null;
   map: ObsMap | null;
@@ -167,6 +177,7 @@ export type Parts = {
   cue: ObsCue | null;
   keymap: ObsKeymap | null;
   keys: ObsKeys | null;
+  heart: ObsHeart | null;
 };
 
 /** Your tries at a map as the pages show them (`list` newest first or not, any order). */

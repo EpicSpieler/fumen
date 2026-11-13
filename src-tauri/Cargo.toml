@@ -35,6 +35,12 @@ tauri-plugin-updater = { version = "2", default-features = false, features = ["r
 # pp and star ratings (src/pp.rs). A fork of rosu-pp that follows osu!'s algorithms after rosu-pp 4.0.1
 # (which is behind live for osu! and osu!taiko); back to rosu-pp once it catches up.
 rosu-pp = { package = "rosu-pp-gemini", version = "=5.0.4" }
+# heart rate monitors over Bluetooth LE (src/heart.rs); macOS needs the Bluetooth line in Info.plist,
+# Linux builds need libdbus-1-dev
+btleplug = "0.11"
+futures = "0.3"
+tokio = { version = "1", features = ["time"] }
+uuid = "1"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security_Cryptography", "Win32_System_Diagnostics_ToolHelp", "Win32_System_LibraryLoader", "Win32_System_Threading", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_WindowsAndMessaging"] }

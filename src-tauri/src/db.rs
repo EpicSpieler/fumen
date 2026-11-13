@@ -353,7 +353,12 @@ const MIGRATIONS: &[&str] = &[
         rate         REAL NOT NULL DEFAULT 1,
         pp           REAL,
         score_id     INTEGER,
-        rank         TEXT
+        rank         TEXT,
+        heart        TEXT,
+        hr_avg       REAL,
+        hr_max       INTEGER,
+        hr_min       INTEGER,
+        hr_fast      REAL
     );
     CREATE INDEX IF NOT EXISTS attempts_md5 ON attempts(md5);
     CREATE INDEX IF NOT EXISTS attempts_started ON attempts(started);
@@ -381,8 +386,22 @@ pub fn open(path: &Path) -> Result<Connection> {
 fn ensure_columns(conn: &Connection) -> Result<()> {
     let mut st = conn.prepare("SELECT name FROM pragma_table_info('attempts')")?;
     let cols = st.query_map([], |r| r.get::<_, String>(0))?.collect::<rusqlite::Result<Vec<_>>>()?;
-    if !cols.is_empty() && !cols.iter().any(|c| c == "misses_at") {
-        conn.execute_batch("ALTER TABLE attempts ADD COLUMN misses_at TEXT NOT NULL DEFAULT '[]'")?;
+    if cols.is_empty() {
+        return Ok(());
+    }
+    let later = [
+        ("misses_at", "TEXT NOT NULL DEFAULT '[]'"),
+        // the pulse during a try (heart.rs)
+        ("heart", "TEXT"),
+        ("hr_avg", "REAL"),
+        ("hr_max", "INTEGER"),
+        ("hr_min", "INTEGER"),
+        ("hr_fast", "REAL"),
+    ];
+    for (name, kind) in later {
+        if !cols.iter().any(|c| c == name) {
+            conn.execute_batch(&format!("ALTER TABLE attempts ADD COLUMN {name} {kind}"))?;
+        }
     }
     Ok(())
 }

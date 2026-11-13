@@ -27,7 +27,7 @@ pub const PORTS: std::ops::RangeInclusive<u16> = 24180..=24189;
 /// the most state the window may send (the tournament's, or one part of the OBS pages')
 const MAX_STATE: usize = 512 * 1024;
 /// the OBS pages' parts: these names only
-const PARTS: [&str; 8] = ["config", "map", "tries", "player", "session", "cue", "keymap", "keys"];
+const PARTS: [&str; 9] = ["config", "map", "tries", "player", "session", "cue", "keymap", "keys", "heart"];
 /// the OBS pages
 const PAGES: [&str; 4] = ["stage", "hud", "card", "session"];
 /// event streams open at once (each holds a thread)

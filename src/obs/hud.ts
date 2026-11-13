@@ -63,7 +63,9 @@ const IDLE: FeelFrame = {
 };
 
 /** the order the parts come in when a map starts */
-const ORDER: HudPartId[] = ["title", "stars", "combo", "hp", "acc", "pp", "lines", "judges", "keys"];
+const ORDER: HudPartId[] = ["title", "stars", "combo", "hp", "acc", "pp", "lines", "judges", "keys", "heart"];
+/** a reading older than this (ms) isn't the pulse now */
+const HEART_FRESH = 6000;
 
 /** the judgements each ruleset counts, best first: tosu's name for it and what it's called */
 const JUDGES: Record<number, { k: keyof Judges; label: string }[]> = {
@@ -173,6 +175,9 @@ export function start(): void {
         <span class="hud-kps"></span>
         <canvas class="hud-trails"></canvas>
         <div class="hud-caps"></div>
+      </div></div></div>
+      <div class="hud-part" data-part="heart"><div class="hud-in"><div class="hud-heart" hidden>
+        <span class="hud-heart-icon">${icon("heart-fill")}</span><b class="hud-bpm num"></b><span class="hud-bpm-unit">bpm</span>
       </div></div></div>
     </div>`;
   const $ = <T extends HTMLElement>(s: string) => root.querySelector<T>(s)!;
@@ -378,6 +383,32 @@ export function start(): void {
     colsKey = "";
     setCols();
   });
+
+  // ── the pulse (a heart rate monitor): the heart beats at its rate ──
+  const heartEl = $(".hud-heart");
+  const bpmEl = $(".hud-bpm");
+  let demoBpm = 128;
+  const pulseNow = (): number | null => {
+    if (editing) return demoBpm;
+    const h = parts.heart;
+    if (!h || h.contact === false || h.bpm <= 0 || Date.now() - h.at > HEART_FRESH) return null;
+    return h.bpm;
+  };
+  const showPulse = (): void => {
+    const bpm = pulseNow();
+    heartEl.hidden = bpm === null;
+    if (bpm === null) return;
+    const text = String(Math.round(bpm));
+    if (bpmEl.textContent !== text) bpmEl.textContent = text;
+    heartEl.style.setProperty("--beat", `${(60 / Math.min(240, Math.max(30, bpm))).toFixed(3)}s`);
+  };
+  showPulse();
+  link.on("heart", showPulse);
+  // a strap that went quiet goes away
+  window.setInterval(() => {
+    if (editing) demoBpm = Math.round(Math.max(95, Math.min(175, demoBpm + (Math.random() - 0.45) * 6)));
+    showPulse();
+  }, 1000);
 
   // being arranged: a made-up hand on D F J K, chords and a long note now and then
   if (editing) {

@@ -13,6 +13,7 @@
       "New: Open in osu! on a set's page and in a map's menu.",
       "New: While osu!lazer is open, downloaded beatmaps go straight into it.",
       "New: Beatmaps you add in osu!lazer show up in Fumen right away.",
+      "New: Heart rate monitors over Bluetooth, like Moofit's. Your pulse during each try, after the play and in History, and on the live overlay.",
       "Changed: Settings are split into categories, listed on the side, with a search."
     ],
     "de": [
@@ -26,6 +27,7 @@
       "Neu: In osu! öffnen, auf der Seite eines Sets und im Menü einer Map.",
       "Neu: Ist osu!lazer offen, gehen heruntergeladene Beatmaps direkt hinein.",
       "Neu: Beatmaps, die du in osu!lazer hinzufügst, tauchen sofort in Fumen auf.",
+      "Neu: Pulsmesser über Bluetooth, etwa von Moofit. Dein Puls bei jedem Versuch, nach dem Play und im Verlauf, und im Live-Overlay.",
       "Geändert: Die Einstellungen sind in Kategorien aufgeteilt, mit einer Liste daneben und einer Suche."
     ]
   },

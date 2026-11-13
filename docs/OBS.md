@@ -170,3 +170,15 @@ like the title.
   waiting for the song to move brought the overlay in at the first note (docs/tosu.md, checked in
   lazer's code). The overlay, the song card and the visualizer source now go by that jump, the
   parts a little quicker than before.
+
+## Heart rate (2026-11-14)
+
+- **Pulse** (`heart`): a heart beating at the pulse's rate with the number beside it, under pp at
+  first. Only there while a heart rate monitor is connected (Settings, While you play) and its
+  last reading is under 6 s old; gone without skin contact. Fumen sends it itself
+  (`src-tauri/src/heart.rs`, part `heart`: `{ bpm, contact, at }`), about once a second, not the
+  window. Any strap or watch with Bluetooth's standard Heart Rate Service works (Moofit, Polar,
+  Garmin, Wahoo); a strap talks to one app at a time, so its phone app has to let go first.
+- The pulse is kept with each try (`attempts.heart`: readings against song time, average,
+  highest, lowest and the average in the map's fastest part) and shown on the score page, with
+  your tries and in History's Heart rate tab.

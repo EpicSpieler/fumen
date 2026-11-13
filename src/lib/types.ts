@@ -520,6 +520,8 @@ export interface UiPrefs {
   tosuAutostart: boolean;
   /** OBS (docs/OBS.md) */
   obs: ObsPrefs;
+  /** the heart rate monitor used (lib/heart): connected on every start */
+  heart: { id: string | null; name: string | null };
 }
 
 /** OBS: the pages' server, the connection to OBS, its scenes and clips. */

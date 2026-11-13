@@ -74,6 +74,7 @@ export const DEFAULT_PREFS: UiPrefs = {
     hud: DEFAULT_HUD_PREFS,
     keys: false,
   },
+  heart: { id: null, name: null },
 };
 
 export const store = {

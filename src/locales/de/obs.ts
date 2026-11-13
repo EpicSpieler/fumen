@@ -127,4 +127,9 @@ export const obs: Record<string, string> = {
   // the song card
   "mapped by {name}": "gemappt von {name}",
   "Your best": "Deine Bestleistung",
+
+  // the pulse
+  "Heart rate": "Puls",
+  "Your pulse, beating along. Only there with a heart rate monitor connected in Settings, While you play.":
+    "Dein Puls, der mitschlägt. Nur da, wenn in den Einstellungen unter Beim Spielen ein Pulsmesser verbunden ist.",
 };

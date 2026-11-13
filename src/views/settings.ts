@@ -6,6 +6,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { api, asApiError, isLinux, isMac, isTauri } from "../lib/api";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { follow } from "../lib/tosu-follow";
+import { heart, type HeartDevice } from "../lib/heart";
 import { lang, LANGS, switchLang, t, tn } from "../lib/i18n";
 import { esc, fixed, MODE_LABEL, num, relativeTime } from "../lib/format";
 import { collectionEvents, fumenCollections, loadCollections, putIntoLazer, saveCollectionDb } from "../lib/collections";
@@ -77,6 +78,9 @@ export async function loginWithOsu(): Promise<void> {
   }
 }
 
+/** a signal's strength in words, from dBm */
+const signal = (rssi: number): string => (rssi >= -60 ? t("strong") : rssi >= -75 ? t("good") : t("weak"));
+
 /** "Off", or seconds */
 const fadeLabel = (v: number): string => (v > 0 ? t("{s} s", { s: fixed(v, 1) }) : t("Off"));
 
@@ -118,6 +122,8 @@ export class SettingsView {
       collectionEvents.on("collections", () => this.renderCollections()),
       follow.bus.on("status", () => void this.renderTosu()),
       overlayEvents.on("change", () => this.renderObs()),
+      heart.bus.on("status", () => this.renderHeart()),
+      heart.bus.on("reading", () => this.renderPulse()),
     );
     // tosu comes and goes on its own
     const tosuTimer = window.setInterval(() => void this.renderTosu(), 3000);
@@ -297,6 +303,7 @@ export class SettingsView {
             </div>
             <input type="checkbox" role="switch" data-pref="tosuAutostart" aria-label="${t("Start tosu with osu!")}" ${p.tosuAutostart ? "checked" : ""} />
           </div>
+          <div class="setting-row" data-row="heart"></div>
         </section>
 
         <section class="settings-section" data-section="stream" role="tabpanel">
@@ -373,6 +380,7 @@ export class SettingsView {
     this.renderAccount();
     this.renderUpdate();
     void this.renderTosu();
+    this.renderHeart();
     this.renderObs();
     const link = this.el.querySelector<HTMLElement>('[data-row="obs-link"]');
     if (link) this.offs.push(mountObsSettings(link));
@@ -509,6 +517,78 @@ export class SettingsView {
   }
 
   /** Where tosu is and whether it runs, under Follow osu! (while that's on). */
+  /** the heart rate monitors the last search found (null: none made, or one picked since) */
+  private heartFound: HeartDevice[] | null = null;
+  private heartSearching = false;
+  private heartError: string | null = null;
+
+  /** The heart rate monitor: the one used and how it's going, or a search for one. */
+  private renderHeart(): void {
+    const row = this.el.querySelector<HTMLElement>('[data-row="heart"]');
+    if (!row) return;
+    const picked = store.prefs.heart?.id ? store.prefs.heart : null;
+    const s = heart.status;
+    const name = esc(s.name ?? picked?.name ?? "");
+    let desc: string;
+    if (!picked)
+      desc = t("A Bluetooth chest strap or watch that shares your pulse, like Moofit's, Polar's or Garmin's. Fumen keeps your pulse with every try at a map and shows it after the play and in History. The live overlay can show it too.");
+    else if (s.state === "on")
+      desc = `<span class="s-tosu-on">${t("Connected")}</span> · ${name} · <span class="s-heart-now">${this.pulseText()}</span>${s.battery !== null ? ` · ${t("Battery {n} %", { n: s.battery })}` : ""}`;
+    else if (s.state === "lost")
+      desc = `${t("{name} isn't there right now. Fumen keeps trying.", { name })}${s.message ? `<br><span class="setting-path">${esc(s.message)}</span>` : ""}`;
+    else desc = t("Connecting to {name}…", { name });
+    const found = this.heartFound;
+    let list = "";
+    if (this.heartError) list = `<p class="heart-note is-missing">${esc(this.heartError)}</p>`;
+    else if (found && !found.length)
+      list = `<p class="heart-note">${t("Nothing found. Is it on and worn? A strap shares its pulse with one app at a time, so close its own app on your phone first.")}</p>`;
+    else if (found)
+      list = `<div class="heart-devs">${found
+        .map((d, i) => `<button type="button" class="heart-dev" data-heart="${i}">${icon("heart")}<span>${esc(d.name)}</span>${d.rssi !== null ? `<small>${signal(d.rssi)}</small>` : ""}</button>`)
+        .join("")}</div>`;
+    const search = this.heartSearching
+      ? `<button class="btn btn-sm" type="button" disabled>${t("Searching…")}</button>`
+      : `<button class="btn btn-sm s-heart-search" type="button">${icon("search")}${picked ? t("Another device") : t("Search")}</button>`;
+    row.innerHTML = `
+      <div class="setting-text">
+        <div class="setting-title">${t("Heart rate monitor")}</div>
+        <div class="setting-desc">${desc}</div>
+        ${list}
+      </div>
+      <div class="setting-actions">
+        ${search}
+        ${picked ? `<button class="btn btn-ghost btn-sm s-heart-forget" type="button">${t("Remove")}</button>` : ""}
+      </div>`;
+  }
+
+  /** The pulse now, in words. */
+  private pulseText(): string {
+    const bpm = heart.bpm;
+    if (bpm !== null) return `${icon("heart-fill")}<b class="num">${bpm}</b> bpm`;
+    return heart.last?.contact === false ? t("Not touching skin") : t("No pulse yet");
+  }
+
+  /** A reading came: only the number changes. */
+  private renderPulse(): void {
+    const el = this.el.querySelector<HTMLElement>(".s-heart-now");
+    if (el) el.innerHTML = this.pulseText();
+  }
+
+  private async heartSearch(): Promise<void> {
+    this.heartSearching = true;
+    this.heartError = null;
+    this.renderHeart();
+    try {
+      this.heartFound = await api.heartScan();
+    } catch (e) {
+      this.heartFound = null;
+      this.heartError = asApiError(e).message;
+    } finally {
+      this.heartSearching = false;
+      this.renderHeart();
+    }
+  }
+
   private async renderTosu(): Promise<void> {
     const row = this.el.querySelector<HTMLElement>('[data-row="tosu"]');
     const auto = this.el.querySelector<HTMLElement>('[data-row="tosu-auto"]');
@@ -822,6 +902,19 @@ export class SettingsView {
         () => toast(t("Copied"), { kind: "success", timeout: 1600 }),
         () => toast(t("Couldn't access the clipboard"), { kind: "danger" }),
       );
+    if (target.closest(".s-heart-search")) return void this.heartSearch();
+    const dev = target.closest<HTMLElement>("[data-heart]");
+    if (dev && this.heartFound) {
+      const d = this.heartFound[Number(dev.dataset.heart)];
+      this.heartFound = null;
+      if (d) void heart.use(d).catch((err) => toast(asApiError(err).message, { kind: "danger", timeout: 6000 }));
+      return this.renderHeart();
+    }
+    if (target.closest(".s-heart-forget")) {
+      this.heartFound = null;
+      void heart.forget().catch(() => {});
+      return this.renderHeart();
+    }
     if (target.closest(".s-cloud-push")) return void this.cloudPush(target.closest<HTMLButtonElement>(".s-cloud-push")!);
     if (target.closest(".s-cloud-pull")) return void this.cloudPull(target.closest<HTMLButtonElement>(".s-cloud-pull")!);
     if (target.closest(".s-cols-lazer")) return void putIntoLazer(fumenCollections());

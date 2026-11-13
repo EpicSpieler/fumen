@@ -11,7 +11,9 @@ import {
   historyEvents, historyNow, isSyncing, loadHistory, mapIndexOf, modsText, playScoreTip, playTarget, playWhen, playWhenTip, syncHistory,
   timeOfDay,
 } from "../lib/history";
-import { goSection } from "../lib/router";
+import { totals, type HeartTotals, type HeartTry } from "../lib/heart-stats";
+import { go, goSection } from "../lib/router";
+import { follow } from "../lib/tosu-follow";
 import { events, setPrefs, store } from "../lib/store";
 import type { History, OsuAccount, OsuModeStats, Play } from "../lib/types";
 import { attachSegIndicator, openMenu, toast, type MenuEntry } from "../ui/controls";
@@ -33,7 +35,11 @@ const MODES = [
   { mode: 3, label: "mania" },
 ];
 
-type Tab = "recent" | "top" | "most";
+type Tab = "recent" | "top" | "most" | "heart";
+/** difficulties listed in the pulse tab at most */
+const PULSE_MAPS = 50;
+/** days in the pulse tab's chart at most */
+const PULSE_DAYS = 30;
 
 /** What a list row stands for (rows point here by index). */
 interface Row {
@@ -60,6 +66,10 @@ export class HistoryView {
   private failed: string | null = null;
   /** weeks the activity grid has room for */
   private weeks = WEEKS;
+  /** every try with its pulse (null until read) */
+  private pulseTries: HeartTry[] | null = null;
+  /** a difficulty's library id by its MD5 (null: not in the library) */
+  private pulseIds = new Map<string, string | null>();
 
   constructor() {
     this.el = document.createElement("section");
@@ -87,12 +97,17 @@ export class HistoryView {
       events.on("prefs", (p) => {
         if ("unicode" in p || "mode" in p) this.render();
       }),
+      // a try with a pulse came in: the pulse tab counts it
+      follow.bus.on("attempt", (a) => {
+        if (a.heart) void this.loadPulse().then(() => this.tab === "heart" && this.renderList());
+      }),
     );
     void this.refresh();
   }
 
   /** The account (logged in or not) and the plays, then everything. */
   private async refresh(): Promise<void> {
+    void this.loadPulse().then(() => this.tab === "heart" && this.renderList());
     this.account = await api.osuAccount().catch(() => null);
     try {
       await loadHistory();
@@ -103,9 +118,14 @@ export class HistoryView {
     this.render();
   }
 
+  private async loadPulse(): Promise<void> {
+    this.pulseTries = await api.heartTries().catch(() => []);
+  }
+
   shown(): void {
     // "synced … ago" moves on while the view is hidden (the rest stays, scroll position too)
     this.renderSync();
+    if (this.tab === "heart") void this.loadPulse().then(() => this.renderList());
   }
 
   // ── rendering ─────────────────────────────────────────────────────────
@@ -151,6 +171,7 @@ export class HistoryView {
           <button type="button" data-tab="recent">${t("Recent")}</button>
           <button type="button" data-tab="top">${t("Top plays")}</button>
           <button type="button" data-tab="most">${t("Most played")}</button>
+          <button type="button" data-tab="heart">${t("Heart rate")}</button>
         </div>
         <div class="hist-list"></div>
       </section>`;
@@ -198,7 +219,68 @@ export class HistoryView {
     if (!h || !list) return;
     this.el.querySelectorAll<HTMLElement>(".hist-tabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === this.tab));
     const plays = this.plays(h);
-    list.innerHTML = this.tab === "recent" ? this.recent(plays) : this.tab === "top" ? this.top(plays) : this.most(h, plays);
+    list.innerHTML = this.tab === "recent" ? this.recent(plays) : this.tab === "top" ? this.top(plays) : this.tab === "heart" ? this.pulse() : this.most(h, plays);
+  }
+
+  /** Your pulse over every try with it: what it comes to, by day and by difficulty. */
+  private pulse(): string {
+    if (!this.pulseTries) return `<div class="skeleton" style="height:220px"></div>`;
+    const mode = store.prefs.mode;
+    const all = mode < 0 ? this.pulseTries : this.pulseTries.filter((x) => x.mode === mode);
+    const sum = totals(all);
+    if (!sum)
+      return `<div class="empty-state">${icon("heart")}
+        <div class="empty-title">${this.pulseTries.length ? t("No pulse in {mode} yet", { mode: MODE_LABEL[mode as 0] }) : t("No pulse yet")}</div>
+        <div class="empty-sub">${t("Connect a heart rate monitor in Settings, While you play. Every try at a map with it on shows up here: your average, your highest, your lowest and your pulse in each map's fastest part.")}</div>
+        ${store.prefs.heart?.id ? "" : `<button class="btn btn-primary btn-sm hist-heart-setup" type="button">${t("Connect one")}</button>`}
+      </div>`;
+    // the difficulties' names come from the library: ask for those not known yet
+    const listed = sum.maps.slice(0, PULSE_MAPS);
+    const missing = [...new Set([...listed.map((m) => m.md5), sum.max?.md5, sum.min?.md5])].filter((md5): md5 is string => !!md5 && !this.pulseIds.has(md5));
+    if (missing.length)
+      void Promise.all(missing.map((md5) => api.mapByMd5(md5).then((id) => this.pulseIds.set(md5, id), () => this.pulseIds.set(md5, null)))).then(() => {
+        if (this.tab === "heart") this.renderList();
+      });
+    this.rows = listed.map((m) => ({ map: this.pulseIds.get(m.md5) ?? undefined, mode: m.mode }));
+    return `
+      <div class="hist-tiles hr-tiles">${this.pulseTiles(sum)}</div>
+      ${pulseDays(sum)}
+      <div class="prow hrow hrow-head label-caps">
+        <span class="hrow-title">${t("By difficulty")}</span><span></span>
+        <span class="hr-val">${t("Average")}</span><span class="hr-val">${t("Highest")}</span><span class="hr-val">${t("Fastest part")}</span><span class="prow-when"></span>
+      </div>
+      ${listed
+        .map(
+          (m, i) => `${this.rowStart(this.rows[i], i, "", "prow hrow").replace('class="prow hrow', `data-md5="${m.md5}" class="prow hrow`)}
+            <span class="prow-count num">${tn(m.tries, "<b>{n}</b> try", "<b>{n}</b> tries")}</span>
+            <span class="hr-val num" data-tip="${t("Average")}">${Math.round(m.avg)}</span>
+            <span class="hr-val hr-max num" data-tip="${t("Highest")}">${m.max}</span>
+            <span class="hr-val num" data-tip="${t("In the fastest part")}">${m.fast === null ? "–" : Math.round(m.fast)}</span>
+            <span class="prow-when">${playWhen(m.last)}</span>
+          </div>`,
+        )
+        .join("")}`;
+  }
+
+  private pulseTiles(s: HeartTotals): string {
+    const where = (md5: string, at: number): string => {
+      const id = this.pulseIds.get(md5);
+      const idx = id ? mapIndexOf(id) : undefined;
+      const map = idx !== undefined ? store.snap!.maps[idx] : null;
+      const set = map ? store.snap!.sets[map.set] : null;
+      return [set ? esc(displayTitle(set, store.prefs.unicode)) : "", playWhen(at)].filter(Boolean).join(" · ");
+    };
+    const bpm = (v: number): string => `${Math.round(v)}<small> bpm</small>`;
+    return [
+      tile(t("Average pulse"), bpm(s.avg), tn(s.tries, "over {n} try", "over {n} tries")),
+      tile(t("Highest"), s.max ? bpm(s.max.bpm) : "–", s.max ? where(s.max.md5, s.max.started) : ""),
+      tile(t("Lowest"), s.min ? bpm(s.min.bpm) : "–", s.min ? where(s.min.md5, s.min.started) : ""),
+      tile(
+        t("In the fastest parts"),
+        s.fast === null ? "–" : bpm(s.fast),
+        s.passAvg !== null && s.restAvg !== null ? t("passes {a}, the rest {b} on average", { a: Math.round(s.passAvg), b: Math.round(s.restAvg) }) : t("on average"),
+      ),
+    ].join("");
   }
 
   private recent(plays: Play[]): string {
@@ -382,6 +464,9 @@ export class HistoryView {
         return this.renderList();
       }
       if (target.closest(".hist-sync-btn")) return void this.sync();
+      if (target.closest(".hist-heart-setup")) return goSection({ name: "settings", section: "play" });
+      const hrow = target.closest<HTMLElement>(".hrow[data-md5]");
+      if (hrow) return go({ name: "tries", md5: hrow.dataset.md5! });
       if (target.closest(".hist-login")) {
         goSection({ name: "settings", section: "osu" });
         return void loginWithOsu();
@@ -459,6 +544,25 @@ function rankTile(history: number[]): string {
   const words = change > 0 ? t("up {n} in 90 days", { n: num(change) }) : change < 0 ? t("down {n} in 90 days", { n: num(-change) }) : t("unchanged in 90 days");
   const line = `<svg class="tile-line" viewBox="0 -4 100 108" preserveAspectRatio="none" aria-hidden="true"><polyline points="${pts}" /></svg>`;
   return tile(t("Rank, 90 days"), `#${num(ranked[ranked.length - 1][1])}`, words, line);
+}
+
+/** The pulse by day: each day's average as a bar, its highest as a tick above. */
+function pulseDays(s: HeartTotals): string {
+  const days = s.days.slice(-PULSE_DAYS);
+  if (days.length < 2) return "";
+  const lo = Math.max(30, Math.min(...days.map((d) => d.avg)) - 15);
+  const hi = Math.max(lo + 20, ...days.map((d) => d.max));
+  const y = (v: number): string => (((v - lo) / (hi - lo)) * 100).toFixed(1);
+  const label = (day: string): string => new Date(`${day}T12:00:00`).toLocaleDateString(locale, { day: "numeric", month: "short" });
+  return `
+    <div class="label-caps hist-day">${t("By day")}</div>
+    <div class="panel hr-days" style="--n:${days.length}">${days
+      .map(
+        (d) => `<div class="hr-day" data-tip="${esc(label(d.day))} · ${t("average {a}, highest {b}", { a: Math.round(d.avg), b: d.max })} · ${tn(d.tries, "{n} try", "{n} tries")}">
+          <i class="hr-day-avg" style="height:${y(d.avg)}%"></i><b class="hr-day-max" style="bottom:${y(d.max)}%"></b></div>`,
+      )
+      .join("")}</div>
+    <div class="score-graph-axis num hr-days-axis"><span>${esc(label(days[0].day))}</span><span>${esc(label(days[days.length - 1].day))}</span></div>`;
 }
 
 function playTiles(plays: Play[]): string {

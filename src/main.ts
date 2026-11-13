@@ -39,6 +39,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import { mountPlayerBar } from "./player";
 import { closeFullscreen, finaleLeft, fullscreenOpen, openFullscreen } from "./views/fullscreen";
 import { follow } from "./lib/tosu-follow";
+import { heart } from "./lib/heart";
 import { launchHtml, renderLaunch } from "./ui/osu-launch";
 import { BrowseView } from "./views/browse";
 import { ScoreView } from "./views/score";
@@ -938,6 +939,7 @@ async function boot(): Promise<void> {
   initObsControl();
   initLivePlays();
   initFollow();
+  heart.init();
   document.body.classList.add("ready");
   void startPing()
     .catch((e) => console.warn("[ping]", asApiError(e).message))
@@ -1006,6 +1008,7 @@ function initFollow(): void {
     if (!visit || visit.md5 !== a.md5) visit = { md5: a.md5, tries: [] };
     visit.tries.push(a);
     if (active instanceof TriesView) active.add(a);
+    if (active instanceof ScoreView) active.add(a);
   });
   follow.bus.on("leave", (md5) => {
     if (followOpened && fullscreenOpen()) closeFullscreen();

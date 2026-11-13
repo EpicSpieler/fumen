@@ -139,4 +139,13 @@ export const rust: Record<string, string> = {
   "osu!stable's osu!.exe wasn't found in its folder.": "Die osu!.exe von osu!stable liegt nicht in seinem Ordner.",
   "osu!stable can only be started from Fumen on Windows.": "osu!stable lässt sich nur unter Windows aus Fumen starten.",
   "That isn't a clip OBS saved.": "Das ist kein Clip, den OBS gespeichert hat.",
+
+  // the heart rate monitor
+  "Bluetooth isn't available: {e}": "Bluetooth ist nicht verfügbar: {e}",
+  "This PC has no Bluetooth (or it's switched off).": "Dieser PC hat kein Bluetooth (oder es ist aus).",
+  "Couldn't search: {e}": "Die Suche ging nicht: {e}",
+  "The heart rate monitor dropped out: {e}": "Die Verbindung zum Pulsmesser ist abgebrochen: {e}",
+  "The heart rate monitor dropped out.": "Die Verbindung zum Pulsmesser ist abgebrochen.",
+  "The heart rate monitor isn't in reach. Is it on, and not connected to another app?": "Der Pulsmesser ist nicht in Reichweite. Ist er an und mit keiner anderen App verbunden?",
+  "That device doesn't share a heart rate.": "Dieses Gerät teilt keinen Puls.",
 };
