@@ -151,3 +151,19 @@ How they turned out, where it differs from the plan above:
   triggers; tries, bests and the session start in `src/lib/obs-parts.test.ts`; the spectrum in
   `src/obs/fft.test.ts`; the server in `overlay.rs`; clip files in `clips.rs`. The fake OBS:
   `node tools/browser-preview/fake-obs.mjs 4466 --password hunter2 [--no-replay]`.
+
+## After the dev build's feedback (2026-11-13)
+
+Two more parts for the live overlay, placed in Arrange like the others; both go on osu!'s results
+like the title.
+
+- **Judgements** (`judges`): each judgement with its count, as osu! names them for the ruleset
+  played (osu!mania: Max, 300, 200, 100, 50, Miss). A miss pops briefly, the rest just count.
+- **Keys** (`keys`): a cap per key with its presses in this try, lit while held, a trail rising for
+  each press, and keys per second. tosu knows osu!'s K1/K2/M1/M2 only, not osu!mania's columns, so
+  Fumen reads the keyboard itself (`src-tauri/src/keys.rs`): off until switched on in Settings,
+  Stream & OBS; only the keys lazer binds to play (from lazer's key bindings, exported by the
+  sidecar with the library); only while osu! is the window in front; nothing kept. Keys are told
+  apart by scan code like osu!framework does, and the caps are named in the keyboard's layout.
+- **Coming in.** Measured again (docs/tosu.md): lazer's time sits at the start while the loading
+  screen is up, so the overlay now comes in with the first step forward, its parts a little quicker.
