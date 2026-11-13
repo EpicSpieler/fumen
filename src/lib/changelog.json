@@ -1,5 +1,33 @@
 [
   {
+    "version": "1.4.0",
+    "date": "2026-11-13",
+    "en": [
+      "New: Follow osu! through tosu. The visualizer opens when a map starts, and a pass opens its score.",
+      "New: Fumen finds tosu and can start it together with osu!.",
+      "New: Every try counts, fails and quits too, with how far you got.",
+      "New: Practise the part where you failed in one click, and see where most tries end.",
+      "New: Stage reacts to your play: combo, misses, breaks and low health.",
+      "New: Fumen in OBS. The visualizer, a live overlay, a song card and a session card as browser sources, scenes that switch with osu! and clips of your best moments.",
+      "New: Judgement counter and key overlay for the live overlay.",
+      "New: Open in osu! on a set's page and in a map's menu.",
+      "New: While osu!lazer is open, downloaded beatmaps go straight into it.",
+      "New: Beatmaps you add in osu!lazer show up in Fumen right away."
+    ],
+    "de": [
+      "Neu: osu! folgen über tosu. Der Visualizer öffnet sich, wenn eine Map startet, und ein Pass öffnet seinen Score.",
+      "Neu: Fumen findet tosu und kann es zusammen mit osu! starten.",
+      "Neu: Jeder Versuch zählt, auch Fails und Abbrüche, mit wie weit du gekommen bist.",
+      "Neu: Die Stelle, an der du gefailt bist, mit einem Klick üben, und sehen, wo die meisten Versuche enden.",
+      "Neu: Stage reagiert auf dein Spiel: Combo, Misses, Combobreaks und wenig Leben.",
+      "Neu: Fumen in OBS. Visualizer, Live-Overlay, Song-Karte und Session-Karte als Browserquellen, Szenen, die mit osu! wechseln, und Clips deiner besten Momente.",
+      "Neu: Judgement-Zähler und Tasten-Overlay fürs Live-Overlay.",
+      "Neu: In osu! öffnen, auf der Seite eines Sets und im Menü einer Map.",
+      "Neu: Ist osu!lazer offen, gehen heruntergeladene Beatmaps direkt hinein.",
+      "Neu: Beatmaps, die du in osu!lazer hinzufügst, tauchen sofort in Fumen auf."
+    ]
+  },
+  {
     "version": "1.3.21",
     "date": "2026-11-11",
     "en": [
