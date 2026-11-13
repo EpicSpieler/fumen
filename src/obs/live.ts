@@ -7,8 +7,10 @@ import { Feel } from "../lib/vis/feel";
 
 /** ms between tries while tosu isn't there */
 const RETRY = 2000;
-/** messages in a row with the song moving on before a map counts as begun (not still loading) */
-const BEGIN_RUNS = 2;
+/** messages with the song moving on before a map counts as begun: lazer's time sits at the start
+ * (paused, or not moving) while the loading screen is still up and starts with the gameplay
+ * screen, so the first step forward after the jump back is the map beginning (docs/tosu.md) */
+const BEGIN_RUNS = 1;
 /** ms osu!'s time has to move on per message for that (a loading screen's time creeps, if at all) */
 const BEGIN_STEP = 30;
 

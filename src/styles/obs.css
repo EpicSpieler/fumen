@@ -114,7 +114,7 @@ body.obs {
 .hud:is([data-phase="play"], [data-phase="end"]) .hud-in {
   opacity: 1;
   transform: none;
-  transition: opacity 0.5s var(--ease-std) calc(0.12s + var(--k) * 0.06s), transform 0.7s var(--ease-out) calc(0.12s + var(--k) * 0.06s);
+  transition: opacity 0.4s var(--ease-std) calc(0.04s + var(--k) * 0.035s), transform 0.6s var(--ease-out) calc(0.04s + var(--k) * 0.035s);
 }
 
 /* ── the progress line (the top edge at first; its words go away from the edge it's nearest) ── */
@@ -126,9 +126,9 @@ body.obs {
   transition: clip-path 0.35s var(--ease-std);
 }
 .hud:is([data-phase="play"], [data-phase="end"]) .hud-bar { clip-path: inset(calc(var(--u) * -4) 0 calc(var(--u) * -4) 0); transition: clip-path 0.9s var(--ease-out); }
-/* osu!'s results show the map themselves: the title, the stars, the line and the health go */
+/* osu!'s results show the map themselves: the title, the stars, the line, the health, the judgements and the keys go */
 body:not(.edit) .hud[data-results] .hud-bar { clip-path: inset(calc(var(--u) * -4) 100% calc(var(--u) * -4) 0); transition: clip-path 0.35s var(--ease-std); }
-body:not(.edit) .hud[data-results] :is([data-part="title"], [data-part="stars"], [data-part="hp"]) .hud-in {
+body:not(.edit) .hud[data-results] :is([data-part="title"], [data-part="stars"], [data-part="hp"], [data-part="judges"], [data-part="keys"]) .hud-in {
   opacity: 0;
   transform: translate(calc(var(--dx) * 1.75rem), calc(var(--dy) * 1.25rem));
   transition: opacity 0.3s var(--ease-std), transform 0.35s var(--ease-std);

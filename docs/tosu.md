@@ -22,6 +22,11 @@ a fail and retry, a quit, another pass. For 1.4 Live (src/lib/tosu.ts, src/lib/t
 - **Start a map:** state 5 → 2 while `beatmap.time.live` still runs on with the menu's music for
   2–3 s (74744 → … , 51851 → 54593), then jumps to the beginning (14, 27; or -10 with lazer's
   lead-in, with `game.paused` flickering while it loads). Then it runs from there.
+- **Loading, measured again 2026-11-13:** after the jump back lazer's time can sit at the start
+  (-13 here, `game.paused` flickering) for about a second while the loading screen is still up;
+  it starts moving the moment the gameplay screen comes in. A map with an intro runs from 0 like
+  any other (first note at 26.7 s: the time ran from 281 ms on). So the first step forward after
+  the jump back is when a map begins; the OBS overlay comes in there, not a few messages later.
 - **Fail:** `play.failed` true at the fail point (live 33656 here), then `game.paused` true (the
   fail screen); the time keeps creeping a little.
 - **Retry:** state stays 2, `play.failed` back to false, health 100, accuracy 0, and the time
