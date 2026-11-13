@@ -7,7 +7,7 @@ import type { HudPrefs } from "./hud-layout";
 import { SESSION_GAP } from "./live";
 import type { VisPrefs } from "./types";
 
-export type PartName = "config" | "map" | "tries" | "player" | "session" | "cue";
+export type PartName = "config" | "map" | "tries" | "player" | "session" | "cue" | "keymap" | "keys";
 
 export interface ObsConfig {
   /** tosu's websocket */
@@ -142,6 +142,22 @@ export interface ObsCue {
   kind: "card" | "session";
 }
 
+/** lazer's key bindings as the key overlay reads them (src-tauri/src/keys.rs). Sent by Fumen
+ * itself, not the window. */
+export interface ObsKeymap {
+  /** "ruleset/variant" ("mania/4", "taiko/0", "fruits/0", "osu/0") → per action (a column) the
+   * keys that play it, by where they are on the keyboard (scan codes) */
+  map: Record<string, number[][]>;
+  /** what each of those keys is called on this keyboard */
+  names: Record<string, string>;
+}
+
+/** The keys held right now and how often each was pressed since the key overlay came on. */
+export interface ObsKeys {
+  down: number[];
+  count: Record<string, number>;
+}
+
 export type Parts = {
   config: ObsConfig | null;
   map: ObsMap | null;
@@ -149,6 +165,8 @@ export type Parts = {
   player: ObsPlayer | null;
   session: ObsSession | null;
   cue: ObsCue | null;
+  keymap: ObsKeymap | null;
+  keys: ObsKeys | null;
 };
 
 /** Your tries at a map as the pages show them (`list` newest first or not, any order). */

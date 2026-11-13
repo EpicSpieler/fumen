@@ -538,6 +538,8 @@ export interface ObsPrefs {
   sessionFrom: number;
   /** the live overlay: where each part sits (lib/hud-layout) */
   hud: HudPrefs;
+  /** the live overlay's key part: read the keys osu! is played with (src-tauri/src/keys.rs); off unless switched on */
+  keys?: boolean;
 }
 
 export type VisStyle = "spectrum" | "ring" | "wave" | "stars" | "stage" | "hifi";

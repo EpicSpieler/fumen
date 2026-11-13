@@ -24,6 +24,8 @@ export interface TosuNow {
   client: string;
   /** the ruleset played (0 osu!, 1 taiko, 2 catch, 3 mania) */
   mode: number;
+  /** osu!mania: how many keys (columns) the map is played with; null elsewhere or when not said */
+  keys: number | null;
   /** the play right now (in a map; zeros elsewhere) */
   play: TosuPlay;
   /** where the first and last notes are, ms */
@@ -49,6 +51,8 @@ export interface TosuPlay {
   breaks: number;
   /** judgements so far (a restart starts again at 0) */
   hits: number;
+  /** the judgements one by one, as tosu counts them (osu!mania: geki is MAX, katu 200) */
+  judges: Judges;
   /** 0–100; null when tosu doesn't say (taiko's fills up from 0 instead of draining) */
   health: number | null;
   /** the grade it's on now ("SS", "S", "A" …) */
@@ -62,6 +66,16 @@ export interface TosuPlay {
   player: string;
   /** who is logged in to osu! */
   me: string;
+}
+
+/** tosu's hit counts by judgement */
+export interface Judges {
+  geki: number;
+  n300: number;
+  katu: number;
+  n100: number;
+  n50: number;
+  miss: number;
 }
 
 export interface TosuResults {
@@ -94,6 +108,9 @@ export function readTosu(msg: unknown): TosuNow | null {
   const res = obj(m.resultsScreen);
   const scoreId = num(res.scoreId) ?? 0;
   const time = obj(beatmap.time);
+  const mode = num(obj(play.mode).number) ?? num(obj(beatmap.mode).number) ?? 0;
+  const cs = obj(obj(beatmap.stats).cs);
+  const keys = num(cs.converted) ?? num(cs.original);
   return {
     md5: str(beatmap.checksum).toLowerCase(),
     state: num(obj(m.state).number) ?? -1,
@@ -105,7 +122,8 @@ export function readTosu(msg: unknown): TosuNow | null {
     version: str(beatmap.version),
     paused: obj(m.game).paused === true,
     client: str(m.client),
-    mode: num(obj(play.mode).number) ?? num(obj(beatmap.mode).number) ?? 0,
+    mode,
+    keys: mode === 3 && keys !== null && keys >= 1 && keys <= 20 ? Math.round(keys) : null,
     play: {
       failed: play.failed === true,
       accuracy: num(play.accuracy) ?? 0,
@@ -115,6 +133,14 @@ export function readTosu(msg: unknown): TosuNow | null {
       misses: num(hits["0"]) ?? 0,
       breaks: num(hits.sliderBreaks) ?? 0,
       hits: judged,
+      judges: {
+        geki: num(hits.geki) ?? 0,
+        n300: num(hits["300"]) ?? 0,
+        katu: num(hits.katu) ?? 0,
+        n100: num(hits["100"]) ?? 0,
+        n50: num(hits["50"]) ?? 0,
+        miss: num(hits["0"]) ?? 0,
+      },
       health: num(obj(play.healthBar).normal),
       rank: str(obj(play.rank).current),
       pp: num(obj(play.pp).current),

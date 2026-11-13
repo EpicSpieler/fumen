@@ -21,7 +21,7 @@ import { player } from "../player";
 import { openHudEditor } from "./hud-editor";
 import { cue, newSession } from "./obs-feed";
 import { mountObsSettings } from "./obs-settings";
-import { overlayEvents, overlayPort, startOverlay, stopOverlay } from "./overlay";
+import { overlayEvents, overlayPort, startOverlay, stopOverlay, syncKeys } from "./overlay";
 
 // the osu! login outlives the view: it waits for the browser while you look elsewhere
 let account: OsuAccount | null = null;
@@ -263,6 +263,13 @@ export class SettingsView {
               <div class="setting-desc">${t("Pages for OBS's browser sources, from this PC only and while Fumen runs. In OBS: Sources, +, Browser, the address below, 1920 × 1080.")}</div>
             </div>
             <input type="checkbox" role="switch" data-obs="serve" aria-label="${t("Sources for OBS")}" ${overlayPort() ? "checked" : ""} />
+          </div>
+          <div class="setting-row">
+            <div class="setting-text">
+              <div class="setting-title">${t("Keys for the live overlay")}</div>
+              <div class="setting-desc">${t("The live overlay's key part shows the keys you play with. For that Fumen reads the keyboard, but only the keys osu!lazer has you play with and only while osu! is the window in front. Nothing of it is kept.")}</div>
+            </div>
+            <input type="checkbox" role="switch" data-obs="keys" aria-label="${t("Keys for the live overlay")}" ${store.prefs.obs?.keys === true ? "checked" : ""} />
           </div>
           <div class="obs-sources" data-row="obs-sources"></div>
           <div class="obs-link" data-row="obs-link"></div>
@@ -762,6 +769,9 @@ export class SettingsView {
     } else if (input.dataset.obs === "serve") {
       setPrefs({ obs: { ...store.prefs.obs, serve: input.checked } });
       void (input.checked ? startOverlay() : stopOverlay());
+    } else if (input.dataset.obs === "keys") {
+      setPrefs({ obs: { ...store.prefs.obs, keys: input.checked } });
+      void syncKeys();
     } else if ("prefCompanion" in input.dataset) {
       setPrefs({ companion: input.checked });
       void (input.checked ? api.openCompanion() : api.closeCompanion()).catch((err) => toast(asApiError(err).message, { kind: "danger" }));

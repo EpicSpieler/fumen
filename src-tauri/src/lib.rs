@@ -14,6 +14,7 @@ mod downloads;
 mod error;
 mod goals;
 mod hitsounds;
+mod keys;
 mod lazer;
 mod lazer_import;
 mod lazer_linux;
@@ -608,6 +609,8 @@ fn library_status(state: State<'_, AppState>) -> Result<LibraryStatus> {
                 || db::get_meta(&conn, "lazer.setFiles")?.is_none()
                 // …and the song and background each difficulty names (library care)
                 || db::get_meta(&conn, "lazer.mapFiles")?.is_none()
+                // …and lazer's key bindings (the stream's key overlay)
+                || db::get_meta(&conn, "lazer.keyBindings")?.is_none()
         }
         _ => false,
     };
@@ -1179,7 +1182,27 @@ fn overlay_start(app: AppHandle) -> Result<u16> {
 
 #[tauri::command]
 fn overlay_stop() {
+    keys::stop();
     overlay::stop()
+}
+
+/// The live overlay's key part (keys.rs): reads the keys lazer binds to play while osu! is in
+/// front, and hands them to the OBS pages (parts `keymap` and `keys`). Whether it runs.
+#[tauri::command]
+fn obs_keys(state: State<'_, AppState>, on: bool) -> Result<bool> {
+    if !on {
+        keys::stop();
+        overlay::set_obs("keys", &serde_json::json!({ "down": [], "count": {} }), vec![], vec![])?;
+        return Ok(false);
+    }
+    let raw = db::get_meta(&state.db(), "lazer.keyBindings")?.unwrap_or_default();
+    let map = keys::keymap(&serde_json::from_str(&raw).unwrap_or_default());
+    let keys = keys::watched(&map);
+    let names: std::collections::BTreeMap<String, String> = keys.iter().map(|k| (k.to_string(), keys::name_of(*k))).collect();
+    overlay::set_obs("keymap", &serde_json::json!({ "map": map, "names": names }), vec![], vec![])?;
+    Ok(keys::start(keys, |down, count| {
+        let _ = overlay::set_obs("keys", &serde_json::json!({ "down": down, "count": count }), vec![], vec![]);
+    }))
 }
 
 #[tauri::command]
@@ -2250,6 +2273,7 @@ pub fn run() {
             overlay_port,
             overlay_state,
             obs_part,
+            obs_keys,
             obs_password_set,
             obs_password_get,
             rename_clip,

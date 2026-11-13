@@ -100,6 +100,7 @@ internal static class Program
             scores = Exporter.WriteScores(session.Realm, w);
             collections = Exporter.WriteCollections(session.Realm, w);
             Exporter.WriteRulesetSettings(session.Realm, w);
+            Exporter.WriteKeyBindings(session.Realm, w);
             skins = Exporter.WriteSkins(session.Realm, w);
 
             w.WriteEndObject();

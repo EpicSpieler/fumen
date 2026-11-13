@@ -111,6 +111,19 @@ export const obs: Record<string, string> = {
   "Passed in the end": "Am Ende geschafft",
   "Not passed yet": "Noch nicht geschafft",
 
+  "Keys for the live overlay": "Tasten fürs Live-Overlay",
+  "The live overlay's key part shows the keys you play with. For that Fumen reads the keyboard, but only the keys osu!lazer has you play with and only while osu! is the window in front. Nothing of it is kept.":
+    "Der Tasten-Teil im Live-Overlay zeigt die Tasten, mit denen du spielst. Dafür liest Fumen die Tastatur mit, aber nur die Tasten, mit denen du in osu!lazer spielst, und nur solange osu! das Fenster im Vordergrund ist. Davon wird nichts gespeichert.",
+  // the live overlay's judgements and keys
+  Judgements: "Judgements",
+  Keys: "Tasten",
+  "How many of each judgement so far.": "Wie viele von jedem Judgement bisher.",
+  "Which keys are held, with a trail for each press. Needs reading the keys switched on in OBS's settings.":
+    "Welche Tasten gedrückt sind, mit einer Spur für jeden Anschlag. Dafür muss in den OBS-Einstellungen das Mitlesen der Tasten an sein.",
+  Miss: "Miss",
+  Max: "Max",
+  KPS: "KPS",
+
   // the song card
   "mapped by {name}": "gemappt von {name}",
   "Your best": "Deine Bestleistung",

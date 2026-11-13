@@ -94,11 +94,11 @@ body.obs {
   transform-origin: calc(var(--ax) * 100%) calc(var(--ay) * 100%);
   transition: opacity 0.8s var(--ease-std), filter 0.8s var(--ease-std);
 }
-.hud-part:is([data-part="bar"], [data-part="hp"], [data-part="vis"]) {
+.hud-part:is([data-part="bar"], [data-part="hp"], [data-part="vis"], [data-part="keys"]) {
   width: calc(var(--w) * 100%);
   transform: translate(calc(var(--ax) * -100%), calc(var(--ay) * -100%));
 }
-.hud-part[data-part="vis"] { height: calc(var(--h) * 100%); }
+.hud-part:is([data-part="vis"], [data-part="keys"]) { height: calc(var(--h) * 100%); }
 
 /* words line up on the side they're pinned to */
 .hud-in { display: flex; flex-direction: column; align-items: flex-start; }
@@ -276,6 +276,42 @@ body:not(.edit) .hud[data-results] :is([data-part="title"], [data-part="stars"],
 .hud-acc { font-size: 4rem; letter-spacing: -0.025em; }
 .hud-acc small { font-size: 2rem; color: rgba(255, 255, 255, 0.7); }
 .hud-pp { font-size: 2.6rem; letter-spacing: -0.02em; }
+
+/* ── the judgements: a label and its count per row, the counts lined up ── */
+.hud-judges { display: grid; grid-template-columns: auto auto; align-items: baseline; column-gap: 1rem; row-gap: 0.2rem; }
+.hud-jl { font-size: 0.8rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(255, 255, 255, 0.64); }
+.hud-jn { font-size: 1.45rem; font-weight: 600; line-height: 1.1; letter-spacing: -0.01em; text-align: right; color: rgba(255, 255, 255, 0.92); transform-origin: 100% 60%; }
+.hud-part[data-align="end"] .hud-jl { text-align: left; }
+.hud-jl[data-j="geki"] { color: color-mix(in srgb, var(--accent-ink) 70%, white); }
+.hud-jl[data-j="miss"] { color: color-mix(in srgb, var(--danger) 65%, white); }
+.hud-jn[data-j="miss"].some { color: color-mix(in srgb, var(--danger) 70%, white); }
+
+/* ── the keys: a cap per column along the bottom, each press's trail rising above it ── */
+.hud-part[data-part="keys"] .hud-in { display: block; height: 100%; }
+.hud-keys { --n: 4; position: relative; display: flex; flex-direction: column; height: 100%; }
+.hud-keys[hidden] { display: none; }
+.hud-trails { display: block; flex: 1; min-height: 0; width: 100%; }
+.hud-caps { display: grid; grid-template-columns: repeat(var(--n), 1fr); gap: min(8px, 4%); margin-top: 0.45rem; }
+.hud-cap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.1rem;
+  height: 3rem;
+  border-radius: 0.55rem;
+  background: rgba(20, 20, 24, 0.72);
+  box-shadow: 0 0.25rem 1rem rgba(0, 0, 0, 0.35);
+  text-shadow: none;
+  transition: background-color 0.12s var(--ease-std), transform 0.12s var(--ease-std);
+}
+.hud-cap span { font-size: 1rem; font-weight: 700; letter-spacing: 0.04em; color: rgba(255, 255, 255, 0.86); }
+.hud-cap b { font-size: 0.72rem; font-weight: 600; color: rgba(255, 255, 255, 0.5); }
+.hud-cap.on { background: var(--accent); transform: translateY(0.12rem); transition: none; }
+.hud-cap.on span { color: var(--accent-ink-on, #fff); }
+.hud-cap.on b { color: rgba(255, 255, 255, 0.75); }
+.hud-kps { position: absolute; top: 0; left: 0; font-size: 0.8rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(255, 255, 255, 0.64); }
+.hud-part[data-align="end"] .hud-kps { left: auto; right: 0; }
 
 /* ── Fumen's lines: how it ended, letter by letter, and what that means against the tries before ── */
 .hud-part[data-part="lines"] .hud-in { position: relative; }

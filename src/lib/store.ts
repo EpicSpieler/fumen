@@ -72,6 +72,7 @@ export const DEFAULT_PREFS: UiPrefs = {
     clips: { on: false, fc: true, best: true, close: true, marker: false, rename: true },
     sessionFrom: 0,
     hud: DEFAULT_HUD_PREFS,
+    keys: false,
   },
 };
 

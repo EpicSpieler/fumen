@@ -9,7 +9,7 @@ import { bpm, duration, esc, fixed, srColor, srInk } from "../lib/format";
 import { t } from "../lib/i18n";
 import { matchById, matchEvents, matchState, slotOfBeatmap, watchMatch, type Match, type MatchState, type Side } from "../lib/matches";
 import { kindInfo, kindOfSlot, modText, poolById, poolEvents, poolSlot, rateOf, slotChart, slotCodes, type Pool } from "../lib/pools";
-import { Emitter, events } from "../lib/store";
+import { Emitter, events, store } from "../lib/store";
 import { closeAnimated, toast } from "../ui/controls";
 import { icon } from "../ui/icons";
 import { chartStars } from "./pool-picker";
@@ -65,6 +65,15 @@ export function initOverlay(): void {
   matchEvents.on("matches", again);
   poolEvents.on("pools", again);
   events.on("library", again);
+  events.on("library", () => void syncKeys());
+}
+
+/** The live overlay's key part (src-tauri/src/keys.rs): reading the keys while the server runs
+ * and it's switched on, not otherwise. Again after an import: lazer's key bindings may be new. */
+export async function syncKeys(): Promise<void> {
+  const on = !!port && store.prefs.obs?.keys === true;
+  if (!port && !on) return;
+  await invoke<boolean>("obs_keys", { on }).catch((e) => console.warn("[keys]", asApiError(e).message));
 }
 
 export async function startOverlay(): Promise<void> {
@@ -72,6 +81,7 @@ export async function startOverlay(): Promise<void> {
     port = await invoke<number>("overlay_start");
     rewatch();
     await push();
+    void syncKeys();
   } catch (e) {
     toast(`${t("Couldn't start the overlay.")} ${asApiError(e).message}`, { kind: "danger" });
   }

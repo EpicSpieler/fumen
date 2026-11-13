@@ -122,6 +122,45 @@ struct Export {
     ruleset_settings: Vec<LSetting>,
     #[serde(default)]
     skins: Vec<LSkin>,
+    #[serde(default)]
+    key_bindings: Vec<LKeyBinding>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LKeyBinding {
+    ruleset: Option<String>,
+    variant: Option<i64>,
+    action: Option<i64>,
+    /// osu!framework InputKey numbers, joined by commas (a combination)
+    keys: Option<String>,
+}
+
+/// lazer's key bindings as the stream's key overlay wants them: "ruleset/variant" → for each
+/// action (a column in osu!mania), the keys that play it (InputKey numbers; single keys only, a
+/// combination with a modifier isn't something you play a column with).
+fn key_bindings(list: &[LKeyBinding]) -> serde_json::Value {
+    let mut out: std::collections::BTreeMap<String, Vec<Vec<i64>>> = std::collections::BTreeMap::new();
+    for b in list {
+        let (Some(ruleset), Some(action)) = (b.ruleset.as_deref(), b.action) else { continue };
+        if !matches!(ruleset, "osu" | "taiko" | "fruits" | "mania") || !(0..64).contains(&action) {
+            continue;
+        }
+        let keys: Vec<i64> = b.keys.as_deref().unwrap_or("").split(',').filter_map(|k| k.trim().parse().ok()).collect();
+        let [key] = keys[..] else { continue };
+        if key <= 0 {
+            continue;
+        }
+        let slots = out.entry(format!("{ruleset}/{}", b.variant.unwrap_or(0))).or_default();
+        if slots.len() <= action as usize {
+            slots.resize(action as usize + 1, Vec::new());
+        }
+        let slot = &mut slots[action as usize];
+        if !slot.contains(&key) {
+            slot.push(key);
+        }
+    }
+    serde_json::to_value(out).unwrap_or_default()
 }
 
 #[derive(Deserialize)]
@@ -437,6 +476,7 @@ pub fn import(conn: &mut Connection, json: &Path, install: &LazerInstall) -> Res
         .filter_map(|s| Some((s.key.clone()?, serde_json::Value::String(s.value.clone().unwrap_or_default()))))
         .collect();
     db::set_meta(&tx, "lazer.maniaSettings", &serde_json::Value::Object(mania).to_string())?;
+    db::set_meta(&tx, "lazer.keyBindings", &key_bindings(&export.key_bindings).to_string())?;
 
     db::set_meta(&tx, "lazer.skins", &counts.skins.to_string())?;
     db::set_meta(&tx, "lazer.setSounds", "1")?;

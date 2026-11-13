@@ -20,13 +20,14 @@ function msg(s: Step): TosuNow {
     paused: false,
     client: "lazer",
     mode: 3,
+    keys: 4,
     firstObject: 4802,
     lastObject: 120000,
     mapCombo: null,
     inBreak: false,
     results: null,
     ...s,
-    play: { failed: false, accuracy: 100, score: 0, maxCombo: 0, combo: 0, misses: 0, breaks: 0, hits: 0, health: null, rank: "", pp: null, mods: "", modList: [], player: "DerTesti", me: "DerTesti", ...s.play },
+    play: { failed: false, accuracy: 100, score: 0, maxCombo: 0, combo: 0, misses: 0, breaks: 0, hits: 0, health: null, rank: "", pp: null, mods: "", modList: [], judges: { geki: 0, n300: 0, katu: 0, n100: 0, n50: 0, miss: 0 }, player: "DerTesti", me: "DerTesti", ...s.play },
   };
 }
 

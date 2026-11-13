@@ -22,9 +22,9 @@
 import { pct, srColor, srInk } from "../lib/format";
 import { HUD_PARTS, hudPrefs, type HudPartId, type HudPrefs } from "../lib/hud-layout";
 import { t } from "../lib/i18n";
-import type { ObsBest, ObsTries } from "../lib/obs-parts";
+import type { ObsBest, ObsKeys, ObsTries } from "../lib/obs-parts";
 import { DEFAULT_PREFS } from "../lib/store";
-import { STATE } from "../lib/tosu";
+import { STATE, type Judges } from "../lib/tosu";
 import type { VisPrefs } from "../lib/types";
 import { beatAt } from "../lib/vis/beat";
 import type { FeelEvent, FeelFrame } from "../lib/vis/feel";
@@ -63,7 +63,57 @@ const IDLE: FeelFrame = {
 };
 
 /** the order the parts come in when a map starts */
-const ORDER: HudPartId[] = ["title", "stars", "combo", "hp", "acc", "pp", "lines"];
+const ORDER: HudPartId[] = ["title", "stars", "combo", "hp", "acc", "pp", "lines", "judges", "keys"];
+
+/** the judgements each ruleset counts, best first: tosu's name for it and what it's called */
+const JUDGES: Record<number, { k: keyof Judges; label: string }[]> = {
+  0: [
+    { k: "n300", label: "300" },
+    { k: "n100", label: "100" },
+    { k: "n50", label: "50" },
+    { k: "miss", label: "Miss" },
+  ],
+  1: [
+    { k: "n300", label: "300" },
+    { k: "n100", label: "100" },
+    { k: "miss", label: "Miss" },
+  ],
+  2: [
+    { k: "n300", label: "300" },
+    { k: "n100", label: "100" },
+    { k: "n50", label: "50" },
+    { k: "miss", label: "Miss" },
+  ],
+  3: [
+    { k: "geki", label: "Max" },
+    { k: "n300", label: "300" },
+    { k: "katu", label: "200" },
+    { k: "n100", label: "100" },
+    { k: "n50", label: "50" },
+    { k: "miss", label: "Miss" },
+  ],
+};
+
+/** lazer's key bindings by ruleset (keys.rs): the variant played and how many of its actions are keys to show */
+function variantOf(mode: number, keys: number | null): { key: string; n: number } | null {
+  if (mode === 3) return keys ? { key: `mania/${keys <= 10 ? keys : 1000 + keys}`, n: keys } : null;
+  if (mode === 1) return { key: "taiko/0", n: 4 };
+  if (mode === 2) return { key: "fruits/0", n: 3 };
+  return { key: "osu/0", n: 2 };
+}
+
+/** a key's name as short as a key cap wants it */
+function capName(name: string, code: number): string {
+  if (code === 0x39) return "␣";
+  const n = name.trim();
+  return n.length <= 3 ? n.toLocaleUpperCase() : n.slice(0, 3).toLocaleUpperCase();
+}
+
+/** how long a press's trail takes to rise through the whole part, seconds */
+const TRAIL_S = 1.1;
+
+/** being arranged: 4K on D F J K, played by a made-up hand */
+const DEMO_KEYMAP = { map: { "mania/4": [[0x20], [0x21], [0x24], [0x25]] } as Record<string, number[][]>, names: { "32": "D", "33": "F", "36": "J", "37": "K" } as Record<string, string> };
 
 const EASE_OUT = "cubic-bezier(.22,1,.36,1)";
 const POP = "cubic-bezier(.34,1.56,.64,1)";
@@ -118,6 +168,12 @@ export function start(): void {
       <div class="hud-part" data-part="acc"><div class="hud-in"><span class="hud-label">${t("Accuracy")}</span><b class="hud-acc"></b></div></div>
       <div class="hud-part" data-part="pp"><div class="hud-in"><span class="hud-label">pp</span><b class="hud-pp"></b></div></div>
       <div class="hud-part" data-part="lines"><div class="hud-in"><div class="hud-endname"></div><div class="hud-say"></div><div class="hud-say"></div>${ghost}</div></div>
+      <div class="hud-part" data-part="judges"><div class="hud-in"><div class="hud-judges"></div></div></div>
+      <div class="hud-part" data-part="keys"><div class="hud-in"><div class="hud-keys">
+        <span class="hud-kps"></span>
+        <canvas class="hud-trails"></canvas>
+        <div class="hud-caps"></div>
+      </div></div></div>
     </div>`;
   const $ = <T extends HTMLElement>(s: string) => root.querySelector<T>(s)!;
   const hud = $(".hud");
@@ -167,6 +223,190 @@ export function start(): void {
   };
   place();
   link.on("config", place);
+
+  // ── the judgements, one row each ──
+  const judgesEl = $(".hud-judges");
+  let judgesMode = -1;
+  const judgeNums = new Map<keyof Judges, HTMLElement>();
+  const judgeShown = new Map<keyof Judges, number>();
+  const judges = (mode: number, j: Judges): void => {
+    const rows = JUDGES[mode] ?? JUDGES[0];
+    if (mode !== judgesMode) {
+      judgesMode = mode;
+      judgesEl.innerHTML = rows
+        .map((r) => `<span class="hud-jl" data-j="${r.k}">${esc(r.label === "Miss" ? t("Miss") : r.label === "Max" ? t("Max") : r.label)}</span><b class="hud-jn num" data-j="${r.k}">0</b>`)
+        .join("");
+      judgeNums.clear();
+      judgeShown.clear();
+      for (const r of rows) judgeNums.set(r.k, judgesEl.querySelector<HTMLElement>(`b[data-j="${r.k}"]`)!);
+    }
+    for (const r of rows) {
+      const v = j[r.k];
+      if (judgeShown.get(r.k) === v) continue;
+      const before = judgeShown.get(r.k) ?? 0;
+      judgeShown.set(r.k, v);
+      const el = judgeNums.get(r.k)!;
+      el.textContent = String(v);
+      el.classList.toggle("some", v > 0);
+      // a miss is a moment; the rest just count
+      if (r.k === "miss" && v > before && !reduceMotion())
+        el.animate([{ transform: "scale(1)" }, { transform: "scale(1.35)", offset: 0.3 }, { transform: "scale(1)" }], { duration: 420, easing: POP });
+    }
+  };
+
+  // ── the keys: held ones lit, a trail rising for each press ──
+  const keysEl = $(".hud-keys");
+  const caps = $(".hud-caps");
+  const kps = $(".hud-kps");
+  const trails = $<HTMLCanvasElement>(".hud-trails");
+  const tctx = trails.getContext("2d")!;
+  /** the columns shown: the keys of each */
+  let cols: number[][] = [];
+  let colsKey = "";
+  let capEls: HTMLElement[] = [];
+  let capCounts: HTMLElement[] = [];
+  /** per column: its presses, page ms (end null while held) */
+  let runs: { a: number; b: number | null }[][] = [];
+  let held: boolean[] = [];
+  let pressed: number[] = [];
+  /** the counts when this try began */
+  let baseCount: Record<string, number> = {};
+  let presses: number[] = [];
+  let demoKeys: ObsKeys = { down: [], count: {} };
+  const keymap = () => (editing ? DEMO_KEYMAP : parts.keymap);
+  const keyState = (): ObsKeys | null => (editing ? demoKeys : parts.keys);
+  const sumOf = (col: number[], count: Record<string, number>): number => col.reduce((n, c) => n + (count[String(c)] ?? 0), 0);
+  const setCols = (): void => {
+    const now = live.now;
+    const map = keymap();
+    const v = now ? variantOf(now.mode, now.keys) : null;
+    const next = v && map ? (map.map[v.key] ?? []).slice(0, v.n) : [];
+    const key = JSON.stringify(next);
+    if (key === colsKey) return;
+    colsKey = key;
+    cols = next;
+    keysEl.hidden = !cols.length;
+    keysEl.style.setProperty("--n", String(Math.max(1, cols.length)));
+    caps.innerHTML = cols
+      .map((c) => `<div class="hud-cap"><span>${esc(capName(map?.names[String(c[0])] ?? "", c[0] ?? 0))}</span><b class="num">0</b></div>`)
+      .join("");
+    capEls = [...caps.querySelectorAll<HTMLElement>(".hud-cap")];
+    capCounts = capEls.map((el) => el.querySelector("b")!);
+    runs = cols.map(() => []);
+    held = cols.map(() => false);
+    const count = keyState()?.count ?? {};
+    pressed = cols.map((col) => sumOf(col, count));
+  };
+  const onKeys = (k: ObsKeys | null): void => {
+    if (!cols.length || !k) return;
+    const tm = performance.now();
+    const down = new Set(k.down);
+    cols.forEach((col, i) => {
+      const isDown = col.some((c) => down.has(c));
+      const count = sumOf(col, k.count);
+      const more = count - pressed[i];
+      pressed[i] = count;
+      if (isDown && !held[i]) {
+        runs[i].push({ a: tm, b: null });
+        presses.push(tm);
+      } else if (!isDown && held[i]) {
+        const r = runs[i][runs[i].length - 1];
+        if (r && r.b === null) r.b = tm;
+      } else if (!isDown && more > 0) {
+        // pressed and let go between two messages: a tap
+        runs[i].push({ a: tm - 25, b: tm });
+        presses.push(tm);
+      }
+      held[i] = isDown;
+      capEls[i]?.classList.toggle("on", isDown);
+      if (capCounts[i]) capCounts[i].textContent = String(Math.max(0, count - sumOf(col, baseCount)));
+    });
+  };
+  const keysBegin = (): void => {
+    baseCount = { ...(keyState()?.count ?? {}) };
+    presses = [];
+    for (const r of runs) r.length = 0;
+    for (const el of capCounts) el.textContent = "0";
+  };
+  const drawTrails = (tm: number): void => {
+    if (!cols.length || keysEl.hidden) return;
+    const W = trails.clientWidth;
+    const H = trails.clientHeight;
+    if (!W || !H) return;
+    const dpr = Math.min(2, devicePixelRatio || 1);
+    if (trails.width !== Math.round(W * dpr) || trails.height !== Math.round(H * dpr)) {
+      trails.width = Math.round(W * dpr);
+      trails.height = Math.round(H * dpr);
+    }
+    tctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    tctx.clearRect(0, 0, W, H);
+    const n = cols.length;
+    const gap = Math.min(8, W * 0.04);
+    const cw = (W - gap * (n - 1)) / n;
+    const speed = H / (TRAIL_S * 1000);
+    tctx.fillStyle = getComputedStyle(keysEl).getPropertyValue("--accent").trim() || "#8b7cff";
+    runs.forEach((list, i) => {
+      const x = i * (cw + gap);
+      for (let r = list.length - 1; r >= 0; r--) {
+        const run = list[r];
+        const bottom = H - (tm - (run.b ?? tm)) * speed;
+        // gone over the top: it and everything before it
+        if (bottom < 0) {
+          list.splice(0, r + 1);
+          break;
+        }
+        const top = Math.max(0, H - (tm - run.a) * speed);
+        const h = Math.max(3, bottom - top);
+        tctx.beginPath();
+        tctx.roundRect(x, bottom - h, cw, h, Math.min(4, cw / 4));
+        tctx.fill();
+      }
+    });
+    // the trails fade out as they rise
+    const fade = tctx.createLinearGradient(0, 0, 0, H);
+    fade.addColorStop(0, "rgba(0,0,0,0)");
+    fade.addColorStop(0.6, "rgba(0,0,0,1)");
+    tctx.globalCompositeOperation = "destination-in";
+    tctx.fillStyle = fade;
+    tctx.fillRect(0, 0, W, H);
+    tctx.globalCompositeOperation = "source-over";
+    while (presses.length && tm - presses[0] > 1000) presses.shift();
+    kps.textContent = presses.length ? `${presses.length} ${t("KPS")}` : "";
+  };
+  link.on("keys", (k) => onKeys(k));
+  link.on("keymap", () => {
+    colsKey = "";
+    setCols();
+  });
+
+  // being arranged: a made-up hand on D F J K, chords and a long note now and then
+  if (editing) {
+    const codes = [0x20, 0x21, 0x24, 0x25];
+    const ups = new Map<number, number>();
+    window.setInterval(() => {
+      if (hud.dataset.phase !== "play") return;
+      const tm = performance.now();
+      const down = new Set(demoKeys.down);
+      for (const [c, at] of ups)
+        if (tm >= at) {
+          down.delete(c);
+          ups.delete(c);
+        }
+      const count = { ...demoKeys.count };
+      if (Math.random() < 0.55) {
+        const chord = Math.random() < 0.2 ? 2 : 1;
+        for (let i = 0; i < chord; i++) {
+          const c = codes[Math.floor(Math.random() * codes.length)];
+          if (down.has(c)) continue;
+          down.add(c);
+          count[String(c)] = (count[String(c)] ?? 0) + 1;
+          ups.set(c, tm + (Math.random() < 0.12 ? 350 + Math.random() * 400 : 45 + Math.random() * 60));
+        }
+      }
+      demoKeys = { down: [...down], count };
+      onKeys(demoKeys);
+    }, 70);
+  }
 
   // ── the screen under it: Stage, see-through, without its words, its lamps where their part is ──
   const canvas = $<HTMLCanvasElement>("canvas");
@@ -311,6 +551,7 @@ export function start(): void {
     resultsTaken = false;
     worded = false;
     marksKey = "";
+    keysBegin();
     hud.dataset.end = "";
     zone.dataset.state = "";
     beyond.classList.remove("on");
@@ -410,6 +651,8 @@ export function start(): void {
       startTries = tr;
       startBest = (parts.map?.md5 === tr.md5 ? parts.map.best : null) ?? tr.best;
     }
+    if (now) setCols();
+    if (playing || ended) drawTrails(tm);
     if (now && (playing || ended)) {
       head(startTries);
       marks(startTries);
@@ -429,6 +672,7 @@ export function start(): void {
       ppShown = ppShown < 0 ? f.pp : glide(ppShown, f.pp, dt, 0.1);
       pp.textContent = String(Math.round(ppShown));
     }
+    judges(now.mode, now.play.judges);
     const health = endKind === "fail" ? 0 : (f.health ?? 1);
     hpShown = glide(hpShown, health, dt, 0.08);
     hpFill.style.transform = `scaleX(${hpShown.toFixed(4)})`;

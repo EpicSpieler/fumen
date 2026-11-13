@@ -56,7 +56,8 @@ export function demoAt(kind: DemoKind, s: number, map: DemoMap): TosuNow | null 
     paused: false,
     client: "lazer",
     mode: map.mode,
-    play: { failed: false, accuracy: 100, score: 0, maxCombo: 0, combo: 0, misses: 0, breaks: 0, hits: 0, health: 100, rank: "SS", pp: 0, mods: "", modList: [], player: "", me: "", ...play },
+    keys: map.mode === 3 ? 4 : null,
+    play: { failed: false, accuracy: 100, score: 0, maxCombo: 0, combo: 0, misses: 0, breaks: 0, hits: 0, health: 100, rank: "SS", pp: 0, mods: "", modList: [], judges: { geki: 0, n300: 0, katu: 0, n100: 0, n50: 0, miss: 0 }, player: "", me: "", ...play },
     firstObject: 0,
     lastObject: DEMO_LAST,
     mapCombo: Math.round((DEMO_LAST / 1000) * PER_S),
@@ -87,6 +88,12 @@ export function demoAt(kind: DemoKind, s: number, map: DemoMap): TosuNow | null 
         ? 100 - 86 * Math.sin((Math.PI * (at - 17)) / 7)
         : 96 + 3 * Math.sin(at * 0.9);
   const accuracy = Math.max(0, 99.4 - missed.length * 0.9 - at * 0.025);
+  // most notes MAX, a few less (the counts add up to the notes hit)
+  const n300 = Math.round(notes * 0.12);
+  const katu = Math.round(notes * 0.03);
+  const n100 = Math.round(notes * 0.012);
+  const n50 = Math.round(notes * 0.004);
+  const judges = { geki: Math.max(0, notes - n300 - katu - n100 - n50), n300, katu, n100, n50, miss: missed.length };
   const play = {
     accuracy,
     score: notes * 1953 - missed.length * 5000,
@@ -94,6 +101,7 @@ export function demoAt(kind: DemoKind, s: number, map: DemoMap): TosuNow | null 
     combo,
     misses: missed.length,
     hits: notes + missed.length,
+    judges,
     health,
     rank: rankOf(accuracy),
     pp: Math.max(0, Math.round(notes * 0.41) - missed.length * 8),

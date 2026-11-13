@@ -246,6 +246,33 @@ internal static class Exporter
         w.WriteEndArray();
     }
 
+    // ── Key bindings (the stream's key overlay: which keys play which column) ──
+
+    /// lazer's key bindings for the rulesets: action (a column in osu!mania) and the keys bound to
+    /// it, as osu!framework's InputKey numbers joined by commas (lazer's KeyCombinationString).
+    /// lazer writes every ruleset's defaults in on start, so changed or not, they're all here.
+    public static void WriteKeyBindings(Realm realm, Utf8JsonWriter w)
+    {
+        w.WriteStartArray("keyBindings");
+        var name = new[] { "KeyBinding", "RealmKeyBinding" }.FirstOrDefault(n => realm.Schema.TryFindObjectSchema(n, out _));
+        if (name != null)
+        {
+            foreach (var b in realm.DynamicApi.All(name))
+            {
+                var ruleset = F.Str(b, "RulesetName");
+                if (ruleset == null) continue;
+                w.WriteStartObject();
+                F.WriteStr(w, "ruleset", ruleset);
+                F.WriteInt(w, "variant", F.Int(b, "Variant"));
+                // lazer stores ActionInt as "Action" and KeyCombinationString as "KeyCombination"
+                F.WriteInt(w, "action", F.Int(b, "Action") ?? F.Int(b, "ActionInt"));
+                F.WriteStr(w, "keys", F.Str(b, "KeyCombination") ?? F.Str(b, "KeyCombinationString"));
+                w.WriteEndObject();
+            }
+        }
+        w.WriteEndArray();
+    }
+
     // ── Skins (for the playfield preview) ───────────────────────────────────
 
     /// Every skin lazer knows, built-in ones included (those have no files; their type is in

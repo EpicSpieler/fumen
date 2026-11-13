@@ -15,9 +15,9 @@ const base = fumen && /^\d+$/.test(fumen) ? `http://127.0.0.1:${fumen}` : locati
 /** Fumen's files as the window reads them (lib/api's fumen:// address) */
 const files = (window as { __FUMEN_BASE__?: string }).__FUMEN_BASE__ ?? (navigator.userAgent.includes("Windows") ? "http://fumen.localhost/" : "fumen://localhost/");
 
-const NAMES: PartName[] = ["config", "map", "tries", "player", "session", "cue"];
+const NAMES: PartName[] = ["config", "map", "tries", "player", "session", "cue", "keymap", "keys"];
 
-export const parts: Parts = { config: null, map: null, tries: null, player: null, session: null, cue: null };
+export const parts: Parts = { config: null, map: null, tries: null, player: null, session: null, cue: null, keymap: null, keys: null };
 export const link = new Emitter<Parts & { open: boolean }>();
 
 export function take<K extends PartName>(name: K, value: Parts[K]): void {
