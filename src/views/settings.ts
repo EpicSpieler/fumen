@@ -1,7 +1,9 @@
-/* settings.ts — osu! account, library source, appearance, about. Adjacent rows merge into one group. */
+/* settings.ts — osu! account, library source, appearance, about. The categories in a list beside
+ * them, one shown at a time; the search goes through all of them. Adjacent rows merge into one
+ * group. */
 import { getVersion } from "@tauri-apps/api/app";
 import { open } from "@tauri-apps/plugin-dialog";
-import { api, asApiError, isLinux, isTauri } from "../lib/api";
+import { api, asApiError, isLinux, isMac, isTauri } from "../lib/api";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { follow } from "../lib/tosu-follow";
 import { lang, LANGS, switchLang, t, tn } from "../lib/i18n";
@@ -14,7 +16,8 @@ import { DEFAULT_ACCENT, events, flushPrefs, refreshStatus, setPrefs, store } fr
 import type { OsuAccount, UiPrefs } from "../lib/types";
 import { attachSegIndicator, openMenu, toast, uiConfirm, uiPrompt } from "../ui/controls";
 import { importSets, openImport } from "./import";
-import { icon } from "../ui/icons";
+import { icon, type IconName } from "../ui/icons";
+import type { SettingsSection } from "../lib/router";
 import { ACCENT_PRESETS, applyAppearance } from "../ui/theme";
 import { openChangelog } from "./changelog";
 import { player } from "../player";
@@ -30,6 +33,28 @@ let waiting = false;
 let shown: SettingsView | null = null;
 
 const MODE_INDEX = { osu: 0, taiko: 1, fruits: 2, mania: 3 } as const;
+
+/** the categories, in the list's order */
+const SECTIONS: { id: SettingsSection; icon: IconName; label: () => string }[] = [
+  { id: "osu", icon: "user", label: () => "osu!" },
+  { id: "library", icon: "library", label: () => t("Library") },
+  { id: "collections", icon: "collection", label: () => t("Collections") },
+  { id: "appearance", icon: "sun", label: () => t("Appearance") },
+  { id: "listening", icon: "music", label: () => t("Listening") },
+  { id: "play", icon: "play", label: () => t("While you play") },
+  { id: "stream", icon: "radar", label: () => t("Stream & OBS") },
+  { id: "about", icon: "info", label: () => t("About") },
+];
+
+/** the category open last (Settings opens there again while Fumen runs) */
+let lastSection: SettingsSection = "osu";
+
+/** lower case without accents, for the search ("uber" finds "Über") */
+const norm = (s: string): string =>
+  s
+    .toLocaleLowerCase()
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "");
 
 /** Logs in through the browser (from here or elsewhere); the scores from osu! follow. */
 export async function loginWithOsu(): Promise<void> {
@@ -74,11 +99,18 @@ export class SettingsView {
   readonly el: HTMLElement;
   private offs: (() => void)[] = [];
   private version = "";
+  private section: SettingsSection;
+  /** the search's words (none: one category shown) */
+  private words: string[] = [];
+  private filterQueued = false;
 
-  constructor() {
+  constructor(section?: SettingsSection) {
     this.el = document.createElement("section");
     this.el.className = "view settings-view";
+    this.section = section ?? lastSection;
     this.render();
+    this.show(this.section);
+    this.wireSearch();
     this.offs.push(
       events.on("status", () => this.renderLibrary()),
       events.on("scan", () => this.renderLibrary()),
@@ -113,17 +145,29 @@ export class SettingsView {
 
   private render(): void {
     const p = store.prefs;
+    const head = (id: SettingsSection): string => `<h2 class="settings-title">${SECTIONS.find((s) => s.id === id)!.label()}</h2>`;
     this.el.innerHTML = `
       <div class="settings">
         <header class="view-head"><div><h1 class="view-title">${t("Settings")}</h1></div></header>
+        <div class="settings-body">
+        <nav class="settings-nav" aria-label="${t("Settings")}">
+          <label class="settings-search">${icon("search")}<input type="search" spellcheck="false" placeholder="${t("Search settings")}" aria-label="${t("Search settings")}" /></label>
+          <div class="settings-nav-list" role="tablist" aria-orientation="vertical">
+            ${SECTIONS.map(
+              (s) =>
+                `<button type="button" class="set-nav-item" role="tab" data-goto="${s.id}" aria-selected="false">${icon(s.icon)}<span class="set-nav-label">${s.label()}</span><span class="set-nav-count num"></span></button>`,
+            ).join("")}
+          </div>
+        </nav>
+        <div class="settings-pages">
 
-        <section class="settings-section">
-          <div class="label-caps settings-label">osu!</div>
+        <section class="settings-section" data-section="osu" role="tabpanel">
+          ${head("osu")}
           <div class="setting-row" data-row="account"></div>
         </section>
 
-        <section class="settings-section">
-          <div class="label-caps settings-label">${t("Library")}</div>
+        <section class="settings-section" data-section="library" role="tabpanel">
+          ${head("library")}
           <div class="setting-row" data-row="path"></div>
           <div class="setting-row" data-row="stable"></div>
           <div class="setting-row" data-row="library"></div>
@@ -136,8 +180,8 @@ export class SettingsView {
           </div>
         </section>
 
-        <section class="settings-section">
-          <div class="label-caps settings-label">${t("Collections")}</div>
+        <section class="settings-section" data-section="collections" role="tabpanel">
+          ${head("collections")}
           <div class="setting-row" data-row="collections"></div>
           <div class="setting-row" data-row="cloud">
             <div class="setting-text">
@@ -151,8 +195,8 @@ export class SettingsView {
           </div>
         </section>
 
-        <section class="settings-section">
-          <div class="label-caps settings-label">${t("Appearance")}</div>
+        <section class="settings-section" data-section="appearance" role="tabpanel">
+          ${head("appearance")}
           <div class="setting-row">
             <div class="setting-text">
               <div class="setting-title">${t("Language")}</div>
@@ -209,8 +253,8 @@ export class SettingsView {
           </div>
         </section>
 
-        <section class="settings-section">
-          <div class="label-caps settings-label">${t("Listening")}</div>
+        <section class="settings-section" data-section="listening" role="tabpanel">
+          ${head("listening")}
           <div class="setting-row">
             <div class="setting-text">
               <div class="setting-title">${t("Skip the silence at the start")}</div>
@@ -222,8 +266,8 @@ export class SettingsView {
           ${fadeRow("fadeOut", t("Fade out"), t("How softly a song goes before the next one: at its end, and when you skip it."), p.fadeOut)}
         </section>
 
-        <section class="settings-section">
-          <div class="label-caps settings-label">${t("While you play")}</div>
+        <section class="settings-section" data-section="play" role="tabpanel">
+          ${head("play")}
           <div class="setting-row">
             <div class="setting-text">
               <div class="setting-title">${t("Show the score after a play")}</div>
@@ -255,8 +299,9 @@ export class SettingsView {
           </div>
         </section>
 
-        <section class="settings-section">
-          <div class="label-caps settings-label">${t("Stream & OBS")}</div>
+        <section class="settings-section" data-section="stream" role="tabpanel">
+          ${head("stream")}
+          <div class="label-caps settings-sub">${t("Browser sources")}</div>
           <div class="setting-row">
             <div class="setting-text">
               <div class="setting-title">${t("Sources for OBS")}</div>
@@ -272,11 +317,12 @@ export class SettingsView {
             <input type="checkbox" role="switch" data-obs="keys" aria-label="${t("Keys for the live overlay")}" ${store.prefs.obs?.keys === true ? "checked" : ""} />
           </div>
           <div class="obs-sources" data-row="obs-sources"></div>
+          <div class="label-caps settings-sub">${t("OBS itself")}</div>
           <div class="obs-link" data-row="obs-link"></div>
         </section>
 
-        <section class="settings-section">
-          <div class="label-caps settings-label">${t("About")}</div>
+        <section class="settings-section" data-section="about" role="tabpanel">
+          ${head("about")}
           <div class="setting-row">
             <div class="setting-text">
               <div class="setting-title about-version">Fumen ${esc(this.version)}</div>
@@ -317,6 +363,9 @@ export class SettingsView {
             <input type="checkbox" role="switch" data-setting="startPing" aria-label="${t("Count me in")}" ${store.settings?.startPing !== false ? "checked" : ""} />
           </div>
         </section>
+        <p class="settings-empty" hidden></p>
+        </div>
+        </div>
       </div>`;
     this.el.querySelectorAll<HTMLElement>(".seg-pill").forEach((s) => attachSegIndicator(s));
     this.renderLibrary();
@@ -327,6 +376,96 @@ export class SettingsView {
     this.renderObs();
     const link = this.el.querySelector<HTMLElement>('[data-row="obs-link"]');
     if (link) this.offs.push(mountObsSettings(link));
+  }
+
+  /** Shows one category (the search, if any, goes). */
+  private show(id: SettingsSection): void {
+    this.section = lastSection = id;
+    const input = this.el.querySelector<HTMLInputElement>(".settings-search input");
+    if (input && input.value) {
+      input.value = "";
+      this.words = [];
+      this.filter();
+    }
+    for (const s of this.el.querySelectorAll<HTMLElement>(".settings-section")) s.classList.toggle("on", s.dataset.section === id);
+    for (const b of this.el.querySelectorAll<HTMLElement>(".set-nav-item")) {
+      const on = b.dataset.goto === id;
+      b.classList.toggle("active", on);
+      b.setAttribute("aria-selected", String(on));
+    }
+  }
+
+  /** The search: as you type, Ctrl+F (or /) to get there while Settings is open. */
+  private wireSearch(): void {
+    const input = this.el.querySelector<HTMLInputElement>(".settings-search input")!;
+    input.addEventListener("input", () => {
+      this.words = norm(input.value).split(/\s+/).filter(Boolean);
+      this.filter();
+    });
+    input.addEventListener("keydown", (e) => {
+      // Enter: to the category of the first match
+      if (e.key !== "Enter" || !this.words.length) return;
+      const first = this.el.querySelector<HTMLElement>(".settings-section:not(.s-miss)");
+      if (first?.dataset.section) this.show(first.dataset.section as SettingsSection);
+    });
+    const keys = (e: KeyboardEvent): void => {
+      if (!this.el.isConnected || this.el.hidden || document.querySelector(".modal-backdrop")) return;
+      const typing = (e.target as HTMLElement).closest("input, textarea, [contenteditable]");
+      if (((isMac ? e.metaKey : e.ctrlKey) && e.key.toLowerCase() === "f") || (e.key === "/" && !typing)) {
+        e.preventDefault();
+        e.stopPropagation();
+        input.focus();
+        input.select();
+      }
+    };
+    window.addEventListener("keydown", keys, true);
+    this.offs.push(() => window.removeEventListener("keydown", keys, true));
+    // rows drawn again (the library, tosu, OBS) are searched again
+    const pages = this.el.querySelector<HTMLElement>(".settings-pages")!;
+    const watch = new MutationObserver(() => {
+      if (!this.words.length || this.filterQueued) return;
+      this.filterQueued = true;
+      queueMicrotask(() => {
+        this.filterQueued = false;
+        this.filter();
+      });
+    });
+    for (const s of pages.querySelectorAll(".settings-section")) watch.observe(s, { childList: true, subtree: true });
+    this.offs.push(() => watch.disconnect());
+  }
+
+  /** Every category's rows that have all the search's words (a category's name brings all of it). */
+  private filter(): void {
+    const words = this.words;
+    const searching = words.length > 0;
+    const has = (text: string): boolean => words.every((w) => text.includes(w));
+    this.el.querySelector(".settings")!.classList.toggle("searching", searching);
+    let total = 0;
+    for (const sec of this.el.querySelectorAll<HTMLElement>(".settings-section")) {
+      const whole = searching && has(norm(sec.querySelector(".settings-title")?.textContent ?? ""));
+      let found = 0;
+      let before = false;
+      for (const row of sec.querySelectorAll<HTMLElement>(".setting-row, .obs-source")) {
+        // a row of controls without a title of its own belongs to the one above it
+        const match: boolean = !searching || whole || (row.querySelector(".setting-title") ? has(norm(row.textContent ?? "")) : before);
+        row.classList.toggle("s-miss", !match);
+        before = match;
+        if (match && !row.hidden) found++;
+      }
+      sec.classList.toggle("s-miss", searching && !found);
+      total += found;
+      const nav = this.el.querySelector<HTMLElement>(`.set-nav-item[data-goto="${sec.dataset.section}"]`);
+      if (nav) {
+        nav.classList.toggle("none", searching && !found);
+        const count = nav.querySelector(".set-nav-count")!;
+        const text = searching && found ? String(found) : "";
+        if (count.textContent !== text) count.textContent = text;
+      }
+    }
+    const empty = this.el.querySelector<HTMLElement>(".settings-empty")!;
+    empty.hidden = !searching || total > 0;
+    const said = searching ? t("No setting matches “{q}”.", { q: this.el.querySelector<HTMLInputElement>(".settings-search input")!.value.trim() }) : "";
+    if (empty.textContent !== said) empty.textContent = said;
   }
 
   /** The OBS pages: each with its address while the server is on, and what can be done with it. */
@@ -645,6 +784,12 @@ export class SettingsView {
 
   private async onClick(e: Event): Promise<void> {
     const target = e.target as Element;
+    const goto = target.closest<HTMLElement>("[data-goto]");
+    if (goto) {
+      this.show(goto.dataset.goto as SettingsSection);
+      this.el.scrollTo({ top: 0 });
+      return;
+    }
     const seg = target.closest<HTMLElement>(".seg-pill [data-v]");
     if (seg) {
       const key = seg.parentElement!.dataset.seg as "theme" | "accentMode" | "lang";

@@ -88,6 +88,12 @@ export const settings: Record<string, string> = {
   "Reduce motion": "Bewegung reduzieren",
   "Turns off transitions and animations.": "Schaltet Übergänge und Animationen aus.",
 
+  // the list of categories and the search
+  "Search settings": "Einstellungen durchsuchen",
+  "No setting matches “{q}”.": "Keine Einstellung passt zu „{q}“.",
+  "Browser sources": "Browserquellen",
+  "OBS itself": "OBS selbst",
+
   // about and updates
   About: "Über",
   "Fumen reads osu!lazer's database from a private copy. Beatmaps and collections you put into lazer go in through lazer's own code: while lazer is closed only on versions tested with Fumen and with a backup of its database first, while it's open beatmaps are handed to lazer, which adds them itself.":

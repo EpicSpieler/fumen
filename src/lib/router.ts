@@ -1,6 +1,9 @@
 /* router.ts — in-memory navigation with back/forward (mouse buttons 4/5, Alt+←/→). */
 import { Emitter } from "./store";
 
+/** Settings' categories (views/settings) */
+export type SettingsSection = "osu" | "library" | "collections" | "appearance" | "listening" | "play" | "stream" | "about";
+
 export type Route =
   | { name: "home" }
   | { name: "library" }
@@ -17,7 +20,8 @@ export type Route =
   | { name: "score"; id: string }
   /** your tries at a difficulty (views/tries), `at`: the one in focus */
   | { name: "tries"; md5: string; at?: number }
-  | { name: "settings" }
+  /** section: the category to open (else the one open last) */
+  | { name: "settings"; section?: SettingsSection }
   | { name: "welcome" };
 
 const stack: Route[] = [{ name: "home" }];

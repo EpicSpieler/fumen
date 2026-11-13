@@ -387,7 +387,7 @@ function show(route: Route): void {
       content.appendChild(view.el);
       break;
     case "settings":
-      view = new SettingsView();
+      view = new SettingsView(route.section);
       content.appendChild(view.el);
       break;
     case "welcome":

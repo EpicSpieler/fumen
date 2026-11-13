@@ -383,7 +383,7 @@ export class HistoryView {
       }
       if (target.closest(".hist-sync-btn")) return void this.sync();
       if (target.closest(".hist-login")) {
-        goSection({ name: "settings" });
+        goSection({ name: "settings", section: "osu" });
         return void loginWithOsu();
       }
       const row = target.closest<HTMLElement>("[data-i]");

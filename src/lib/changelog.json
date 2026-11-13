@@ -12,7 +12,8 @@
       "New: Judgement counter and key overlay for the live overlay.",
       "New: Open in osu! on a set's page and in a map's menu.",
       "New: While osu!lazer is open, downloaded beatmaps go straight into it.",
-      "New: Beatmaps you add in osu!lazer show up in Fumen right away."
+      "New: Beatmaps you add in osu!lazer show up in Fumen right away.",
+      "Changed: Settings are split into categories, listed on the side, with a search."
     ],
     "de": [
       "Neu: osu! folgen über tosu. Der Visualizer öffnet sich, wenn eine Map startet, und ein Pass öffnet seinen Score.",
@@ -24,7 +25,8 @@
       "Neu: Judgement-Zähler und Tasten-Overlay fürs Live-Overlay.",
       "Neu: In osu! öffnen, auf der Seite eines Sets und im Menü einer Map.",
       "Neu: Ist osu!lazer offen, gehen heruntergeladene Beatmaps direkt hinein.",
-      "Neu: Beatmaps, die du in osu!lazer hinzufügst, tauchen sofort in Fumen auf."
+      "Neu: Beatmaps, die du in osu!lazer hinzufügst, tauchen sofort in Fumen auf.",
+      "Geändert: Die Einstellungen sind in Kategorien aufgeteilt, mit einer Liste daneben und einer Suche."
     ]
   },
   {
